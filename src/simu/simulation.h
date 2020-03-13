@@ -16,13 +16,13 @@ class Simulation {
   std::set<Critter*> _critters, _corpses;
   phylogeny::GIDManager _gidManager;
 
-  Environment *_environment;
+  std::unique_ptr<Environment> _environment;
 
 public:
   using CGenome = Critter::Genome;
 
   Simulation();
-  virtual ~Simulation (void) = default;
+  virtual ~Simulation (void);
 
   const auto& environment (void) const {
     return *_environment;

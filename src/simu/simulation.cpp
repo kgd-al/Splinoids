@@ -6,6 +6,11 @@ namespace simu {
 
 Simulation::Simulation(void) : _environment(nullptr) {}
 
+Simulation::~Simulation (void) {
+  clear();
+}
+
+
 struct CritterInitData {
   Critter::Genome genome;
   float x, y;
@@ -127,7 +132,7 @@ void Simulation::init(const Environment::Genome &egenome,
                       Critter::Genome cgenome,
                       InitType type) {
 
-  _environment = new Environment (egenome);
+  _environment = std::make_unique<Environment>(egenome);
 
   if (type == InitType::REGULAR) {
     _gidManager.setNext(cgenome.id());
@@ -157,6 +162,7 @@ Critter* Simulation::addCritter (const CGenome &genome,
 
 void Simulation::delCritter (Critter *critter) {
   _critters.erase(critter);
+  delete critter;
 }
 
 void Simulation::clear (void) {

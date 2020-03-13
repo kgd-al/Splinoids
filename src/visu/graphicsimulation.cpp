@@ -9,6 +9,8 @@ GraphicSimulation::GraphicSimulation(QStatusBar *sbar)
 
 }
 
+GraphicSimulation::~GraphicSimulation (void) = default;
+
 void GraphicSimulation::postInit(void) {
   Simulation::postInit();
 

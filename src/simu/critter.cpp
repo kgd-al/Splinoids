@@ -1,5 +1,3 @@
-#include <Box2D>
-
 #include "critter.h"
 
 namespace simu {

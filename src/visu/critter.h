@@ -53,8 +53,8 @@ private:
   void debugDrawBelow (QPainter *painter) const;
   void debugDrawAbove (QPainter *painter) const;
 #else
-  void debugDrawBelow (void) const {}
-  void debugDrawAbove (void) const {}
+  void debugDrawBelow (QPainter*) const {}
+  void debugDrawAbove (QPainter*) const {}
 #endif
 };
 

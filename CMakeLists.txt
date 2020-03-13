@@ -112,6 +112,10 @@ PREPEND(SIMU_SRC "src/simu" ${SIMU_SRC})
 
 add_library(SIMU_OBJS OBJECT ${GNTP_SRC} ${SIMU_SRC})# ${CGP_SRC} ${S_MISC_SRC})
 
+include_directories(box2d/include)
+add_subdirectory(box2d)
+
+set(SIMU_LIBS box2d)
 
 ################################################################################
 ## Target (simulation)
@@ -241,8 +245,8 @@ if (NOT CLUSTER_BUILD)
       "src/visualizer.cpp"
     )
     set_property(TARGET visualizer PROPERTY AUTOMOC ON)
-    target_link_libraries(visualizer ${QT_LIBS} ${APOGeT_LIBRARIES}
-                                                ${APOGeT_GUI_LIBRARIES})
+    target_link_libraries(visualizer ${SIMU_LIBS} ${APOGeT_LIBRARIES}
+                                     ${QT_LIBS} ${APOGeT_GUI_LIBRARIES})
 
 
 #################################################################################

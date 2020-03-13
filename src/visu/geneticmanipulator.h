@@ -16,7 +16,7 @@ class MiniViewer : public QGraphicsView {
 public:
   MiniViewer (QWidget *parent, CritterProxy *proxy);
 
-  virtual ~MiniViewer (void) {}
+  virtual ~MiniViewer (void);
 
   void resizeEvent(QResizeEvent *e) override;
 };

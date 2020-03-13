@@ -81,6 +81,10 @@ MiniViewer::MiniViewer (QWidget *parent, CritterProxy *proxy)
   scale(Z, -Z);
 }
 
+MiniViewer::~MiniViewer (void) {
+  delete scene();
+}
+
 void MiniViewer::resizeEvent(QResizeEvent */*e*/) {
 //  qDebug() << sceneRect();
   fitInView(sceneRect(), Qt::KeepAspectRatio);

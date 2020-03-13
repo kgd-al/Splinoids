@@ -12,21 +12,21 @@ namespace visu {
 
 class GraphicSimulation : public simu::Simulation {
   std::map<const simu::Critter*, visu::Critter*> _critters;
+  std::unique_ptr<QGraphicsScene> _scene;
   Environment *_graphicEnvironment;
-
-  QGraphicsScene *_scene;
 
   QStatusBar *_sbar;
 
 public:
   GraphicSimulation(QStatusBar *sbar);
+  ~GraphicSimulation(void);
 
   auto scene (void) {
-    return _scene;
+    return _scene.get();
   }
 
   const auto scene (void) const {
-    return _scene;
+    return _scene.get();
   }
 
   auto statusBar (void) {
