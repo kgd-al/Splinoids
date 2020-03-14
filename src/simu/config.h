@@ -5,6 +5,19 @@
 #include "../genotype/environment.h"
 #include "kgd/apt/core/ptreeconfig.h"
 
+#include "box2d/b2_math.h"
+
+namespace simu {
+
+using P2D = b2Vec2;
+using real = decltype(P2D::x);
+
+std::ostream& operator<< (std::ostream &os, const P2D &p);
+P2D fromPolar (real a, real l);
+
+P2D operator* (const P2D &p, real v);
+
+}
 namespace config {
 struct PTree;
 
@@ -14,7 +27,7 @@ struct CONFIG_FILE(Simulation) {
 
   DECLARE_SUBCONFIG(PTree, configPhylogeny)
 
-  static constexpr float GRID_SUBDIVISION = 2;
+  DECLARE_PARAMETER(float, critterBaseSpeed)
 };
 
 } // end of namespace config

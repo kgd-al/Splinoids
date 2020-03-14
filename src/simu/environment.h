@@ -15,9 +15,16 @@ public:
   using Color = std::array<float, 3>;
   static constexpr Color EMPTY { 0, 0, 0 };
 
+  // Box2D parameters
+  static constexpr float DT = 1.f / 60.f;
+  static constexpr int V_ITER = 8;  // Solver iterations for velocities
+  static constexpr int P_ITER = 3;  // Solver iterations for positions
+
 private:
   Genome _genome;
-  b2World *_physics;
+  b2World _physics;
+
+  b2Body *_edges;
 
 public:
   Environment(const Genome &g);
@@ -31,17 +38,28 @@ public:
     return _genome.size;
   }
 
-  const auto* physics (void) const {
+  auto extent (void) const {
+    return .5 * size();
+  }
+
+  const auto& physics (void) const {
     return _physics;
   }
 
-  auto* physics (void) {
+  auto& physics (void) {
     return _physics;
+  }
+
+  b2Body* body (void) {
+    return _edges;
   }
 
   void vision (const Critter *c) const;
 
+  virtual void step (void);
+
 private:
+  void createEdges (void);
 };
 
 } // end of namespace simu

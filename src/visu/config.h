@@ -1,17 +1,17 @@
 #ifndef VISU_CONFIG_H
 #define VISU_CONFIG_H
 
-#include "kgd/settings/configfile.h"
+#include "../simu/config.h"
 
-#include "../genotype/critter.h"
+#include <QPointF>
 
 DEFINE_PRETTY_ENUMERATION(
   RenderingType,
   NORMAL, VISION)
 
-namespace config {
+QPointF toQt (const simu::P2D &p);
 
-struct Simulation;
+namespace config {
 
 struct CONFIG_FILE(Visualisation) {
   DECLARE_SUBCONFIG(Simulation, configSimulation)
@@ -22,6 +22,9 @@ struct CONFIG_FILE(Visualisation) {
 
   DECLARE_PARAMETER(RenderingType, renderingType)
 
+  DECLARE_PARAMETER(float, zoomFactor)
+  DECLARE_PARAMETER(uint, substepsSpeed)
+
   using DebugDrawFlags = std::bitset<2*genotype::Critter::SPLINES_COUNT>;
 #ifndef NDEBUG
   static DebugDrawFlags debugDraw;
@@ -29,6 +32,7 @@ struct CONFIG_FILE(Visualisation) {
 #else
   static constexpr DebugDrawFlags debugDraw = 0;
 #endif
+  DECLARE_DEBUG_PARAMETER(bool, b2DebugDraw, false)
 };
 
 } // end of namespace config

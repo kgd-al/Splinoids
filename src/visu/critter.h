@@ -17,7 +17,7 @@ private:
   std::array<QPainterPath, SPLINES_COUNT> _artifacts;
 
 #ifndef NDEBUG
-  QVector<QPolygonF> _polygons;
+  QVector<QPolygonF> _polygons, _b2polygons;
 #endif
 
   QRectF _maximalBoundingRect;

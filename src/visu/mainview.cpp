@@ -10,10 +10,54 @@
 #include "geneticmanipulator.h"
 #include "config.h"
 
+#include "../../joystick/joystick.hh"
+
 namespace visu {
 
-QTimer timer;
-int TIMER_PERIOD = 10000; // ms
+class PersitentJoystick {
+  using Type = decltype(JoystickEvent::type);
+  using Control = decltype(JoystickEvent::number);
+  using Value = decltype(JoystickEvent::value);
+  std::map<Type, std::map<Control, Value>> mappings;
+
+  Joystick low_level_object;
+public:
+
+  enum MyOwnControllerMapping : Control { // Which won't work for you
+//    AXIS_L_X = ?,
+    AXIS_L_Y = 1,
+
+//    AXIS_R_X = ?,
+    AXIS_R_Y = 4
+  };
+
+  void update (void) {
+    JoystickEvent event;
+    while (low_level_object.sample(&event)) {
+      if (event.type == JS_EVENT_INIT)  continue;
+
+      mappings[event.type][event.number] = event.value;
+    }
+  }
+
+  float axisValue (MyOwnControllerMapping c) {
+    return value(JS_EVENT_AXIS, c);
+  }
+
+  float value (Type t, Control c) {
+    auto it = mappings.find(t);
+    if (it == mappings.end()) return NAN;
+
+    auto it2 = it->second.find(c);
+    if (it2 == it->second.end()) return NAN;
+
+    float v = it2->second;
+    if (t == JS_EVENT_AXIS) v /= JoystickEvent::MAX_AXES_VALUE;
+
+    return v;
+  }
+};
+PersitentJoystick joystick;
 
 MainView::MainView (GraphicSimulation &simulation)
   : _simu(simulation), _selection(nullptr) {
@@ -28,10 +72,7 @@ MainView::MainView (GraphicSimulation &simulation)
 
   new Graphics_view_zoom(this);
 
-  connect(&timer, &QTimer::timeout, [this] {
-    debugTriggerRepop(simu::InitType::MEGA_RANDOM);
-  });
-//  timer.start(TIMER_PERIOD);
+  connect(&_stepTimer, &QTimer::timeout, this, &MainView::step);
 
   _manipulator = new GeneticManipulator(this);
 //  _manipulator->show();
@@ -39,20 +80,76 @@ MainView::MainView (GraphicSimulation &simulation)
           this, &MainView::keyReleaseEvent);
 }
 
-void MainView::keyReleaseEvent(QKeyEvent *e) {
+void MainView::start(void) {
+  _stepTimer.start(STEP_MS);
+}
 
-#ifndef NDEBUG
-  if (Qt::KeypadModifier & e->modifiers()) {
+void MainView::stop (void) {
+  _stepTimer.stop();
+}
+
+void MainView::step(void) {
+  joystick.update();  // Consume joystick events since last step
+
+  QPointF prevSelectionPos;
+  if (_selection) prevSelectionPos = _selection->pos();
+
+  _simu.step();
+
+  if (_selection) {
+    QPointF newSelectionPos = _selection->pos();
+    if (newSelectionPos != prevSelectionPos)
+      focusOnSelection();
+  }
+
+  if (_selection)  // Use joystick status to update controlled critter (if any)
+    externalCritterControl();
+}
+
+bool MainView::event(QEvent *e) {
+  return QGraphicsView::event(e);
+}
+
+void MainView::keyReleaseEvent(QKeyEvent *e) {
+  if (Qt::KeypadModifier == e->modifiers()) {
     auto k = e->key();
+#ifndef NDEBUG
     if (Qt::Key_1 <= k && k <= Qt::Key_4) {
       int i = k - Qt::Key_1;
       if (e->modifiers() & Qt::ControlModifier) i += Critter::SPLINES_COUNT;
       config::Visualisation::debugDraw.flip(i);
       std::cerr << config::Visualisation::debugDraw;
       scene()->update();
+    } else
+#endif
+      switch (k) {
+      case Qt::Key_Plus:
+        config::Visualisation::zoomFactor.ref() /= 2.;
+        focusOnSelection();
+        break;
+      case Qt::Key_Minus:
+        config::Visualisation::zoomFactor.ref() *= 2.;
+        focusOnSelection();
+        break;
+      }
+  }
+
+  if ((Qt::KeypadModifier | Qt::ControlModifier) == e->modifiers()) {
+    switch (e->key()) {
+    case Qt::Key_Plus:
+      config::Visualisation::substepsSpeed.ref() =
+        std::min(256u, config::Visualisation::substepsSpeed() * 2);
+      std::cerr << "New speed: " << config::Visualisation::substepsSpeed()
+                << std::endl;
+      break;
+    case Qt::Key_Minus:
+      config::Visualisation::substepsSpeed.ref() =
+        std::max(config::Visualisation::substepsSpeed() / 2, 1u);
+      std::cerr << "New speed: " << config::Visualisation::substepsSpeed()
+                << std::endl;
+      break;
     }
   }
-#endif
 
   if (Qt::NoModifier == e->modifiers()) {
     switch (e->key()) {
@@ -82,10 +179,9 @@ void MainView::keyReleaseEvent(QKeyEvent *e) {
       _manipulator->setVisible(!_manipulator->isVisible());
       break;
     case Qt::Key_Space:
-      if (timer.isActive()) timer.stop();
-      else
-        timer.start(TIMER_PERIOD);
-      qDebug() << "Timer running: " << timer.isActive();
+      if (_stepTimer.isActive())
+            stop();
+      else  start();
       break;
 
     case Qt::Key_Tab: {
@@ -109,6 +205,23 @@ void MainView::keyReleaseEvent(QKeyEvent *e) {
     switch (e->key()) {
     case Qt::Key_R:
       debugTriggerRepop(simu::InitType::MEGA_RANDOM);
+      break;
+
+#ifndef NDEBUG
+    case Qt::Key_D: {
+      bool &b2dd = config::Visualisation::b2DebugDraw.ref();
+      b2dd = !b2dd;
+      _simu.doDebugDrawNow();
+      scene()->update();
+      break;
+    }
+#endif
+
+    case Qt::Key_Left:
+      selectPrevious();
+      break;
+    case Qt::Key_Right:
+      selectNext();
       break;
     }
   }
@@ -162,6 +275,32 @@ void MainView::mouseMoveEvent(QMouseEvent *e) {
   QGraphicsView::mouseMoveEvent(e);
 }
 
+void MainView::selectNext(void) {
+  Critter *newSelection = nullptr;
+  auto &critters = _simu.critters();
+  if (!_selection)  newSelection = critters.begin()->second;
+  else {
+    auto it = critters.find(&_selection->object());
+    if (it == critters.end()) it = critters.begin();
+    else
+      newSelection = std::next(it)->second;
+  }
+  selectionChanged(newSelection);
+}
+
+void MainView::selectPrevious(void) {
+  Critter *newSelection = nullptr;
+  auto &critters = _simu.critters();
+  if (!_selection)  newSelection = std::prev(critters.end())->second;
+  else {
+    auto it = critters.find(&_selection->object());
+    if (it == critters.begin()) it = critters.end();
+    else
+      newSelection = std::prev(it)->second;
+  }
+  selectionChanged(newSelection);
+}
+
 void MainView::selectionChanged(Critter *c) {
 //  auto q = qDebug();
 //  q << "SelectionChanged from "
@@ -170,11 +309,42 @@ void MainView::selectionChanged(Critter *c) {
   if (_selection) _selection->setSelected(false);
   _selection = c;
 
-  if (c)  c->setSelected(true);
+  if (c) {
+    _selection->setSelected(true);
+    focusOnSelection();
+  }
+
   _manipulator->setSubject(c);
 
 //  q << "to"
 //    << (_selection? int(_selection->object().id()) : -1);
+}
+
+void MainView::focusOnSelection (void) {
+  float S = config::Visualisation::zoomFactor();
+  QRectF r = _selection->boundingRect().translated(_selection->pos());
+//  qDebug() << r;
+  if (S != 1) {
+    QPointF d (.5*S*r.width(), .5*S*r.height());
+    QPointF center = r.center();
+    r.setTopLeft(center - d);
+    r.setBottomRight(center + d);
+  }
+//  qDebug() << ">> " << r;
+  fitInView(r, Qt::KeepAspectRatio);
+}
+
+void MainView::externalCritterControl(void) {
+  static const std::map<PersitentJoystick::MyOwnControllerMapping, Motor>
+    j2m_map {
+      { PersitentJoystick::AXIS_L_Y, Motor::LEFT  },
+      { PersitentJoystick::AXIS_R_Y, Motor::RIGHT },
+  };
+
+  for (const auto &p: j2m_map) {
+    float v = joystick.value(JS_EVENT_AXIS, p.first);
+    if (!isnan(v))  _selection->object().setMotorOutput(-v, p.second);
+  }
 }
 
 } // end of namespace visu

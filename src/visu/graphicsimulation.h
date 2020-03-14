@@ -37,11 +37,27 @@ public:
     return _critters;
   }
 
+  auto& critters (void) {
+    return _critters;
+  }
+
+  auto bounds (void) const {
+    return _graphicEnvironment->boundingRect();
+  }
+
+  void step (void) override;
+
   simu::Critter *addCritter(const CGenome &genome,
                             float x, float y, float r) override;
   void delCritter (simu::Critter *critter) override;
 
   void postInit (void) override;
+
+#ifndef NDEBUG
+  void doDebugDrawNow (void) {
+    _graphicEnvironment->doDebugDraw();
+  }
+#endif
 };
 
 } // end of namespace visu

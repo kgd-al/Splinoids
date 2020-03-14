@@ -13,10 +13,13 @@ enum class InitType {
 };
 
 class Simulation {
+protected:
   std::set<Critter*> _critters, _corpses;
   phylogeny::GIDManager _gidManager;
 
   std::unique_ptr<Environment> _environment;
+
+  rng::FastDice _dice;
 
 public:
   using CGenome = Critter::Genome;
@@ -24,12 +27,12 @@ public:
   Simulation();
   virtual ~Simulation (void);
 
-  const auto& environment (void) const {
+  auto& environment (void) {
     return *_environment;
   }
 
   void init (const Environment::Genome &egenome,
-             Critter::Genome cgenome, InitType type = InitType::RANDOM);
+             Critter::Genome cgenome, InitType type = InitType::REGULAR);
 
   virtual void postInit (void) {}
 
@@ -40,7 +43,7 @@ public:
   void clear (void);
   virtual void preClear (void) {}
 
-  void step (void);
+  virtual void step (void);
 };
 
 } // end of namespace simu

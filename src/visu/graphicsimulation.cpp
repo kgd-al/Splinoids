@@ -1,13 +1,13 @@
 #include "graphicsimulation.h"
+#include "config.h"
+#include "b2debugdrawer.h"
 
 #include <QDebug>
 
 namespace visu {
 
 GraphicSimulation::GraphicSimulation(QStatusBar *sbar)
-  : _scene (new QGraphicsScene), _sbar(sbar) {
-
-}
+  : _scene (new QGraphicsScene), _sbar(sbar) {}
 
 GraphicSimulation::~GraphicSimulation (void) = default;
 
@@ -17,6 +17,23 @@ void GraphicSimulation::postInit(void) {
   _graphicEnvironment = new Environment (environment());
   _scene->addItem(_graphicEnvironment);
   _scene->setSceneRect(_graphicEnvironment->boundingRect());
+
+#ifndef NDEBUG
+  _scene->addItem(_graphicEnvironment->debugDrawer());
+#endif
+}
+
+void GraphicSimulation::step (void) {
+  for (uint i=0; i<config::Visualisation::substepsSpeed(); i++)
+    Simulation::step();
+
+  for (const auto &p: _critters)
+    if (p.first->body().IsAwake())
+      p.second->updatePosition();
+
+#ifndef NDEBUG
+  if (config::Visualisation::b2DebugDraw()) doDebugDrawNow();
+#endif
 }
 
 simu::Critter*

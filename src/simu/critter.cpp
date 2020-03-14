@@ -1,4 +1,5 @@
 #include "critter.h"
+#include "environment.h"
 
 namespace simu {
 
@@ -74,7 +75,10 @@ SplinesCoefficients coefficients = [] {
     real t = real(i+1) / (Critter::SPLINES_PRECISION-1),
          t_ = 1-t;
     c[i] = {
-      std::pow(t_, 3), 3*std::pow(t_, 2)*t, 3*t_*std::pow(t, 2), std::pow(t, 3)
+      real(std::pow(t_, 3)),
+      real(3*std::pow(t_, 2)*t),
+      real(3*t_*std::pow(t, 2)),
+      real(std::pow(t, 3))
     };
   }
   return c;
@@ -91,9 +95,28 @@ P2D pointAt (int t, const P2D &p0, const P2D &c0, const P2D &c1, const P2D &p1){
   }
 }
 
-Critter::Critter(const Genome &g, float x, float y, float r)
-  : _genotype(g), _size(r), _pos(x, y), _rotation(M_PI/2.) {
+Critter::Critter(const Genome &g, b2Body *body, float r)
+  : _genotype(g), _size(r), _body(*body) {
   updateShape();
+  _motors = { { Motor::LEFT, 0 }, { Motor::RIGHT, 0 } };
+}
+
+
+std::ofstream log ("velocity.dat");
+void Critter::step(Environment &env) {
+//  std::cerr << "Critter " << id() << " at " << pos() << ", angle = "
+//            << 180*rotation()/M_PI << std::endl;
+
+  if (id() == ID(1)) {
+    log << _body.GetLinearVelocity().Length() << std::endl;
+  }
+
+  // Apply requested motor output
+  for (auto &m: _motors) {
+    P2D f = _body.GetWorldVector({config::Simulation::critterBaseSpeed()*m.second,0}),
+        p = _body.GetWorldPoint({0, int(m.first)*.5f*bodyRadius()});
+    _body.ApplyForce(f, p, true);
+  }
 }
 
 void Critter::updateShape(void) {
@@ -111,21 +134,21 @@ void Critter::updateSplines(void) {
   using S = genotype::Spline::Index;
   static constexpr auto W0_RANGE = M_PI/2;
 
-  const real r = .5*bodySize();
+  const real r = bodyRadius();
   for (uint i=0; i<SPLINES_COUNT; i++) {
     genotype::Spline::Data &d = _genotype.splines[i].data;
     SplineData &sd = _splinesData[i];
     float w = dimorphism(i);
 
-    P2D p0 = P2D::fromPolar(d[S::SA], r); SET(sd.p0, p0)
+    P2D p0 = fromPolar(d[S::SA], r); SET(sd.p0, p0)
 
     sd.al0 = d[S::SA] + W0_RANGE * d[S::W0];
-    sd.pl0 = P2D::fromPolar(sd.al0, r);
+    sd.pl0 = fromPolar(sd.al0, r);
 
     sd.ar0 = d[S::SA] - W0_RANGE * d[S::W0];
-    sd.pr0 = P2D::fromPolar(sd.ar0, r);
+    sd.pr0 = fromPolar(sd.ar0, r);
 
-    sd.p1 = P2D::fromPolar(d[S::SA] + d[S::EA], w * (r + d[S::EL]));
+    sd.p1 = fromPolar(d[S::SA] + d[S::EA], w * (r + d[S::EL]));
     P2D v = sd.p1 - p0;
     P2D t (-v.y, v.x);
 
@@ -147,26 +170,81 @@ void Critter::updateSplines(void) {
 
 #undef SET
 
-void Critter::testConvex (const CollisionObject &o) {
+void Critter::testConvex (const Vertices &o, std::vector<Vertices> &v) {
   assert(o.size() == 4);  // Only works for quads
 
   // Only need to test outer edges
   P2D i;
   if (!intersection(o[0], o[1], o[2], o[3], i))
-    _collisionObjects.push_back(o); // Convex quad -> keep
+    v.push_back(o); // Convex quad -> keep
 
   else { // Concave quad -> divide in triangles
-    _collisionObjects.push_back({ o[0], o[1], i });
-    _collisionObjects.push_back({ i, o[2], o[3] });
+    v.push_back({ o[0], i, o[3] });
+    v.push_back({ i, o[1], o[2] });
   }
 }
 
-bool Critter::insideBody(const P2D &p) const {
-  return std::sqrt(p.x*p.x+p.y*p.y) <= .5*bodySize();
+void Critter::addBodyFixture (void) {
+  b2CircleShape s;
+  s.m_p.Set(0, 0);
+  s.m_radius = bodyRadius();
+
+  b2FixtureDef fd;
+  fd.shape = &s;
+  fd.density = 1;
+  fd.friction = .3;
+
+  _body.CreateFixture(&fd);
 }
 
-bool Critter::internalPolygon(const CollisionObject &o) const {
-  for (const P2D &p: o) if (!insideBody(p)) return false;
+void Critter::addPolygonFixture (const Vertices &v) {
+//  float ccs = 0;
+//  uint n = v.size();
+//  for (uint i=0; i<n; i++)
+//    ccs += (v[(i+1)%n].x - v[i].x)*(v[(i+1)%n].y + v[i].y);
+//  std::cerr << "Polygon: ";
+//  for (auto p: v) std::cerr << " " << p;
+//  std::cerr << " (CCScore = " << ccs << ")" << std::endl;
+
+  b2PolygonShape s;
+  s.Set(v.data(), v.size());
+//  std::cerr << "Valid? " << s.Validate() << std::endl;
+
+//  // Debug
+//  bool ok = true;
+//  if (s.m_count != v.size())
+//    ok = false;
+//  else {
+//    for (uint j=0; j<v.size(); j++)
+//      if (v[j] != s.m_vertices[j])
+//        ok = false;
+//  }
+//  if (!ok) {
+//    std::cerr << "Mismatched polygon:\n\t Base";
+//    for (uint j=0; j<v.size(); j++) std::cerr << " " << v[j];
+//    std::cerr << "\n\tBox2D";
+//    for (uint j=0; j<s.m_count; j++) std::cerr << " " << s.m_vertices[j];
+//    std::cerr << std::endl;
+//  }
+
+//  std::cerr << "Shape: ";
+//  for (int j=0; j<s.m_count; j++) std::cerr << " " << s.m_vertices[j];
+//  std::cerr << std::endl;
+
+  b2FixtureDef fd;
+  fd.shape = &s;
+  fd.density = 2;
+  fd.friction = .1;
+
+  _body.CreateFixture(&fd);
+}
+
+bool Critter::insideBody(const P2D &p) const {
+  return std::sqrt(p.x*p.x+p.y*p.y) <= bodyRadius();
+}
+
+bool Critter::internalPolygon(const Vertices &v) const {
+  for (const P2D &p: v) if (!insideBody(p)) return false;
   return true;
 }
 
@@ -244,103 +322,108 @@ template <> const P2D& max<Y> (const P2D &lhs, const P2D &rhs) {
 
 // Use variation of Bentley–Ottmann algorithm?
 void Critter::mergeAndSplit(void) {
-  using namespace linesweep;
-  std::set<YEvent> yevents;
+//  using namespace linesweep;
+//  std::set<YEvent> yevents;
 
-  _msIntersections.clear();
-  _msLines.clear();
+//  _msIntersections.clear();
+//  _msLines.clear();
 
-  const auto insertYEvents = [&yevents] (const L2D &l) {
-    yevents.insert({I, l});  yevents.insert({O, l});
-  };
+//  const auto insertYEvents = [&yevents] (const L2D &l) {
+//    yevents.insert({I, l});  yevents.insert({O, l});
+//  };
 
-  std::cerr << _collisionObjects.size() << " objects:\n";
-  for (const auto &o: _collisionObjects) {
-    for (uint i=0; i<o.size()-1; i++) insertYEvents({o[i], o[i+1]});
-    insertYEvents({o.back(), o.front()});
+//  std::cerr << _collisionObjects.size() << " objects:\n";
+//  for (const auto &o: _collisionObjects) {
+//    for (uint i=0; i<o.size()-1; i++) insertYEvents({o[i], o[i+1]});
+//    insertYEvents({o.back(), o.front()});
 
-    std::cerr << "\t";
-    for (const auto &p: o)  std::cerr << p << " ";
-    std::cerr << "\n";
-  }
-  std::cerr << std::endl;
+//    std::cerr << "\t";
+//    for (const auto &p: o)  std::cerr << p << " ";
+//    std::cerr << "\n";
+//  }
+//  std::cerr << std::endl;
 
-  std::set<L2D, L2D_CMP> currentLines;
-  P2D lastI;
+//  std::set<L2D, L2D_CMP> currentLines;
+//  P2D lastI;
 
-  std::cerr << yevents.size() << " YEvents:\n";
-  for (const YEvent &e: yevents)
-    std::cerr << "\t" << e << "\n";
-  std::cerr << std::endl;
+//  std::cerr << yevents.size() << " YEvents:\n";
+//  for (const YEvent &e: yevents)
+//    std::cerr << "\t" << e << "\n";
+//  std::cerr << std::endl;
 
-//  std::set<XEvent> xevents;
-  while (!yevents.empty()) {
-    auto it = yevents.begin();
-    YEvent ye = *it;
-    yevents.erase(it);
+////  std::set<XEvent> xevents;
+//  while (!yevents.empty()) {
+//    auto it = yevents.begin();
+//    YEvent ye = *it;
+//    yevents.erase(it);
 
-    std::cerr << "Processing " << ye << "\n";
+//    std::cerr << "Processing " << ye << "\n";
 
-//    std::initializer_list<XEvent> events {
-//      { I, ye.line }, { O, ye.line }
-//    };
-    if (ye.type == I) {
-      for (const L2D &l: currentLines)
-        std::cerr << "\t" << l << "\n";
+////    std::initializer_list<XEvent> events {
+////      { I, ye.line }, { O, ye.line }
+////    };
+//    if (ye.type == I) {
+//      for (const L2D &l: currentLines)
+//        std::cerr << "\t" << l << "\n";
 
-      bool foundI = false;
-      for (const L2D &l: currentLines) {
-        if (!consecutive(ye.line, l)
-            && aabbIntersection(ye.line, l)
-            && intersection(ye.line, l, lastI)) {
+//      bool foundI = false;
+//      for (const L2D &l: currentLines) {
+//        if (!consecutive(ye.line, l)
+//            && aabbIntersection(ye.line, l)
+//            && intersection(ye.line, l, lastI)) {
 
-          std::cerr << "Intersection "
-                    << " at " << lastI
-                    << " between " << ye.line << " and " << l
-                    << std::endl;
+//          std::cerr << "Intersection "
+//                    << " at " << lastI
+//                    << " between " << ye.line << " and " << l
+//                    << std::endl;
 
-          foundI = true;
-          _msIntersections.push_back(lastI);
-          L2D lm { min<Y>(ye.line.p0, ye.line.p1), lastI },
-              lM { lastI, max<Y>(ye.line.p0, ye.line.p1) },
-              rm { min<Y>(l.p0, l.p1), lastI },
-              rM { lastI, max<Y>(l.p0, l.p1) };
+//          foundI = true;
+//          _msIntersections.push_back(lastI);
+//          L2D lm { min<Y>(ye.line.p0, ye.line.p1), lastI },
+//              lM { lastI, max<Y>(ye.line.p0, ye.line.p1) },
+//              rm { min<Y>(l.p0, l.p1), lastI },
+//              rM { lastI, max<Y>(l.p0, l.p1) };
 
-          _msLines.push_back({lm.p0, lm.p1});
-          _msLines.push_back({rm.p0, rm.p1});
+//          _msLines.push_back({lm.p0, lm.p1});
+//          _msLines.push_back({rm.p0, rm.p1});
 
-          yevents.erase({ O, ye.line });
-          yevents.erase({ O, l });
+//          yevents.erase({ O, ye.line });
+//          yevents.erase({ O, l });
 
-          yevents.insert({ O, lM });  currentLines.insert(lM);
-          yevents.insert({ O, rM });  currentLines.insert(rM);
-        }
-      }
+//          yevents.insert({ O, lM });  currentLines.insert(lM);
+//          yevents.insert({ O, rM });  currentLines.insert(rM);
+//        }
+//      }
 
-      if (!foundI) {
-        auto n = currentLines.size();
-        currentLines.insert(ye.line);
-        assert(n < currentLines.size());
-  //      xevents.insert(events);
-      }
+//      if (!foundI) {
+//        auto n = currentLines.size();
+//        currentLines.insert(ye.line);
+//        assert(n < currentLines.size());
+//  //      xevents.insert(events);
+//      }
 
-    } else {
-      currentLines.erase(ye.line);
-//      for (auto &e: events) xevents.erase(e);
-    }
-  }
+//    } else {
+//      currentLines.erase(ye.line);
+////      for (auto &e: events) xevents.erase(e);
+//    }
+//  }
 
-  std::cerr << "Merge/split completed with " << _msIntersections.size()
-            << " intersections" << std::endl;
+//  std::cerr << "Merge/split completed with " << _msIntersections.size()
+//            << " intersections" << std::endl;
 }
 
 void Critter::updateObjects(void) {
   static constexpr auto P = SPLINES_PRECISION;
   static constexpr auto N = 2*SPLINES_PRECISION-1;
 
-  _collisionObjects.clear();
-  for (uint i=0; i<SPLINES_COUNT; i++) {
+  auto f = _body.GetFixtureList();
+  while (f) {
+    _body.DestroyFixture(f);
+    f = f->GetNext();
+  }
 
+  std::vector<Vertices> objects;
+  for (uint i=0; i<SPLINES_COUNT; i++) {
     if (dimorphism(i) > 0) {
       const auto &d = _splinesData[i];
       std::array<P2D, N> p;
@@ -350,31 +433,29 @@ void Critter::updateObjects(void) {
         p[t+P-1] = pointAt(t, d.p1, d.cr0, d.cr1, d.pr0);
 
       for (uint k=0; k<P-2; k++)
-        testConvex({ p[k], p[k+1], p[N-k-2], p[N-k-1] });
+        testConvex({ p[k], p[k+1], p[N-k-2], p[N-k-1] }, objects);
 
       // Top triangle
-      _collisionObjects.push_back({
-        p[P-2], p[P-1], p[P]
-      });
+      objects.push_back({ p[P-2], p[P-1], p[P] });
     }
   }
 
-  uint n = _collisionObjects.size();
+  uint n = objects.size();
   for (uint i=0; i<n; i++) {
-    const CollisionObject &o = _collisionObjects[i];
-    CollisionObject o_;
-    for (const P2D &p: o) o_.emplace_back(p.x, -p.y);
-    _collisionObjects.push_back(o_);
+    const Vertices &v = objects[i];
+    Vertices v_;
+    for (const P2D &p: v) v_.emplace_back(p.x, -p.y);
+    objects.push_back(v_);
   }
-  uint n2 = _collisionObjects.size();
+  uint n2 = objects.size();
 
-  for (auto it=_collisionObjects.begin(); it != _collisionObjects.end();) {
+  for (auto it=objects.begin(); it != objects.end();) {
     if (internalPolygon(*it))
-      it = _collisionObjects.erase(it);
+      it = objects.erase(it);
     else
       ++it;
   }
-  uint n3 = _collisionObjects.size();
+  uint n3 = objects.size();
 
 //  if (!_collisionObjects.empty()) mergeAndSplit();
 
@@ -393,6 +474,17 @@ void Critter::updateObjects(void) {
 //    std::cerr << "\n";
 //  }
 //  std::cerr << std::endl;
+
+  collisionObjects = objects;
+
+  addBodyFixture();
+  for (Vertices &v: objects)  addPolygonFixture(v);
+}
+
+void Critter::setMotorOutput(float i, Motor m) {
+  assert(-1 <= i && i <= 1);
+  assert(EnumUtils<Motor>::isValid(m));
+  _motors.at(m) = i;
 }
 
 } // end of namespace simu

@@ -10,7 +10,6 @@ Simulation::~Simulation (void) {
   clear();
 }
 
-
 struct CritterInitData {
   Critter::Genome genome;
   float x, y;
@@ -119,7 +118,7 @@ static const std::map<InitType,InitMethod> initMethods = {
   { InitType::REGULAR,
     [] (const Critter::Genome &base, phylogeny::GIDManager &gidm, InitList &l) {
       rng::FastDice dice (0);
-      for (int i=0; i<10; i++) {
+      for (int i=0; i<1/*0*/; i++) {
         auto cg = base.clone(gidm);
         cg.cdata.sex = (i%2 ? Critter::Sex::MALE : Critter::Sex::FEMALE);
         l.push_back({cg, dice(-10.f,10.f), dice(-10.f,10.f), 1});
@@ -155,13 +154,23 @@ void Simulation::init(const Environment::Genome &egenome,
 Critter* Simulation::addCritter (const CGenome &genome,
                                  float x, float y, float r) {
 
-  Critter *c = new Critter (genome, x, y, r);
+  b2BodyDef bodyDef;
+  bodyDef.type = b2_dynamicBody;
+  bodyDef.position.Set(x, y);
+  bodyDef.angle = M_PI;//_dice(0., 2*M_PI);
+  bodyDef.angularDamping = .8;
+  bodyDef.linearDamping = .5;
+
+  b2Body *body = _environment->physics().CreateBody(&bodyDef);
+  Critter *c = new Critter (genome, body, r);
+
   _critters.insert(c);
   return c;
 }
 
 void Simulation::delCritter (Critter *critter) {
   _critters.erase(critter);
+  _environment->physics().DestroyBody(&critter->body());
   delete critter;
 }
 
@@ -170,7 +179,9 @@ void Simulation::clear (void) {
 }
 
 void Simulation::step (void) {
-
+  for (Critter *c: _critters)
+    c->step(*_environment);
+  _environment->step();
 }
 
 } // end of namespace simu

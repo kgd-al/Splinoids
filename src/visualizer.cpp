@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QMainWindow>
 #include <QSettings>
+#include <QTimer>
 
 #include "kgd/external/cxxopts.hpp"
 
@@ -19,6 +20,9 @@
 //}
 
 int main(int argc, char *argv[]) {
+  using CGenome = genotype::Critter;
+  using EGenome = genotype::Environment;
+
   // ===========================================================================
   // == Command line arguments parsing
 
@@ -250,20 +254,33 @@ int main(int argc, char *argv[]) {
 
 //  config::Simulation::setupConfig(configFile, verbosity);
 //  if (configFile.empty()) config::Simulation::printConfig("");
-  genotype::Critter::printMutationRates(std::cout, 2);
+  rng::FastDice dice (4);
+
+  CGenome::printMutationRates(std::cout, 2);
+  CGenome cgenome = CGenome::random(dice);
+  for (uint i=0; i<5000; i++) cgenome.mutate(dice);
+
+  cgenome.dimorphism = {1,0,0,0};
+  cgenome.splines[0].data[2] = 1;
+
+  EGenome egenome = EGenome::random(dice);
 
   QMainWindow w;
-  rng::FastDice dice (0);
   visu::GraphicSimulation s (w.statusBar());
-  s.init(genotype::Environment::random(dice),
-         genotype::Critter::random(dice),
-         simu::InitType::MEGA_RANDOM);
+  s.init(egenome, cgenome, simu::InitType::REGULAR);
 
   visu::MainView v (s);
   w.setCentralWidget(&v);
 
   w.setWindowTitle("Untitled1 main window");
   w.show();
+
+  v.fitInView(s.bounds(), Qt::KeepAspectRatio);
+  v.selectNext();
+
+  QTimer::singleShot(1000, [&v] {
+    v.start();
+  });
 
   auto ret = a.exec();
 

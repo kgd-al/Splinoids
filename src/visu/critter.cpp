@@ -9,6 +9,9 @@
 #include <QtMath>
 #include <QFileDialog>
 
+#include "box2d/b2_fixture.h"
+#include "box2d/b2_polygon_shape.h"
+
 #include <QDebug>
 
 namespace visu {
@@ -38,50 +41,10 @@ QPointF fromPolar (float angle, float length) {
   return length * QPointF(std::cos(angle), std::sin(angle));
 }
 
-//void makeSpline (QPainterPath &p, Critter::DrawData &s, float r,
-//                 const genotype::Spline &s, float weight) {
-
-//  using S = genotype::Spline;
-//  using D = S::Data;
-//  const D &d = s.data;
-
-//  static constexpr auto W0_RANGE = M_PI/2;
-
-//  s.p0 = fromPolar(d[S::SA], r);
-
-//  float al0 = d[S::SA] + W0_RANGE * d[S::W0];
-//  s.pl0 = fromPolar(al0, r);
-
-//  float ar0 = d[S::SA] - W0_RANGE * d[S::W0];
-//  s.pr0 = fromPolar(ar0, r);
-
-//  s.p1 = fromPolar(d[S::SA] + d[S::EA], weight * (r + d[S::EL]));
-//  QPointF v = s.p1 - s.p0;
-//  QPointF t (-v.y(), v.x());
-
-//  s.pc0 = s.p0 + d[S::DX0] * v;
-//  s.pc1 = s.p0 + d[S::DX1] * v;
-
-//  s.c0 = s.p0 + d[S::DX0] * v + d[S::DY0] * t;
-//  s.c1 = s.p0 + d[S::DX1] * v + d[S::DY1] * t;
-
-//  s.cl0 = s.p0 + d[S::DX0] * v + d[S::DY0] * weight * t * (1+d[S::W1]);
-//  s.cl1 = s.p0 + d[S::DX1] * v + d[S::DY1] * weight * t * (1+d[S::W2]);
-
-//  s.cr0 = s.p0 + d[S::DX0] * v - d[S::DY0] * weight * t * (1+d[S::W1]);
-//  s.cr1 = s.p0 + d[S::DX1] * v - d[S::DY1] * weight * t * (1+d[S::W2]);
-
-//  p.moveTo(s.pl0);
-//  p.cubicTo(s.cl0, s.cl1, s.p1);
-//  p.cubicTo(s.cr0, s.cr1, s.pr0);
-//  p.arcTo(-r, -r, 2*r, 2*r, -qRadiansToDegrees(ar0), -qRadiansToDegrees(al0-ar0));
-//  p.closeSubpath();
-//}
-
 void Critter::updateShape (void) {
   prepareGeometryChange();
 
-  float r = .5*_critter.bodySize();
+  float r = _critter.bodyRadius();
 
   _body = QPainterPath();
   _body.addEllipse(QPoint(0, 0), r, r);
@@ -92,9 +55,9 @@ void Critter::updateShape (void) {
   for (uint i=0; i<SPLINES_COUNT; i++) {
     const auto &s = splines[i];
     auto &p = _artifacts[i];
-    p.moveTo(s.pl0);
-    p.cubicTo(s.cl0, s.cl1, s.p1);
-    p.cubicTo(s.cr0, s.cr1, s.pr0);
+    p.moveTo(toQt(s.pl0));
+    p.cubicTo(toQt(s.cl0), toQt(s.cl1), toQt(s.p1));
+    p.cubicTo(toQt(s.cr0), toQt(s.cr1), toQt(s.pr0));
     p.arcTo(-r, -r, 2*r, 2*r,
             -qRadiansToDegrees(s.ar0),
             -qRadiansToDegrees(s.al0-s.ar0));
@@ -105,10 +68,23 @@ void Critter::updateShape (void) {
 
 #ifndef NDEBUG
   _polygons.clear();
-  for (const auto &s: _critter.collisionObjects()) {
+  for (const auto &s: _critter.collisionObjects) {
     QPolygonF p;
-    for (const auto &v: s)  p << v;
+    for (const auto &v: s)  p << toQt(v);
     _polygons.push_back(p);
+  }
+  _b2polygons.clear();
+  const b2Fixture *f = _critter.fixturesList();
+  while (f) {
+    const b2Shape *s = f->GetShape();
+    b2Shape::Type t = s->GetType();
+    if (t == b2Shape::e_polygon) {
+      const b2PolygonShape *bp = dynamic_cast<const b2PolygonShape*>(s);
+      QPolygonF qp;
+      for (int i=0; i<bp->m_count; i++)  qp << toQt(bp->m_vertices[i]);
+      _b2polygons.push_back(qp);
+    }
+    f = f->GetNext();
   }
 #endif
 
@@ -133,7 +109,7 @@ void Critter::updateShape (void) {
 }
 
 QRectF Critter::boundingRect (void) const {
-  int S = _critter.size();
+  int S = _critter.bodySize();
   return QRectF(-.5*S, -.5*S, S, S).united(_maximalBoundingRect);
 }
 
@@ -252,19 +228,21 @@ void Critter::debugDrawAbove (QPainter *painter) const {
         if (d.test(i+SPLINES_COUNT)) {
           pen.setStyle(Qt::DashLine);  pen.setColor(Qt::gray);  painter->setPen(pen);
           painter->drawPolyline(QPolygonF({
-            s.pl0, s.cl0, s.cl1, s.p1, s.cr0, s.cr1, s.pr0
+            toQt(s.pl0), toQt(s.cl0), toQt(s.cl1),
+            toQt(s.p1),
+            toQt(s.cr0), toQt(s.cr1), toQt(s.pr0)
           }));
         }
 
         if (d.test(i)) {
           pen.setStyle(Qt::SolidLine);  pen.setColor(Qt::black);  painter->setPen(pen);
-          painter->drawLine(s.p0, s.p1);
+          painter->drawLine(toQt(s.p0), toQt(s.p1));
           pen.setStyle(Qt::DashLine);  painter->setPen(pen);
-          painter->drawLine(s.pc0, s.c0);
-          painter->drawLine(s.pc1, s.c1);
+          painter->drawLine(toQt(s.pc0), toQt(s.c0));
+          painter->drawLine(toQt(s.pc1), toQt(s.c1));
           pen.setStyle(Qt::DotLine);  painter->setPen(pen);
           painter->drawPolyline(QPolygonF({
-            s.p0, s.c0, s.c1, s.p1
+            toQt(s.p0), toQt(s.c0), toQt(s.c1), toQt(s.p1)
           }));
         }
       }
@@ -273,36 +251,70 @@ void Critter::debugDrawAbove (QPainter *painter) const {
 
   // Debug draw of simu spline objects
   const auto dco = config::Visualisation::showCollisionObjects();
+  static constexpr float pr = .0125;
   if (dco) {
     painter->save();
-      if (dco & 1) {
-        pen.setColor(Qt::blue);
-        pen.setStyle(Qt::DashLine);
-        painter->setPen(pen);
-        for (const auto &p: _polygons)  painter->drawPolygon(p);
-      }
       if (dco & 2) {
-        painter->setBrush(Qt::red);
         painter->setPen(Qt::NoPen);
+        painter->setBrush(Qt::red);
+        for (const auto &p: _b2polygons)
+          for (const auto &p_: p)
+            painter->drawEllipse(p_, pr, pr);
+        painter->setBrush(Qt::darkRed);
         for (const auto &p: _polygons)
           for (const auto &p_: p)
-            painter->drawEllipse(p_, .025, .025);
+            painter->drawEllipse(p_, .5*pr, .5*pr);
+      }
+
+      if (dco & 1) {
+        painter->setBrush(Qt::NoBrush);
+        pen.setStyle(Qt::DashLine);
+        pen.setColor(Qt::green);
+        painter->setPen(pen);
+        for (const auto &p: _polygons)  painter->drawPolygon(p);
+        pen.setColor(Qt::blue);
+        painter->setPen(pen);
+        for (const auto &p: _b2polygons)  painter->drawPolygon(p);
       }
 
       // Intermediate debug
-      painter->setBrush(Qt::darkRed);
-      painter->setPen(Qt::NoPen);
-      for (const auto &p: _critter._msIntersections)
-        painter->drawEllipse(p, .0125, .0125);
+//      painter->setBrush(Qt::darkRed);
+//      painter->setPen(Qt::NoPen);
+//      for (const auto &p: _critter._msIntersections)
+//        painter->drawEllipse(toQt(p), .0125, .0125);
 
-      pen.setStyle(Qt::SolidLine);
-      pen.setColor(Qt::darkBlue);
-      painter->setPen(pen);
-      for (const auto &l: _critter._msLines)
-        painter->drawLine(l[0], l[1]);
+//      pen.setStyle(Qt::SolidLine);
+//      pen.setColor(Qt::darkBlue);
+//      painter->setPen(pen);
+//      for (const auto &l: _critter._msLines)
+//        painter->drawLine(toQt(l[0]), toQt(l[1]));
 
     painter->restore();
   }
+
+  // draw motor outputs
+  painter->save();
+    static constexpr float mo_W = .1;
+    float S = object().bodySize();
+    float R = .25 * S;
+    float L = .1 * S;
+
+    for (Motor m: EnumUtils<Motor>::iterator()) {
+      float o = object().motorOutput(m);
+      QRectF r (0, -int(m) * R-.5*mo_W, L * o, mo_W);
+      painter->fillRect(r, QColor::fromRgbF(1, 0, 0, std::fabs(o)));
+    }
+  painter->restore();
+
+  // draw Velocity (physics)
+  painter->save();
+    pen.setColor(Qt::red);
+    painter->setPen(pen);
+    painter->drawLine({0,0},
+                      toQt(
+                        object().body().GetLocalVector(
+                          object().body().GetLinearVelocity())));
+  painter->restore();
 }
 #endif
 

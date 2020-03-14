@@ -2,52 +2,15 @@
 #define SIMU_CRITTER_H
 
 #include "../genotype/critter.h"
+#include "config.h"
+
+#include "box2d/b2_body.h"
+
+DEFINE_PRETTY_ENUMERATION(Motor, LEFT = -1, RIGHT = 1)
 
 namespace simu {
 
-using real = double;
-struct P2D {
-  real x, y;
-
-  P2D (void) : P2D(0,0) {}
-
-  P2D (real x, real y) : x(x), y(y) {}
-
-  P2D operator+ (const P2D &that) const {
-    return P2D (this->x + that.x, this->y + that.y);
-  }
-
-  P2D operator- (const P2D &that) const {
-    return P2D (this->x - that.x, this->y - that.y);
-  }
-
-  P2D operator* (real v) const {
-    return P2D(this->x * v, this->y * v);
-  }
-
-  friend P2D operator* (real v, const P2D &p) {
-    return p * v;
-  }
-
-  friend bool operator== (const P2D &lhs, const P2D &rhs) {
-    return lhs.x == rhs.x && lhs.y == rhs.y;
-  }
-
-  friend std::ostream& operator<< (std::ostream &os, const P2D &p) {
-    return os << "{ " << p.x << ", " << p.y << " }";
-  }
-
-  template <typename T,
-            typename V = decltype(std::declval<T>().x()),
-            typename std::enable_if<std::is_same_v<V, real>, int>::type = 0>
-  operator T(void) const {
-    return T(x, y);
-  }
-
-  static P2D fromPolar (float a, float l) {
-    return l * P2D(std::cos(a), std::sin(a));
-  }
-};
+struct Environment;
 
 class Critter {
 public:
@@ -64,9 +27,7 @@ private:
 
   float _size; // Ratio
 
-  P2D _pos;
-
-  float _rotation;
+  b2Body &_body;
 
   struct SplineData {
     // Central spline
@@ -99,15 +60,18 @@ private:
   };
   std::array<SplineData, SPLINES_COUNT> _splinesData;
 
-  using CollisionObject = std::vector<P2D>;
-  using CollisionObjects = std::vector<CollisionObject>;
-  CollisionObjects _collisionObjects;
+
+  std::map<Motor, float> _motors;
 
 public:
+  using Vertices = std::vector<P2D>;
+  std::vector<Vertices> collisionObjects;
   std::vector<P2D> _msIntersections;
   std::vector<std::array<P2D,2>> _msLines;
 
-  Critter(const Genome &g, float x, float y, float r);
+  Critter(const Genome &g, b2Body *body, float r);
+
+  void step (Environment &env);
 
   const auto& genotype (void) const {
     return _genotype;
@@ -131,20 +95,28 @@ public:
   }
 
   auto pos (void) const {
-    return _pos;
+    return _body.GetPosition();
   }
 
   auto x (void) const {
-    return _pos.x;
+    return pos().x;
   }
 
   auto y (void) const {
-    return _pos.y;
+    return pos().y;
   }
 
   // in radians
   auto rotation (void) const {
-    return _rotation;
+    return _body.GetAngle();
+  }
+
+  const b2Body& body (void) const {
+    return _body;
+  }
+
+  b2Body& body (void) {
+    return _body;
   }
 
   /*
@@ -155,30 +127,46 @@ public:
   }
 
   /*
+   * In ]0,1]. Ratio of maximal size
+   */
+  auto bodyRadius (void) const {
+    return .5f * bodySize();
+  }
+
+  /*
    * In ]0,2]. (Potential) Size of body + artifacts
    */
-  auto size (void) const {
-    return 2 * bodySize();
-  }
+//  auto size (void) const {
+//    return 2 * bodySize();
+//  }
 
   const auto& splinesData (void) const {
     return _splinesData;
   }
 
-  const auto& collisionObjects (void) const {
-    return _collisionObjects;
+  const auto fixturesList (void) const {
+    return _body.GetFixtureList();
   }
 
   void updateShape (void);
+
+  void setMotorOutput (float i, Motor m);
+
+  float motorOutput (Motor m) const {
+    return _motors.at(m);
+  }
 
 private:
   void updateSplines (void);
   void updateObjects (void);
 
-  void testConvex (const CollisionObject &o);
-  bool internalPolygon (const CollisionObject &o) const;
+  static void testConvex (const Vertices &o, std::vector<Vertices> &v);
+  bool internalPolygon (const Vertices &v) const;
 
   bool insideBody (const P2D &p) const;
+
+  void addBodyFixture (void);
+  void addPolygonFixture (const Vertices &v);
 
   void mergeAndSplit (void);
 };

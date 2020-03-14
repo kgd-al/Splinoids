@@ -216,6 +216,9 @@ if (NOT CLUSTER_BUILD)
 
         "geneticmanipulator.h"
         "geneticmanipulator.cpp"
+
+        "b2debugdrawer.h"
+        "b2debugdrawer.cpp"
 #        "plant.h"
 #        "plant.cpp"
 #        "qtconversions.hpp"
@@ -227,7 +230,12 @@ if (NOT CLUSTER_BUILD)
     )
     PREPEND(VISU_SRC "src/visu" ${VISU_SRC})
 
-    add_library(VISU_OBJS OBJECT ${VISU_SRC})
+    set(VISU_MISC_SRC
+        "joystick/joystick.hh"
+        "joystick/joystick.cc"
+        )
+
+    add_library(VISU_OBJS OBJECT ${VISU_SRC} ${VISU_MISC_SRC})
     target_include_directories(VISU_OBJS PRIVATE $<TARGET_PROPERTY:Qt5::Widgets,INTERFACE_INCLUDE_DIRECTORIES>)
     target_compile_definitions(VISU_OBJS PRIVATE $<TARGET_PROPERTY:Qt5::Widgets,INTERFACE_COMPILE_DEFINITIONS>)
     set_property(TARGET VISU_OBJS PROPERTY POSITION_INDEPENDENT_CODE ON)
@@ -245,8 +253,9 @@ if (NOT CLUSTER_BUILD)
       "src/visualizer.cpp"
     )
     set_property(TARGET visualizer PROPERTY AUTOMOC ON)
-    target_link_libraries(visualizer ${SIMU_LIBS} ${APOGeT_LIBRARIES}
-                                     ${QT_LIBS} ${APOGeT_GUI_LIBRARIES})
+    target_link_libraries(visualizer ${SIMU_LIBS}
+                                     ${APOGeT_LIBRARIES} ${APOGeT_GUI_LIBRARIES}
+                                     ${QT_LIBS})
 
 
 #################################################################################
