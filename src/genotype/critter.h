@@ -5,7 +5,11 @@
 
 #include "kgd/apt/core/crossover.h"
 
+#include "config.h"
+
 namespace genotype {
+
+using Color = config::Color;
 
 class Spline : public genotype::EDNA<Spline> {
   APT_EDNA()
@@ -36,6 +40,20 @@ public:
 
 DECLARE_GENOME_FIELD(Spline, Spline::Data, data)
 
+class Vision : public genotype::EDNA<Vision> {
+  APT_EDNA()
+public:
+  float angleBody, angleRelative;
+  float width;
+
+  uint precision;
+};
+
+DECLARE_GENOME_FIELD(Vision, float, angleBody)
+DECLARE_GENOME_FIELD(Vision, float, angleRelative)
+DECLARE_GENOME_FIELD(Vision, float, width)
+DECLARE_GENOME_FIELD(Vision, uint, precision)
+
 class Critter : public genotype::EDNA<Critter> {
   APT_EDNA()
 
@@ -49,6 +67,11 @@ public:
 
   using Dimorphism = std::array<float, 2*SPLINES_COUNT>;
   Dimorphism dimorphism;
+
+  using Colors = std::array<Color, 2*(SPLINES_COUNT+1)>;
+  Colors colors;
+
+  Vision vision;
 
   BOCData cdata;
   phylogeny::Genealogy gdata;
@@ -102,6 +125,8 @@ public:
 
 DECLARE_GENOME_FIELD(Critter, Critter::Splines, splines)
 DECLARE_GENOME_FIELD(Critter, Critter::Dimorphism, dimorphism)
+DECLARE_GENOME_FIELD(Critter, Critter::Colors, colors)
+DECLARE_GENOME_FIELD(Critter, Vision, vision)
 DECLARE_GENOME_FIELD(Critter, BOCData, cdata)
 
 } // end of namespace gntp
@@ -117,8 +142,23 @@ struct EDNA_CONFIG_FILE(Spline) {
 };
 
 template <>
+struct EDNA_CONFIG_FILE(Vision) {
+  DECLARE_PARAMETER(Bounds<float>, angleBodyBounds)
+  DECLARE_PARAMETER(Bounds<float>, angleRelativeBounds)
+  DECLARE_PARAMETER(Bounds<float>, widthBounds)
+  DECLARE_PARAMETER(Bounds<uint>, precisionBounds)
+
+  DECLARE_PARAMETER(MutationRates, mutationRates)
+  DECLARE_PARAMETER(DistanceWeights, distanceWeights)
+};
+
+template <>
 struct EDNA_CONFIG_FILE(Critter) {
   DECLARE_PARAMETER(MutationRates, dimorphism_mutationRates)
+
+  using BC = Bounds<genotype::Color::value_type>;
+  DECLARE_PARAMETER(BC, color_bounds)
+  DECLARE_PARAMETER(MutationRates, colors_mutationRates)
 
   using Crossover = genotype::BOCData::config_t;
   DECLARE_SUBCONFIG(Crossover, configCrossover)

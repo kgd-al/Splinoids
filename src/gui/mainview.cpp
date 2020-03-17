@@ -8,11 +8,11 @@
 #include "mainview.h"
 
 #include "geneticmanipulator.h"
-#include "config.h"
+#include "../visu/config.h"
 
 #include "../../joystick/joystick.hh"
 
-namespace visu {
+namespace gui {
 
 class PersitentJoystick {
   using Type = decltype(JoystickEvent::type);
@@ -59,8 +59,8 @@ public:
 };
 PersitentJoystick joystick;
 
-MainView::MainView (GraphicSimulation &simulation)
-  : _simu(simulation), _selection(nullptr) {
+MainView::MainView (visu::GraphicSimulation &simulation, StatsView *stats)
+  : _simu(simulation), _stats(stats), _selection(nullptr) {
 
   setScene(simulation.scene());
   setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
@@ -81,6 +81,7 @@ MainView::MainView (GraphicSimulation &simulation)
 }
 
 void MainView::start(void) {
+  static const uint STEP_MS = 1000 / config::Simulation::ticksPerSecond();
   _stepTimer.start(STEP_MS);
 }
 
@@ -116,7 +117,8 @@ void MainView::keyReleaseEvent(QKeyEvent *e) {
 #ifndef NDEBUG
     if (Qt::Key_1 <= k && k <= Qt::Key_4) {
       int i = k - Qt::Key_1;
-      if (e->modifiers() & Qt::ControlModifier) i += Critter::SPLINES_COUNT;
+      if (e->modifiers() & Qt::ControlModifier)
+        i += visu::Critter::SPLINES_COUNT;
       config::Visualisation::debugDraw.flip(i);
       std::cerr << config::Visualisation::debugDraw;
       scene()->update();
@@ -163,6 +165,11 @@ void MainView::keyReleaseEvent(QKeyEvent *e) {
           !config::Visualisation::opaqueBodies();
       scene()->update();
       break;
+    case Qt::Key_V:
+      config::Visualisation::drawVision.ref() =
+          (config::Visualisation::drawVision()+1)%3;
+      scene()->update();
+      break;
 
 #ifndef NDEBUG
     case Qt::Key_D:
@@ -172,9 +179,6 @@ void MainView::keyReleaseEvent(QKeyEvent *e) {
       break;
 #endif
 
-    case Qt::Key_R:
-      debugTriggerRepop(simu::InitType::RANDOM);
-      break;
     case Qt::Key_G:
       _manipulator->setVisible(!_manipulator->isVisible());
       break;
@@ -203,10 +207,6 @@ void MainView::keyReleaseEvent(QKeyEvent *e) {
 
   } else if (Qt::ControlModifier == e->modifiers()) {
     switch (e->key()) {
-    case Qt::Key_R:
-      debugTriggerRepop(simu::InitType::MEGA_RANDOM);
-      break;
-
 #ifndef NDEBUG
     case Qt::Key_D: {
       bool &b2dd = config::Visualisation::b2DebugDraw.ref();
@@ -231,8 +231,8 @@ void MainView::mouseReleaseEvent(QMouseEvent *e) {
   QGraphicsView::mouseReleaseEvent(e);
 
   QGraphicsItem *i = itemAt(e->pos());
-  Critter *c = nullptr;
-  if (i)   c = dynamic_cast<Critter*>(i);
+  visu::Critter *c = nullptr;
+  if (i)   c = dynamic_cast<visu::Critter*>(i);
 
 //  if (c)
 //    std::cerr << "Clicked critter " << c->object().id() << " at "
@@ -242,30 +242,8 @@ void MainView::mouseReleaseEvent(QMouseEvent *e) {
   if (Qt::NoModifier == e->modifiers())
     selectionChanged(c);
 
-  if (c && Qt::ControlModifier == e->modifiers())
-    debugTriggerRepop(simu::InitType::MUTATIONAL_LANDSCAPE,
-                      c->object().genotype());
-
   if (c && Qt::ShiftModifier == e->modifiers())
     c->save();
-}
-
-void MainView::debugTriggerRepop (simu::InitType type,
-                                  const genotype::Critter &base) {
-
-  _manipulator->setSubject(nullptr);
-  _simu.clear();
-  _simu.init(_simu.environment().genotype(), base, type);
-
-  QRectF crittersBounds;
-  for (const auto &pair: _simu.critters()) {
-    const Critter *c = pair.second;
-    crittersBounds =
-      crittersBounds.united(c->boundingRect().translated(c->pos()));
-  }
-
-//  qDebug() << "Adjusting view to " << crittersBounds;
-  fitInView(crittersBounds, Qt::KeepAspectRatio);
 }
 
 void MainView::mouseMoveEvent(QMouseEvent *e) {
@@ -276,7 +254,7 @@ void MainView::mouseMoveEvent(QMouseEvent *e) {
 }
 
 void MainView::selectNext(void) {
-  Critter *newSelection = nullptr;
+  visu::Critter *newSelection = nullptr;
   auto &critters = _simu.critters();
   if (!_selection)  newSelection = critters.begin()->second;
   else {
@@ -289,7 +267,7 @@ void MainView::selectNext(void) {
 }
 
 void MainView::selectPrevious(void) {
-  Critter *newSelection = nullptr;
+  visu::Critter *newSelection = nullptr;
   auto &critters = _simu.critters();
   if (!_selection)  newSelection = std::prev(critters.end())->second;
   else {
@@ -301,7 +279,7 @@ void MainView::selectPrevious(void) {
   selectionChanged(newSelection);
 }
 
-void MainView::selectionChanged(Critter *c) {
+void MainView::selectionChanged(visu::Critter *c) {
 //  auto q = qDebug();
 //  q << "SelectionChanged from "
 //    << (_selection? int(_selection->object().id()) : -1);
@@ -347,4 +325,4 @@ void MainView::externalCritterControl(void) {
   }
 }
 
-} // end of namespace visu
+} // end of namespace gui

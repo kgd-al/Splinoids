@@ -4,6 +4,7 @@
 #include "box2d/box2d.h"
 
 #include "../genotype/environment.h"
+#include "config.h"
 
 namespace simu {
 
@@ -12,13 +13,6 @@ struct Critter;
 class Environment {
 public:
   using Genome = genotype::Environment;
-  using Color = std::array<float, 3>;
-  static constexpr Color EMPTY { 0, 0, 0 };
-
-  // Box2D parameters
-  static constexpr float DT = 1.f / 60.f;
-  static constexpr int V_ITER = 8;  // Solver iterations for velocities
-  static constexpr int P_ITER = 3;  // Solver iterations for positions
 
 private:
   Genome _genome;

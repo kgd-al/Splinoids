@@ -17,6 +17,8 @@ P2D fromPolar (real a, real l);
 
 P2D operator* (const P2D &p, real v);
 
+using Color = genotype::Color;
+
 }
 namespace config {
 struct PTree;
@@ -28,6 +30,12 @@ struct CONFIG_FILE(Simulation) {
   DECLARE_SUBCONFIG(PTree, configPhylogeny)
 
   DECLARE_PARAMETER(float, critterBaseSpeed)
+
+  DECLARE_PARAMETER(uint, b2VelocityIter)
+  DECLARE_PARAMETER(uint, b2PositionIter)
+  DECLARE_PARAMETER(uint, ticksPerSecond)
+  DECLARE_PARAMETER(uint, secondsPerDay)
+  DECLARE_PARAMETER(uint, daysPerYear)
 };
 
 } // end of namespace config

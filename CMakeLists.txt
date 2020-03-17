@@ -59,6 +59,7 @@ FUNCTION(PREPEND output prefix)
 ENDFUNCTION(PREPEND)
 
 set(GNTP_SRC
+    "config.h"
     "critter.h"
     "critter.cpp"
     "environment.h"
@@ -74,12 +75,16 @@ PREPEND(GNTP_SRC "src/genotype" ${GNTP_SRC})
 set(SIMU_SRC
     "critter.h"
     "critter.cpp"
+    "plant.h"
+    "plant.cpp"
     "environment.h"
     "environment.cpp"
     "simulation.h"
     "simulation.cpp"
     "config.h"
     "config.cpp"
+    "time.h"
+    "time.cpp"
 #    "types.h"
 #    "types.cpp"
 #    "simulation.h"
@@ -205,37 +210,40 @@ if (NOT CLUSTER_BUILD)
     set(VISU_SRC
         "critter.h"
         "critter.cpp"
+        "plant.h"
+        "plant.cpp"
         "environment.h"
         "environment.cpp"
         "graphicsimulation.h"
         "graphicsimulation.cpp"
-        "mainview.h"
-        "mainview.cpp"
         "config.h"
         "config.cpp"
 
-        "geneticmanipulator.h"
-        "geneticmanipulator.cpp"
-
         "b2debugdrawer.h"
         "b2debugdrawer.cpp"
-#        "plant.h"
-#        "plant.cpp"
-#        "qtconversions.hpp"
-#        "controller.h"
-#        "controller.cpp"
-#        "tools/fastforwarddialog.h"
-#        "tools/fastforwarddialog.cpp"
-#        "tools/smoothdurations.hpp"
     )
     PREPEND(VISU_SRC "src/visu" ${VISU_SRC})
 
-    set(VISU_MISC_SRC
+    set(GUI_SRC
+        "mainview.h"
+        "mainview.cpp"
+        "geneticmanipulator.h"
+        "geneticmanipulator.cpp"
+        "statsview.h"
+        "statsview.cpp"
+    )
+
+    PREPEND(GUI_SRC "src/gui" ${GUI_SRC})
+
+    set(GUI_MISC_SRC
         "joystick/joystick.hh"
         "joystick/joystick.cc"
-        )
 
-    add_library(VISU_OBJS OBJECT ${VISU_SRC} ${VISU_MISC_SRC})
+        "qt-collapsible-section/Section.h"
+        "qt-collapsible-section/Section.cpp"
+    )
+
+    add_library(VISU_OBJS OBJECT ${VISU_SRC} ${GUI_SRC} ${GUI_MISC_SRC})
     target_include_directories(VISU_OBJS PRIVATE $<TARGET_PROPERTY:Qt5::Widgets,INTERFACE_INCLUDE_DIRECTORIES>)
     target_compile_definitions(VISU_OBJS PRIVATE $<TARGET_PROPERTY:Qt5::Widgets,INTERFACE_COMPILE_DEFINITIONS>)
     set_property(TARGET VISU_OBJS PROPERTY POSITION_INDEPENDENT_CODE ON)

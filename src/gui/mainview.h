@@ -3,24 +3,26 @@
 
 #include <QGraphicsView>
 
-#include "graphicsimulation.h"
+#include "../visu/graphicsimulation.h"
 
-namespace visu {
+#include "statsview.h"
+
+namespace gui {
 
 struct GeneticManipulator;
 
 class MainView : public QGraphicsView {
   QTimer _stepTimer;
 
-  GraphicSimulation &_simu;
+  visu::GraphicSimulation &_simu;
   GeneticManipulator *_manipulator;
 
-  Critter *_selection;
+  StatsView *_stats;
+
+  visu::Critter *_selection;
 
 public:
-  static constexpr uint STEP_MS = 1000 * simu::Environment::DT;
-
-  MainView (GraphicSimulation &simulation);
+  MainView (visu::GraphicSimulation &simulation, StatsView *stats);
 
   void keyReleaseEvent(QKeyEvent *e) override;
 
@@ -37,15 +39,12 @@ public:
   void step (void);
 
 private:
-  void selectionChanged (Critter *c);
+  void selectionChanged (visu::Critter *c);
   void focusOnSelection (void);
 
   void externalCritterControl (void);
-
-  void debugTriggerRepop (simu::InitType type,
-                          const genotype::Critter &base = genotype::Critter());
 };
 
-} // end of namespace visu
+} // end of namespace gui
 
 #endif // MAINVIEW_H

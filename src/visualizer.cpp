@@ -5,7 +5,7 @@
 
 #include "kgd/external/cxxopts.hpp"
 
-#include "visu/mainview.h"
+#include "gui/mainview.h"
 
 //#include "visu/controller.h"
 
@@ -30,6 +30,8 @@ int main(int argc, char *argv[]) {
 
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::QUIET;
+
+  decltype(simu::Simulation::InitData::seed) rngSeed = -1;
 
 //  std::string envGenomeArg, plantGenomeArg;
 
@@ -56,6 +58,7 @@ int main(int argc, char *argv[]) {
      cxxopts::value(configFile))
     ("v,verbosity", "Verbosity level. " + config::verbosityValues(),
      cxxopts::value(verbosity))
+    ("seed", "Seed value for simulation's RNG", cxxopts::value(rngSeed))
 //    ("d,duration", "Simulation duration. ",
 //     cxxopts::value(duration))
 //    ("f,data-folder", "Folder under which to store the computational outputs",
@@ -254,25 +257,36 @@ int main(int argc, char *argv[]) {
 
 //  config::Simulation::setupConfig(configFile, verbosity);
 //  if (configFile.empty()) config::Simulation::printConfig("");
-  rng::FastDice dice (4);
+  rng::FastDice dice;
+  if (rngSeed >= 0) dice.reset(rngSeed);
 
   CGenome::printMutationRates(std::cout, 2);
   CGenome cgenome = CGenome::random(dice);
   for (uint i=0; i<5000; i++) cgenome.mutate(dice);
-
-  cgenome.dimorphism = {1,0,0,0};
-  cgenome.splines[0].data[2] = 1;
+  std::cerr << "Initial splinoid genome: " << cgenome << std::endl;
 
   EGenome egenome = EGenome::random(dice);
 
+  simu::Simulation::InitData idata {};
+  idata.ienergy = 10;
+  idata.nCritters = 1;//5;
+  idata.seed = rngSeed;
+
   QMainWindow w;
-  visu::GraphicSimulation s (w.statusBar());
-  s.init(egenome, cgenome, simu::InitType::REGULAR);
+  gui::StatsView *stats = new gui::StatsView;
+  visu::GraphicSimulation s (w.statusBar(), stats);
+  s.init(egenome, cgenome, idata);
 
-  visu::MainView v (s);
-  w.setCentralWidget(&v);
+  gui::MainView v (s, stats);
 
-  w.setWindowTitle("Untitled1 main window");
+  QWidget *holder = new QWidget;
+  QLayout *topLayout = new QVBoxLayout;
+  holder->setLayout(topLayout);
+  topLayout->addWidget(&v);
+  topLayout->addWidget(stats);
+  w.setCentralWidget(holder);
+
+  w.setWindowTitle("Splinoids main window");
   w.show();
 
   v.fitInView(s.bounds(), Qt::KeepAspectRatio);

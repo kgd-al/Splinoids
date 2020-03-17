@@ -4,12 +4,14 @@
 #include "../simu/config.h"
 
 #include <QPointF>
+#include <QColor>
 
 DEFINE_PRETTY_ENUMERATION(
   RenderingType,
   NORMAL, VISION)
 
 QPointF toQt (const simu::P2D &p);
+QColor toQt (const simu::Color &c);
 
 namespace config {
 
@@ -19,6 +21,7 @@ struct CONFIG_FILE(Visualisation) {
   DECLARE_PARAMETER(float, viewZoom)
   DECLARE_PARAMETER(bool, opaqueBodies)
   DECLARE_PARAMETER(bool, drawInnerEdges)
+  DECLARE_PARAMETER(int, drawVision)
 
   DECLARE_PARAMETER(RenderingType, renderingType)
 

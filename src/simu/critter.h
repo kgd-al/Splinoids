@@ -18,14 +18,22 @@ public:
   using Sex = Genome::Sex;
   using ID = phylogeny::GID;
 
+  static constexpr float MIN_SIZE = 1;
   static constexpr float MAX_SIZE = 1;
+
+  static constexpr float BODY_DENSITY = 1;
+  static constexpr float ARTIFACTS_DENSITY = 2;
+
   static constexpr auto SPLINES_COUNT = Genome::SPLINES_COUNT;
   static constexpr uint SPLINES_PRECISION = 4;
 
 private:
   Genome _genotype;
 
+  float _visionRange; // Derived from genotype
   float _size; // Ratio
+
+//  uint foo;
 
   b2Body &_body;
 
@@ -60,16 +68,25 @@ private:
   };
   std::array<SplineData, SPLINES_COUNT> _splinesData;
 
+  b2Fixture *_b2Body;
+  std::array<std::vector<b2Fixture*>, SPLINES_COUNT> _b2Artifacts;
 
   std::map<Motor, float> _motors;
 
+  // Vision cache data (each vector of size 2*(2*genotype.vision.precision+1))
+  std::vector<const Color*> _retina;
+  std::array<P2D, 2> _raysStart;
+  std::vector<P2D> _raysEnd;
+  std::vector<float> _raysFraction; // TODO Remove (debug visu only)
+
+  float _energy, _health, _water;
+
 public:
+  // TODO Remove these variables
   using Vertices = std::vector<P2D>;
   std::vector<Vertices> collisionObjects;
-  std::vector<P2D> _msIntersections;
-  std::vector<std::array<P2D,2>> _msLines;
 
-  Critter(const Genome &g, b2Body *body, float r);
+  Critter(const Genome &g, b2Body *body, float e);
 
   void step (Environment &env);
 
@@ -148,6 +165,30 @@ public:
     return _body.GetFixtureList();
   }
 
+  float visionRange (void) const {
+    return _visionRange;
+  }
+
+  const auto& raysStart (void) const {
+    return _raysStart;
+  }
+
+  const auto& retina (void) const {
+    return _retina;
+  }
+
+  const auto& raysEnd (void) const {
+    return _raysEnd;
+  }
+
+  const auto &raysLength (void) const {
+    return _raysFraction;
+  }
+
+  auto mass (void) const {
+    return _body.GetMass();
+  }
+
   void updateShape (void);
 
   void setMotorOutput (float i, Motor m);
@@ -156,7 +197,27 @@ public:
     return _motors.at(m);
   }
 
+  const Color& bodyColor (void) const {
+    return _genotype.colors[5*sex()];
+  }
+
+  const Color& splineColor (uint i) const {
+    return _genotype.colors[5*sex()+i];
+  }
+
+  // age in [0,1]
+  static float efficiency (float age);
+
+  // MIN_SIZE <= size <= MAX_SIZE
+  static float storage (float size) {
+    return M_PI * .25 * size * size;
+  }
+
+  static float computeVisionRange (float visionWidth);
+
 private:
+  void performVision (const Environment &env);
+
   void updateSplines (void);
   void updateObjects (void);
 
@@ -165,10 +226,8 @@ private:
 
   bool insideBody (const P2D &p) const;
 
-  void addBodyFixture (void);
-  void addPolygonFixture (const Vertices &v);
-
-  void mergeAndSplit (void);
+  b2Fixture* addBodyFixture (void);
+  b2Fixture* addPolygonFixture(uint i, const Vertices &v);
 };
 
 } // end of namespace simu

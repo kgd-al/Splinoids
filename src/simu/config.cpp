@@ -26,5 +26,11 @@ DEFINE_SUBCONFIG(PTree, configPhylogeny)
 
 DEFINE_PARAMETER(float, critterBaseSpeed, 2)
 
+DEFINE_PARAMETER(uint, b2VelocityIter, 8)
+DEFINE_PARAMETER(uint, b2PositionIter, 3)
+DEFINE_PARAMETER(uint, ticksPerSecond, 50)
+DEFINE_PARAMETER(uint, secondsPerDay, 200)
+DEFINE_PARAMETER(uint, daysPerYear, 1000)
+
 #undef CFILE
 } // end of namespace config

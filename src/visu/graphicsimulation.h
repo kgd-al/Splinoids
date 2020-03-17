@@ -3,22 +3,31 @@
 
 #include <QGraphicsScene>
 #include <QStatusBar>
+#include <QLabel>
 
 #include "../simu/simulation.h"
 #include "environment.h"
 #include "critter.h"
+#include "plant.h"
+
+namespace gui {
+struct StatsView;
+}
 
 namespace visu {
 
 class GraphicSimulation : public simu::Simulation {
   std::map<const simu::Critter*, visu::Critter*> _critters;
+  std::map<const simu::Plant*, visu::Plant*> _plants;
   std::unique_ptr<QGraphicsScene> _scene;
   Environment *_graphicEnvironment;
 
   QStatusBar *_sbar;
+  gui::StatsView *_stats;
+  QLabel *_timeLabel, *_genLabel;
 
 public:
-  GraphicSimulation(QStatusBar *sbar);
+  GraphicSimulation(QStatusBar *sbar, gui::StatsView *stats);
   ~GraphicSimulation(void);
 
   auto scene (void) {
@@ -47,9 +56,12 @@ public:
 
   void step (void) override;
 
-  simu::Critter *addCritter(const CGenome &genome,
-                            float x, float y, float r) override;
+  simu::Critter* addCritter(const CGenome &genome,
+                            float x, float y, float e) override;
   void delCritter (simu::Critter *critter) override;
+
+  simu::Plant* addPlant(float x, float y, float s, float e) override;
+  void delPlant(simu::Plant *plant) override;
 
   void postInit (void) override;
 

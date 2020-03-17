@@ -15,6 +15,12 @@ Environment::~Environment (void) {
 }
 
 void Environment::step (void) {
+
+  // Box2D parameters
+  static const float DT = 1.f / config::Simulation::secondsPerDay();
+  static const int V_ITER = config::Simulation::b2VelocityIter();
+  static const int P_ITER = config::Simulation::b2PositionIter();
+
   _physics.Step(DT, V_ITER, P_ITER);
 //  std::cerr << "Physical step took " << _physics.GetProfile().step
 //            << " ms" << std::endl;

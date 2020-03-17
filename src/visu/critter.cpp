@@ -20,6 +20,7 @@ using Sex = simu::Critter::Sex;
 static const QColor artifactsFillColor = QColor::fromRgbF(.9, .85, .75);
 static const QColor bodyFillColor1 = QColor::fromRgbF(.0, .0, .0);
 static const QColor bodyFillColor2 = QColor::fromRgbF(.0, .0, .0, .0);
+static const QColor visionFillColor = QColor::fromRgbF(1, .5, .5, .125);
 static const QMap<Sex, QColor> sexColors {
   {   Sex::MALE, QColor::fromRgbF( .6, .6, 1. ) },
   { Sex::FEMALE, QColor::fromRgbF(1.,  .6,  .6) },
@@ -28,8 +29,13 @@ static const QMap<Sex, QColor> sexColors {
 Critter::Critter(simu::Critter &critter) : _critter(critter) {
   setFlag(ItemIsSelectable, true);
   setAcceptedMouseButtons(Qt::NoButton);
+  setZValue(2);
   updatePosition();
   updateShape();
+
+  _bcolor = toQt(critter.bodyColor());
+  for (uint i=0; i<SPLINES_COUNT; i++)
+    _acolors[i] = toQt(critter.splineColor(i));
 }
 
 
@@ -39,6 +45,14 @@ void Critter::updatePosition (void) {
 
 QPointF fromPolar (float angle, float length) {
   return length * QPointF(std::cos(angle), std::sin(angle));
+}
+
+QRectF squarify (const QRectF &r) {
+  qreal s = std::max(
+    std::max(r.right(), -r.left()),
+    std::max(r.top(), -r.bottom())
+  );
+  return QRectF (-s, -s, 2*s, 2*s);
 }
 
 void Critter::updateShape (void) {
@@ -66,6 +80,30 @@ void Critter::updateShape (void) {
     abr = abr.united(p.boundingRect());
   }
 
+  updateVision();
+
+  QRectF b2br;
+  { // Compute b2AABB
+    b2Transform t;
+    t.SetIdentity();
+    b2AABB aabb;
+    aabb.lowerBound.Set( FLT_MAX,  FLT_MAX);
+    aabb.upperBound.Set(-FLT_MAX, -FLT_MAX);
+    const b2Fixture *f = _critter.fixturesList();
+    while (f) {
+      const b2Shape *s = f->GetShape();
+      for (int c=0; c<s->GetChildCount(); c++) {
+        b2AABB sAABB;
+        s->ComputeAABB(&sAABB, t, c);
+//        shapeAABB.lowerBound = shapeAABB.lowerBound;
+//        shapeAABB.upperBound = shapeAABB.upperBound;
+        aabb.Combine(sAABB);
+      }
+      f = f->GetNext();
+    }
+    b2br = QRectF(toQt(aabb.lowerBound), toQt(aabb.upperBound));
+  }
+
 #ifndef NDEBUG
   _polygons.clear();
   for (const auto &s: _critter.collisionObjects) {
@@ -73,7 +111,7 @@ void Critter::updateShape (void) {
     for (const auto &v: s)  p << toQt(v);
     _polygons.push_back(p);
   }
-  _b2polygons.clear();
+  _b2polygons.clear();  uint fixtures = 0;
   const b2Fixture *f = _critter.fixturesList();
   while (f) {
     const b2Shape *s = f->GetShape();
@@ -85,27 +123,43 @@ void Critter::updateShape (void) {
       _b2polygons.push_back(qp);
     }
     f = f->GetNext();
+    fixtures++;
   }
 #endif
 
   QRectF abr_f = QRectF(abr.x(), -abr.y() -abr.height(),
                         abr.width(), abr.height());
 
-//  qDebug() << "Expected bounding rect: " << boundingRect();
-//  qDebug() << "    Body bounding rect: " << _body.boundingRect();
-//  qDebug() << "     abr bounding rect: " << abr;
-//  qDebug() << "   abr_f bounding rect: " << abr_f;
+  _minimalBoundingRect = _body.boundingRect().united(b2br)
+                                            .united(abr).united(abr_f);
 
-  _maximalBoundingRect = _body.boundingRect()
-                          .united(abr)
-                          .united(abr_f);
+  _critterBoundingRect = squarify(_minimalBoundingRect);
 
-//  qDebug() << "Resulting bounding rect: " << _maximalBoundingRect;
+  QRectF vcbr = _visionCone.boundingRect(),
+         vcbr_f = QRectF(vcbr.x(), -vcbr.y() - vcbr.height(),
+                         vcbr.width(), vcbr.height());
 
-  qreal s = std::max(_maximalBoundingRect.width(), _maximalBoundingRect.height());
-  _maximalBoundingRect.setRect(-.5*s, -.5*s, s, s);
+  _maximalBoundingRect =
+    squarify(_critterBoundingRect.united(vcbr).united(vcbr_f));
+}
 
-//  qDebug() << "Normalized bounding rect: " << _maximalBoundingRect;
+void Critter::updateVision(void) {
+  const genotype::Vision &v = _critter.genotype().vision;
+  _visionCone = QPainterPath();
+
+  float a0 = v.angleBody;
+  QPointF pB = _critter.bodyRadius() * QPointF(std::cos(a0), std::sin(a0));
+
+  float dar = v.angleRelative - .5 * v.width;
+  float ar = a0 + dar;
+  float r = _critter.visionRange();
+  QPointF pr = pB + r * QPointF(std::cos(ar), std::sin(ar));
+
+  _visionCone.moveTo(pB);
+  _visionCone.lineTo(pr);
+  _visionCone.arcTo(QRectF(pB - QPointF(r,r), pB + QPointF(r, r)),
+                    -qRadiansToDegrees(ar), -qRadiansToDegrees(v.width));
+  _visionCone.lineTo(pB);
 }
 
 QRectF Critter::boundingRect (void) const {
@@ -120,6 +174,10 @@ void Critter::paint(QPainter *painter,
 }
 
 void Critter::doPaint (QPainter *painter) const {
+#ifndef NDEBUG
+  if (config::Visualisation::b2DebugDraw()) return;
+#endif
+
   if (config::Visualisation::renderingType() != RenderingType::NORMAL)
     return;
 
@@ -131,6 +189,8 @@ void Critter::doPaint (QPainter *painter) const {
     if (isSelected()) {
       pen.setColor(Qt::gray); pen.setStyle(Qt::DotLine); painter->setPen(pen);
       painter->drawRect(boundingRect());
+      pen.setColor(Qt::red); pen.setStyle(Qt::DashLine); painter->setPen(pen);
+      painter->drawRect(critterBoundingRect());
     }
 
 //    pen.setColor(Qt::red);
@@ -155,7 +215,7 @@ void Critter::doPaint (QPainter *painter) const {
 //        painter->setPen(pen);
 
         if (config::Visualisation::opaqueBodies())
-          painter->fillPath(_body, bodyFillColor1);
+          painter->fillPath(_body, _bcolor);
 
         if (!config::Visualisation::drawInnerEdges()) {
           painter->scale(1,  1);
@@ -166,10 +226,12 @@ void Critter::doPaint (QPainter *painter) const {
         }
 
         painter->scale(1,  1);
-        for (const auto &a: _artifacts) painter->fillPath(a, artifactsFillColor);
+        for (uint i=0; i<SPLINES_COUNT; i++)
+          painter->fillPath(_artifacts[i], _acolors[i]);
 
         painter->scale(1, -1);
-        for (const auto &a: _artifacts) painter->fillPath(a, artifactsFillColor);
+        for (uint i=0; i<SPLINES_COUNT; i++)
+          painter->fillPath(_artifacts[i], _acolors[i]);
 
         if (config::Visualisation::drawInnerEdges()) {
           painter->scale(1,  1);
@@ -196,6 +258,38 @@ void Critter::doPaint (QPainter *painter) const {
       pen.setColor(Qt::black);
       painter->setPen(pen);
       painter->drawPath(_body);
+    }
+
+    if (config::Visualisation::drawVision() >= 1) {
+      painter->save();
+        pen.setColor(visionFillColor.darker());
+        pen.setStyle(Qt::SolidLine);
+        painter->setPen(pen);
+        painter->setBrush(visionFillColor);
+        painter->drawPath(_visionCone);
+        painter->scale(1, -1);
+        painter->drawPath(_visionCone);
+        painter->scale(1, -1);
+
+        if (config::Visualisation::drawVision() >= 2) {
+          const auto &s = object().raysStart();
+          const auto &e = object().raysEnd();
+          const auto &l = object().raysLength();
+          const auto &r = object().retina();
+          const auto n = e.size(), h = n/2;
+          for (uint i=0; i<n; i++) {
+            QPointF pstart = toQt(s[i<h?0:1]),
+                    pmax = toQt(e[i]),
+                    pend = pstart + l[i] * (pmax-pstart);
+            QColor color = r[i] ? toQt(*r[i]) : QColor();
+            pen.setColor(color);
+            painter->setPen(pen);
+            painter->drawLine(pstart, pend);
+            painter->setBrush(color.lighter());
+            painter->drawEllipse(pend, .0125, .0125);
+          }
+        }
+      painter->restore();
     }
 
     pen.setColor(sexColors.value(_critter.sex()));

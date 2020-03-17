@@ -42,9 +42,35 @@ DEFINE_GENOME_DISTANCE_WEIGHTS({
 
 #undef GENOME
 
+
+#define GENOME Vision
+
+static constexpr float fPI = M_PI;
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, angleBody, "", 0.f, 0.f, fPI/2.f, fPI/2.f)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, angleRelative, "", -fPI/2.f, -fPI/2.f, fPI/2.f, fPI/2.f)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, width, "", fPI/60, fPI/60, 2*fPI/3.f, 2*fPI/3.f)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(uint, precision, "", 0u, 0u, 10u, 10u)
+
+DEFINE_GENOME_MUTATION_RATES({
+  EDNA_PAIR(    angleBody, 1),
+  EDNA_PAIR(angleRelative, 1),
+  EDNA_PAIR(        width, 1),
+  EDNA_PAIR(    precision, 1),
+})
+DEFINE_GENOME_DISTANCE_WEIGHTS({
+  EDNA_PAIR(    angleBody, 1),
+  EDNA_PAIR(angleRelative, 1),
+  EDNA_PAIR(        width, 1),
+  EDNA_PAIR(    precision, 1),
+})
+
+#undef GENOME
+
+
 #define GENOME Critter
 
 DEFINE_GENOME_FIELD_AS_SUBGENOME(BOCData, cdata, "")
+DEFINE_GENOME_FIELD_AS_SUBGENOME(Vision, vision, "")
 
 using Config = genotype::Critter::config_t;
 
@@ -131,15 +157,88 @@ auto dimorphismFunctor = [] {
 };
 DEFINE_GENOME_FIELD_WITH_FUNCTOR(Dm, dimorphism, "", dimorphismFunctor())
 
+
+using Cs = GENOME::Colors;
+auto colorsFunctor = [] {
+  GENOME_FIELD_FUNCTOR(Cs, colors) functor;
+  static constexpr auto Csn = GENOME::SPLINES_COUNT+1;  // Also body color
+  static constexpr auto Cn = std::tuple_size_v<Color>;
+
+  using MO = config::MutationSettings::BoundsOperators<Color::value_type>;
+
+  functor.random = [] (auto &dice) {
+    static const Config::BC &bounds = Config::color_bounds();
+    Cs colors;
+    for (Color &c: colors)
+      for (Color::value_type &v: c)
+        v = dice(bounds.rndMin, bounds.rndMax);
+    return colors;
+  };
+
+  functor.mutate = [] (auto &colors, auto &dice) {
+    static const Config::BC &bounds = Config::color_bounds();
+    static const auto &dmRates = Config::colors_mutationRates();
+    std::string field = dice.pickOne(dmRates);
+    uint i = dice(Cs::size_type(0), colors.size()-1);
+    if (field == "homogeneous")
+      colors[i] = colors[(i+Csn)%(2*Csn)];
+
+    else if (field == "monomorphism") {
+      uint j = i;
+      while (j == i) {
+        j = dice(Csn*floor(j/Csn), Csn*(1+floor(j/Csn))-1);
+      }
+      colors[i] = colors[j];
+
+    } else if (field == "mutate") {
+      uint j = dice(Color::size_type(0), Cn-1);
+      MO::mutate(colors[i][j], bounds.min, bounds.max, dice);
+    }
+  };
+
+  functor.cross = [] (auto &lhs, auto &rhs, auto &dice) {
+    Cs res;
+    for (uint i=0; i<2*Csn; i++)
+      for (uint j=0; j<Cn; j++)
+        res[i][j] = dice.toss(lhs[i][j], rhs[i][j]);
+    return res;
+  };
+
+  functor.distance = [] (auto &lhs, auto &rhs) {
+    static const Config::BC &bounds = Config::color_bounds();
+      float d = 0;
+    for (uint i=0; i<2*Csn; i++)
+      for (uint j=0; j<Cn; j++)
+        d += MO::distance(lhs[i][j], rhs[i][j], bounds.min, bounds.max);
+    return d;
+  };
+
+  functor.check = [] (auto &colors) {
+    static const Config::BC &bounds = Config::color_bounds();
+    bool ok = true;
+    for (auto &c: colors)
+      for (auto &v: c)
+        ok &= MO::check(v, bounds.min, bounds.max);
+    return ok;
+  };
+
+  return functor;
+};
+DEFINE_GENOME_FIELD_WITH_FUNCTOR(Cs, colors, "", colorsFunctor())
+
 DEFINE_GENOME_MUTATION_RATES({
   EDNA_PAIR(   splines, std::tuple_size_v<Ss> * std::tuple_size_v<D>),
   EDNA_PAIR(dimorphism, std::tuple_size_v<Dm> + 1),
+  EDNA_PAIR(    colors, std::tuple_size_v<Cs>),
+  EDNA_PAIR(    vision, 4),
 
   EDNA_PAIR(     cdata, 3.f),
 })
 DEFINE_GENOME_DISTANCE_WEIGHTS({
   EDNA_PAIR(   splines, std::tuple_size_v<Ss> * std::tuple_size_v<D>),
   EDNA_PAIR(dimorphism, std::tuple_size_v<Dm> + 1),
+  EDNA_PAIR(    colors, std::tuple_size_v<Cs>),
+  EDNA_PAIR(    vision, 4),
 
   EDNA_PAIR(     cdata, 0.f),
 })
@@ -230,6 +329,35 @@ struct genotype::Aggregator<Dm, Critter> {
                    uint /*verbosity*/) {}
 };
 
+
+template <>
+struct genotype::MutationRatesPrinter<Cs, GENOME, &GENOME::colors> {
+  static constexpr bool recursive = true;
+  static void print (std::ostream &os, uint width, uint depth, float ratio) {
+    const auto &r = Config::colors_mutationRates();
+
+#define F(X) r.at(X), X
+    prettyPrintMutationRate(os, width, depth, ratio, F("homogeneous"), false);
+    prettyPrintMutationRate(os, width, depth, ratio, F("monomorphism"), false);
+    prettyPrintMutationRate(os, width, depth, ratio, F("mutate"), false);
+#undef F
+  }
+};
+
+template <>
+struct genotype::Extractor<Cs> {
+  std::string operator() (const Cs &ls, const std::string &field) {
+    return "Not implemented";
+  }
+};
+
+template <>
+struct genotype::Aggregator<Cs, Critter> {
+  void operator() (std::ostream &os, const std::vector<Critter> &genomes,
+                   std::function<const Cs& (const Critter&)> access,
+                   uint /*verbosity*/) {}
+};
+
 #undef GENOME
 
 #define CFILE genotype::Critter::config_t
@@ -243,6 +371,15 @@ DEFINE_CONTAINER_PARAMETER(CFILE::MutationRates, dimorphism_mutationRates,
   { "equal", 2.f  },
   {   "mut", 7.f  },
 }))
+
+DEFINE_CONTAINER_PARAMETER(CFILE::MutationRates, colors_mutationRates,
+                           utils::normalizeRates({
+  {  "homogeneous", 1.f  },
+  { "monomorphism", 1.f  },
+  {       "mutate", 18.f  },
+}))
+
+DEFINE_PARAMETER(CFILE::BC, color_bounds, .25f, .25f, .75f, .75f)
 
 #undef CFILE
 

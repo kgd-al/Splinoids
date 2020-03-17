@@ -6,6 +6,10 @@ QPointF toQt (const simu::P2D &p) {
   return QPointF(p.x, p.y);
 }
 
+QColor toQt (const simu::Color &c) {
+  return QColor::fromRgbF(c[0], c[1], c[2], 1);
+}
+
 namespace config {
 #define CFILE Visualisation
 
@@ -14,10 +18,11 @@ DEFINE_SUBCONFIG(Simulation, configSimulation)
 DEFINE_PARAMETER(float, viewZoom, 100)//100)
 DEFINE_PARAMETER(bool, opaqueBodies, true)
 DEFINE_PARAMETER(bool, drawInnerEdges, false)
+DEFINE_PARAMETER(int, drawVision, 0)
 
 DEFINE_PARAMETER(RenderingType, renderingType, RenderingType::NORMAL)
 
-DEFINE_PARAMETER(float, zoomFactor, 4)
+DEFINE_PARAMETER(float, zoomFactor, 1)
 DEFINE_PARAMETER(uint, substepsSpeed, 1)
 
 #ifndef NDEBUG

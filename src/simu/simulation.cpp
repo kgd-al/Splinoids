@@ -10,159 +10,62 @@ Simulation::~Simulation (void) {
   clear();
 }
 
-struct CritterInitData {
-  Critter::Genome genome;
-  float x, y;
-  float size;
-};
-using InitList = std::vector<CritterInitData>;
-using InitMethod = std::function<void(
-  const Critter::Genome&, phylogeny::GIDManager&, InitList&)>;
-
-static const std::map<InitType,InitMethod> initMethods = {
-  // == Test multiple mutants
-  { InitType::MUTATIONAL_LANDSCAPE,
-    [] (const Critter::Genome &base, phylogeny::GIDManager &gidm, InitList &l) {
-      int Nx = 1, Ny = 1;
-      rng::FastDice dice;// (0);
-      for (int i=-Nx; i<=Nx; i++) {
-        for (int j=-Ny; j<=Ny; j++) {
-          auto cg = base.clone(gidm);
-          if (i != 0 || j != 0)
-            for (int k=0; k<100; k++) cg.mutate(dice);
-          cg.cdata.sex = Critter::Sex::FEMALE;
-          l.push_back({cg, 4.5f*i-1, 2.5f*j, 1});
-
-          cg = cg.clone(gidm);
-          cg.cdata.sex = Critter::Sex::MALE;
-          l.push_back({cg, 4.5f*i+1, 2.5f*j, 1});
-        }
-      }
-    }
-  },
-
-  // == "Random" init
-  { InitType::RANDOM,
-    [] (const Critter::Genome&, phylogeny::GIDManager &gidm, InitList &l) {
-      int Nx = 2, Ny = 1;
-      rng::FastDice dice;// (0);
-      for (int i=-Nx; i<=Nx; i++) {
-        for (int j=-Ny; j<=Ny; j++) {
-          auto cg = Critter::Genome::random(dice);
-
-//          cg.splines[0] = genotype::Spline({
-//            M_PI/2,
-//            -M_PI/4, .5,
-//            .25, .25, .75, -.1,
-//            .1, .5, .5
-//          });
-
-          cg.gdata.updateAfterCloning(gidm);
-
-          for (int m=0; m<1000; m++)  cg.mutate(dice);
-
-          l.push_back({cg, 2.5f*i, 2.5f*j, 1});
-        }
-      }
-    }
-  },
-
-  // == "Random" init
-  { InitType::MEGA_RANDOM,
-    [] (const Critter::Genome&, phylogeny::GIDManager &gidm, InitList &l) {
-      using CGenome = Critter::Genome;
-      using Sex = genotype::BOCData::Sex;
-      using Spline = genotype::Spline;
-
-      int Nx = 2, Ny = 1;
-      rng::FastDice dice (4);
-      for (int i=-Nx; i<=Nx; i++) {
-        for (int j=-Ny; j<=Ny; j++) {
-          CGenome cg;
-          cg.gdata.updateAfterCloning(gidm);
-          cg.cdata = genotype::BOCData::random(dice);
-
-          const auto &sb = config::EDNAConfigFile<Spline>::dataBounds();
-          for (uint i=0; i<CGenome::SPLINES_COUNT; i++) {
-            for (uint j=0; j<std::tuple_size_v<Spline::Data>; j++)
-              cg.splines[i].data[j] = dice(sb.min[j], sb.max[j]);
-          }
-
-          for (uint i=0; i<2*CGenome::SPLINES_COUNT; i++)
-            cg.dimorphism[i] = dice(0, 1);
-
-          cg.cdata.sex = config::MutationSettings::BoundsOperators<genotype::BOCData::Sex>::rand(Sex(0),Sex(0),dice);
-
-          // DEBUG !!
-//          for (uint i=0; i<2*CGenome::SPLINES_COUNT; i++)
-//            cg.dimorphism[i] = 0;
-//          for (uint i=1; i<2; i++)  cg.dimorphism[i] = 1;
-//          cg.cdata.sex = Sex::FEMALE;
-          // ====
-
-          if (!cg.check())
-            utils::doThrow<std::logic_error>(
-              "Invalid random point in ", utils::className<CGenome>(),
-              "'s genetic space: ", cg);
-
-//          std::cerr << "Random genome " << cg.id() << " at " << 2.5f*i << ","
-//                    << 2.5f*j << std::endl;
-
-          l.push_back({cg, 2.5f*i, 2.5f*j, 1});
-        }
-      }
-    }
-  },
-
-  // == "Regular" init
-  { InitType::REGULAR,
-    [] (const Critter::Genome &base, phylogeny::GIDManager &gidm, InitList &l) {
-      rng::FastDice dice (0);
-      for (int i=0; i<1/*0*/; i++) {
-        auto cg = base.clone(gidm);
-        cg.cdata.sex = (i%2 ? Critter::Sex::MALE : Critter::Sex::FEMALE);
-        l.push_back({cg, dice(-10.f,10.f), dice(-10.f,10.f), 1});
-      }
-    }
-  }
-};
-
 void Simulation::init(const Environment::Genome &egenome,
                       Critter::Genome cgenome,
-                      InitType type) {
+                      const InitData &data) {
+
+  // TODO Remove (debug)
+  cgenome.vision.angleBody = M_PI/4.;
+  cgenome.vision.angleRelative = -M_PI/4;
+  cgenome.vision.width = M_PI/4.;
+  cgenome.vision.precision = 10;
+
+  if (data.seed >= 0) _dice.reset(data.seed);
 
   _environment = std::make_unique<Environment>(egenome);
 
-  if (type == InitType::REGULAR) {
-    _gidManager.setNext(cgenome.id());
-    cgenome.gdata.setAsPrimordial(_gidManager);
+  _gidManager.setNext(cgenome.id());
+  cgenome.gdata.setAsPrimordial(_gidManager);
+
+  float energy = data.ienergy;
+  float cenergy = energy * data.cRatio;
+  float energyPerCritter = std::min(Critter::storage(Critter::MIN_SIZE),
+                                    cenergy / data.nCritters);
+
+  energy -= cenergy;
+  cenergy -= energyPerCritter * data.nCritters;
+  energy += cenergy;
+
+  const float C = data.cRange, P = data.pRange;
+
+  for (uint i=0; i<data.nCritters; i++) {
+    auto cg = cgenome.clone(_gidManager);
+    cg.cdata.sex = (i%2 ? Critter::Sex::MALE : Critter::Sex::FEMALE);
+    addCritter(cg, /*_dice(-C, C), _dice(-C, C)*/0,0, energyPerCritter);
   }
 
-  auto it = initMethods.find(type);
-  if (it == initMethods.end())
-    utils::doThrow<std::invalid_argument>("Init type ", int(type),
-                                          " is not a valid value");
-
-  InitList ilist;
-  it->second(cgenome, _gidManager, ilist);
-  for (const auto &i: ilist)
-    addCritter(i.genome, i.x, i.y, i.size);
+  while (energy > 0) {
+    float s = _dice(1.f, 2.f);
+    float e = std::min(Plant::maxStorage(s), energy);
+    energy -= e;
+    addPlant(_dice(-P, P), _dice(-P, P), s, e);
+  }
 
   postInit();
 }
 
 Critter* Simulation::addCritter (const CGenome &genome,
-                                 float x, float y, float r) {
+                                 float x, float y, float e) {
 
   b2BodyDef bodyDef;
   bodyDef.type = b2_dynamicBody;
   bodyDef.position.Set(x, y);
-  bodyDef.angle = M_PI;//_dice(0., 2*M_PI);
+  bodyDef.angle = _dice(0., 2*M_PI);
   bodyDef.angularDamping = .8;
   bodyDef.linearDamping = .5;
 
-  b2Body *body = _environment->physics().CreateBody(&bodyDef);
-  Critter *c = new Critter (genome, body, r);
+  b2Body *body = physics().CreateBody(&bodyDef);
+  Critter *c = new Critter (genome, body, e);
 
   _critters.insert(c);
   return c;
@@ -170,18 +73,47 @@ Critter* Simulation::addCritter (const CGenome &genome,
 
 void Simulation::delCritter (Critter *critter) {
   _critters.erase(critter);
-  _environment->physics().DestroyBody(&critter->body());
+  physics().DestroyBody(&critter->body());
   delete critter;
+}
+
+Plant* Simulation::addPlant(float x, float y, float s, float e) {
+  b2BodyDef bodyDef;
+  bodyDef.type = b2_staticBody;
+  bodyDef.position.Set(x, y);
+
+  b2Body *body = _environment->physics().CreateBody(&bodyDef);
+  Plant *p = new Plant (body, s, e);
+
+  _plants.insert(p);
+  return p;
+}
+
+void Simulation::delPlant(Plant *plant) {
+  _plants.erase(plant);
+  physics().DestroyBody(&plant->body());
+  delete plant;
 }
 
 void Simulation::clear (void) {
   while (!_critters.empty())  delCritter(*_critters.begin());
+  while (!_plants.empty())  delPlant(*_plants.begin());
 }
 
 void Simulation::step (void) {
-  for (Critter *c: _critters)
+  _minGen = std::numeric_limits<uint>::max();
+  _maxGen = 0;
+
+  for (Critter *c: _critters) {
     c->step(*_environment);
+
+    _minGen = std::min(_minGen, c->genotype().gdata.generation);
+    _maxGen = std::max(_maxGen, c->genotype().gdata.generation);
+  }
+
   _environment->step();
+  _time.next();
+//  std::cerr << "Simulation step " << _time.pretty() << std::endl;
 }
 
 } // end of namespace simu

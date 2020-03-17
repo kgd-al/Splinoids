@@ -4,3 +4,6 @@
 [submodule "joystick"]
 	path = joystick
 	url = https://github.com/drewnoakes/joystick.git
+[submodule "qt-collapsible-section"]
+	path = qt-collapsible-section
+	url = https://github.com/Elypson/qt-collapsible-section.git
