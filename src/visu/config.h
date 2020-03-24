@@ -6,12 +6,10 @@
 #include <QPointF>
 #include <QColor>
 
-DEFINE_PRETTY_ENUMERATION(
-  RenderingType,
-  NORMAL, VISION)
-
 QPointF toQt (const simu::P2D &p);
 QColor toQt (const simu::Color &c);
+
+DEFINE_PRETTY_ENUMERATION(RenderingType, REGULAR, ENERGY, HEALTH)
 
 namespace config {
 
@@ -23,10 +21,16 @@ struct CONFIG_FILE(Visualisation) {
   DECLARE_PARAMETER(bool, drawInnerEdges)
   DECLARE_PARAMETER(int, drawVision)
 
-  DECLARE_PARAMETER(RenderingType, renderingType)
+  DECLARE_PARAMETER(RenderingType, renderType)
 
-  DECLARE_PARAMETER(float, zoomFactor)
+  DECLARE_PARAMETER(int, showFights)
+
+  DECLARE_PARAMETER(bool, showGrid)
+
+  DECLARE_PARAMETER(float, selectionZoomFactor)
   DECLARE_PARAMETER(uint, substepsSpeed)
+
+  DECLARE_DEBUG_PARAMETER(int, drawFightingDebug, 0)
 
   using DebugDrawFlags = std::bitset<2*genotype::Critter::SPLINES_COUNT>;
 #ifndef NDEBUG

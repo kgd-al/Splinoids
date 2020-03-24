@@ -52,7 +52,7 @@ std::string Time::pretty (void) const {
   oss << std::setfill('0')
       << "y" << _year
       << "d" << std::setw(D_digits) << _day
-      << "@" << std::setw(S_digits) << _second
+      << "s" << std::setw(S_digits) << _second
       << "." << std::setw(M_digits) << _msecond;
   return oss.str();
 }

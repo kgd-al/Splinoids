@@ -1,6 +1,8 @@
 #ifndef SIMU_CRITTER_H
 #define SIMU_CRITTER_H
 
+#include <bitset>
+
 #include "../genotype/critter.h"
 #include "config.h"
 
@@ -18,8 +20,9 @@ public:
   using Sex = Genome::Sex;
   using ID = phylogeny::GID;
 
-  static constexpr float MIN_SIZE = 1;
-  static constexpr float MAX_SIZE = 1;
+  static constexpr float MIN_SIZE = 1;  // New-born size
+  static constexpr float MAX_SIZE = 1;  // Mature size
+  static constexpr float RADIUS = .5; // Body size of a mature splinoid
 
   static constexpr float BODY_DENSITY = 1;
   static constexpr float ARTIFACTS_DENSITY = 2;
@@ -27,15 +30,36 @@ public:
   static constexpr auto SPLINES_COUNT = Genome::SPLINES_COUNT;
   static constexpr uint SPLINES_PRECISION = 4;
 
+  enum class FixtureType { BODY, ARTIFACT };
+  enum class Side : uint { LEFT = 0, RIGHT = 1 };
+  struct FixtureData {
+    FixtureType type;
+    const Color &color;
+
+    // Only valid if type == Artifact
+    uint sindex;  // Index of spline [0,SPLINES_COUNT[
+    Side sside;  // Side (left if original, right if mirrored)
+    uint aindex;  // Index of artifact sub-component (UNUSED)
+
+    P2D centerOfMass; // Must be set after creation // WARNING Brittle
+
+    FixtureData (FixtureType t, const Color &c,
+                 uint si, Side fs, uint ai);
+    FixtureData (FixtureType t, const Color &c)
+      : FixtureData(t, c, -1, Side(-1), -1) {}
+
+    friend std::ostream& operator<< (std::ostream &os, const FixtureData &fd);
+    friend std::ostream& operator<< (std::ostream &os, const Side &s);
+  };
+
 private:
   Genome _genotype;
 
   float _visionRange; // Derived from genotype
-  float _size; // Ratio
-
-//  uint foo;
+  float _size; // in ]0,1] maturity-dependant
 
   b2Body &_body;
+  b2BodyUserData _objectUserData;
 
   struct SplineData {
     // Central spline
@@ -69,22 +93,40 @@ private:
   std::array<SplineData, SPLINES_COUNT> _splinesData;
 
   b2Fixture *_b2Body;
-  std::array<std::vector<b2Fixture*>, SPLINES_COUNT> _b2Artifacts;
+  std::array<std::vector<b2Fixture*>, 2*SPLINES_COUNT> _b2Artifacts;
+  std::map<b2Fixture*, FixtureData> _b2FixturesUserData;
+  std::array<float, 1+2*SPLINES_COUNT> _masses;
 
   std::map<Motor, float> _motors;
 
   // Vision cache data (each vector of size 2*(2*genotype.vision.precision+1))
-  std::vector<const Color*> _retina;
+  std::vector<Color> _retina;
   std::array<P2D, 2> _raysStart;
   std::vector<P2D> _raysEnd;
   std::vector<float> _raysFraction; // TODO Remove (debug visu only)
 
-  float _energy, _health, _water;
+  float _clockSpeed;
+  float _age;
+
+  float /*_maxEnergy,*/ _energy; // Only for main body
+
+  /* Each portion managed independantly
+   * Indices are
+   *              0 body
+   *          [1:S] left splines
+   *   [S+1, 2*S-1] right splines
+   * Where S in the number of splines (SPLINES_COUNT)
+   */
+  std::array<float, 1+2*SPLINES_COUNT> _currHealth;
+  std::bitset<2*SPLINES_COUNT> _destroyed;
+
+  // Potential extension
+  //  float _water;
 
 public:
   // TODO Remove these variables
   using Vertices = std::vector<P2D>;
-  std::vector<Vertices> collisionObjects;
+  std::array<std::vector<Vertices>, 2*SPLINES_COUNT> collisionObjects;
 
   Critter(const Genome &g, b2Body *body, float e);
 
@@ -136,26 +178,13 @@ public:
     return _body;
   }
 
-  /*
-   * In ]0,1]. Ratio of maximal size
-   */
-  auto bodySize (void) const {
-    return _size * MAX_SIZE;
-  }
-
-  /*
-   * In ]0,1]. Ratio of maximal size
-   */
   auto bodyRadius (void) const {
-    return .5f * bodySize();
+    return _size * RADIUS;
   }
 
-  /*
-   * In ]0,2]. (Potential) Size of body + artifacts
-   */
-//  auto size (void) const {
-//    return 2 * bodySize();
-//  }
+  auto bodyDiameter (void) const {
+    return 2 * bodyRadius();
+  }
 
   const auto& splinesData (void) const {
     return _splinesData;
@@ -165,16 +194,148 @@ public:
     return _body.GetFixtureList();
   }
 
+  auto mass (void) const {
+    return _body.GetMass();
+  }
+
+  auto clockSpeed (void) const {
+    return _clockSpeed;
+  }
+
+  // v in [0;1]
+  auto clockSpeed (float v) {
+    assert(0 <= v && v <= 1);
+    return _clockSpeed = v * _genotype.minClockSpeed
+                       + (1-v) * _genotype.maxClockSpeed;
+  }
+
+  auto age (void) const {
+    return _age;
+  }
+
+  auto maxUsableEnergy (void) const {
+    return _masses[0];
+  }
+
+  auto usableEnergy (void) const {
+    return _energy;
+  }
+
+  auto totalEnergy (void) const {
+    return _energy + config::Simulation::healthToEnergyRatio() * _currHealth[0];
+  }
+
+  auto storableEnergy (void) const {
+    assert(usableEnergy() <= maxUsableEnergy());
+    return maxUsableEnergy() - usableEnergy();
+  }
+
+  static auto splineIndex (uint i, Side side) {
+    return uint(side) * SPLINES_COUNT + i;
+  }
+
+  static auto splineIndex (const FixtureData &fd) {
+    return splineIndex(fd.sindex, fd.sside);
+  }
+
+  auto bodyMaxHealth (void) const {
+    return _masses[0];
+  }
+
+  auto splineMaxHealth (uint i, Side s) const {
+    return _masses[1+splineIndex(i, s)];
+  }
+
+  auto bodyHealth (void) const {
+    return _currHealth[0];
+  }
+
+  auto splineHealth (uint i, Side side) const {
+    return _currHealth[1 + splineIndex(i, side)];
+  }
+
+  auto activeSpline (uint i, Side s) const {
+    return splineMaxHealth(i, s) > 0;
+  }
+
+  auto destroyedSpline (uint i, Side s) const {
+    return _destroyed.test(splineIndex(i, s));
+  }
+
+  // Returns true if a spline was destroyed
+  bool applyHealthDamage(const FixtureData &d, float amount);
+
+  // Perform the actual suppression (outside of the world-tick)
+  void destroySpline (b2Fixture *f);
+
+  void updateShape (void);
+
+  void setMotorOutput (float i, Motor m);
+
+  float motorOutput (Motor m) const {
+    return _motors.at(m);
+  }
+
+  void feed (float de) {
+    assert(0 <= de && de <= maxUsableEnergy() - _energy);
+    _energy += de;
+  }
+
+  const Color& bodyColor (void) const {
+    return _genotype.colors[(SPLINES_COUNT+1)*sex()];
+  }
+
+  const Color& splineColor (uint i) const {
+    return _genotype.colors[(SPLINES_COUNT+1)*sex()+i+1];
+  }
+
+  bool tooOld (void) const {
+    return age() >= 1;
+  }
+
+  bool starved (void) const {
+    return usableEnergy() <= 0;
+  }
+
+  bool fatallyInjured (void) const {
+    return bodyHealth() <= 0;
+  }
+
+  bool isDead (void) const {
+    return tooOld() || starved() || fatallyInjured();
+  }
+
+  void autopsy (void) const;
+
+  // ===========================================================================
+  // == Vision-related data
+
+  auto visionBodyAngle (void) const {
+    return _genotype.vision.angleBody;
+  }
+
+  auto visionRelativeRotation (void) const {
+    return _genotype.vision.angleRelative;
+  }
+
+  auto visionWidth (void) const {
+    return _genotype.vision.width;
+  }
+
+  auto visionPrecision (void) const {
+    return _genotype.vision.precision;
+  }
+
   float visionRange (void) const {
     return _visionRange;
   }
 
-  const auto& raysStart (void) const {
-    return _raysStart;
-  }
-
   const auto& retina (void) const {
     return _retina;
+  }
+
+  const auto& raysStart (void) const {
+    return _raysStart;
   }
 
   const auto& raysEnd (void) const {
@@ -185,38 +346,39 @@ public:
     return _raysFraction;
   }
 
-  auto mass (void) const {
-    return _body.GetMass();
-  }
+  static b2BodyUserData* get (b2Body *b);
+  static FixtureData* get (b2Fixture *f);
 
-  void updateShape (void);
-
-  void setMotorOutput (float i, Motor m);
-
-  float motorOutput (Motor m) const {
-    return _motors.at(m);
-  }
-
-  const Color& bodyColor (void) const {
-    return _genotype.colors[5*sex()];
-  }
-
-  const Color& splineColor (uint i) const {
-    return _genotype.colors[5*sex()+i];
-  }
+  // ===========================================================================
+  // == Static computers
 
   // age in [0,1]
   static float efficiency (float age);
 
-  // MIN_SIZE <= size <= MAX_SIZE
-  static float storage (float size) {
-    return M_PI * .25 * size * size;
+  static float energyForCreation (void) {
+    return 2*maximalEnergyStorage(MIN_SIZE);
+  }
+
+  static float maximalEnergyStorage (float size) {
+    return M_PI * size * size * RADIUS * RADIUS * BODY_DENSITY;
   }
 
   static float computeVisionRange (float visionWidth);
 
 private:
+  // ===========================================================================
+  // == Iteration substeps
+
   void performVision (const Environment &env);
+  void neuralStep (void);
+  void energyConsumption (Environment &env);
+
+  void growthStep (void);
+  void reproduction (void);
+  void senescence (void);
+
+  // ===========================================================================
+  // == Shape-defining internal methods
 
   void updateSplines (void);
   void updateObjects (void);
@@ -227,7 +389,14 @@ private:
   bool insideBody (const P2D &p) const;
 
   b2Fixture* addBodyFixture (void);
-  b2Fixture* addPolygonFixture(uint i, const Vertices &v);
+  b2Fixture* addPolygonFixture(uint splineIndex, Side side, uint artifactIndex,
+                               const Vertices &v);
+  b2Fixture* addFixture (const b2FixtureDef &def,
+                         const FixtureData &data);
+
+  void delFixture (b2Fixture *f);
+
+  // ===========================================================================
 };
 
 } // end of namespace simu

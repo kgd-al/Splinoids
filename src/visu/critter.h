@@ -10,6 +10,7 @@ namespace visu {
 class Critter : public QGraphicsItem {
 public:
   static constexpr auto SPLINES_COUNT = genotype::Critter::SPLINES_COUNT;
+  using Side = simu::Critter::Side;
 
 private:
   simu::Critter &_critter;
@@ -64,10 +65,16 @@ public:
              const QStyleOptionGraphicsItem*, QWidget *) override;
   void doPaint (QPainter *painter) const;
 
-  void save (QString filename = QString()) const;
+  void saveGenotype (const QString &filename) const;
+  void printPhenotype (const QString &filename) const;
 
 private:
   void updateVision (void);
+
+  QColor bodyColor (void) const;
+  QColor splineColor (uint i, simu::Critter::Side s) const;
+
+  bool shouldDrawSpline (uint i, Side s) const;
 
 #ifndef NDEBUG
   void debugDrawBelow (QPainter *painter) const;

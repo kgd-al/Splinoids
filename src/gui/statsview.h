@@ -3,26 +3,24 @@
 
 #include <iostream>
 
-#include "../../qt-collapsible-section/Section.h"
-
 #include <QString>
 #include <QLabel>
 #include <QMap>
 
-#include <QFormLayout>
-
 namespace gui {
 
-class StatsView : public Section {
+class StatsView : public QWidget {
   QMap<QString, QLabel*> details;
 
 public:
-  StatsView(void);
+  StatsView(void) {}
+
+  void setupFields (const QStringList &l);
 
   template <typename T>
-  void update (const QString &field, T value) {
+  void update (const QString &field, T value, int precision = 2) {
     QLabel *l = details.value(field);
-    if (l)  l->setText(QString::number(value));
+    if (l)  l->setText(QString::number(value, 'f', precision));
     else
       std::cerr << field.toStdString() << " is not a stats field!" << std::endl;
   }

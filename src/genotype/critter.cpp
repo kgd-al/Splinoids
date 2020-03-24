@@ -72,6 +72,11 @@ DEFINE_GENOME_DISTANCE_WEIGHTS({
 DEFINE_GENOME_FIELD_AS_SUBGENOME(BOCData, cdata, "")
 DEFINE_GENOME_FIELD_AS_SUBGENOME(Vision, vision, "")
 
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, minClockSpeed, "minCS", 0, 1)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, maxClockSpeed, "maxCS", 1, 2)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, matureAge, "mature", .25, .5)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, oldAge, "old", .5, .75)
+
 using Config = genotype::Critter::config_t;
 
 using Ss = GENOME::Splines;
@@ -180,10 +185,10 @@ auto colorsFunctor = [] {
     static const auto &dmRates = Config::colors_mutationRates();
     std::string field = dice.pickOne(dmRates);
     uint i = dice(Cs::size_type(0), colors.size()-1);
-    if (field == "homogeneous")
+    if (field == "monomorphism")
       colors[i] = colors[(i+Csn)%(2*Csn)];
 
-    else if (field == "monomorphism") {
+    else if (field == "homogeneous") {
       uint j = i;
       while (j == i) {
         j = dice(Csn*floor(j/Csn), Csn*(1+floor(j/Csn))-1);
@@ -227,18 +232,26 @@ auto colorsFunctor = [] {
 DEFINE_GENOME_FIELD_WITH_FUNCTOR(Cs, colors, "", colorsFunctor())
 
 DEFINE_GENOME_MUTATION_RATES({
-  EDNA_PAIR(   splines, std::tuple_size_v<Ss> * std::tuple_size_v<D>),
-  EDNA_PAIR(dimorphism, std::tuple_size_v<Dm> + 1),
-  EDNA_PAIR(    colors, std::tuple_size_v<Cs>),
-  EDNA_PAIR(    vision, 4),
+  EDNA_PAIR(      splines, std::tuple_size_v<Ss> * std::tuple_size_v<D>),
+  EDNA_PAIR(   dimorphism, std::tuple_size_v<Dm> + 1),
+  EDNA_PAIR(       colors, std::tuple_size_v<Cs>),
+  EDNA_PAIR(       vision, 4),
+  EDNA_PAIR(minClockSpeed, 1),
+  EDNA_PAIR(maxClockSpeed, 1),
+  EDNA_PAIR(    matureAge, 1),
+  EDNA_PAIR(       oldAge, 1),
 
   EDNA_PAIR(     cdata, 3.f),
 })
 DEFINE_GENOME_DISTANCE_WEIGHTS({
-  EDNA_PAIR(   splines, std::tuple_size_v<Ss> * std::tuple_size_v<D>),
-  EDNA_PAIR(dimorphism, std::tuple_size_v<Dm> + 1),
-  EDNA_PAIR(    colors, std::tuple_size_v<Cs>),
-  EDNA_PAIR(    vision, 4),
+  EDNA_PAIR(      splines, std::tuple_size_v<Ss> * std::tuple_size_v<D>),
+  EDNA_PAIR(   dimorphism, std::tuple_size_v<Dm> + 1),
+  EDNA_PAIR(       colors, std::tuple_size_v<Cs>),
+  EDNA_PAIR(       vision, 4),
+  EDNA_PAIR(minClockSpeed, 1),
+  EDNA_PAIR(maxClockSpeed, 1),
+  EDNA_PAIR(    matureAge, 1),
+  EDNA_PAIR(       oldAge, 1),
 
   EDNA_PAIR(     cdata, 0.f),
 })
@@ -375,8 +388,8 @@ DEFINE_CONTAINER_PARAMETER(CFILE::MutationRates, dimorphism_mutationRates,
 DEFINE_CONTAINER_PARAMETER(CFILE::MutationRates, colors_mutationRates,
                            utils::normalizeRates({
   {  "homogeneous", 1.f  },
-  { "monomorphism", 1.f  },
-  {       "mutate", 18.f  },
+  { "monomorphism", 9.f  },
+  {       "mutate", 490.f  },
 }))
 
 DEFINE_PARAMETER(CFILE::BC, color_bounds, .25f, .25f, .75f, .75f)

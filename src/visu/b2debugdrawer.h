@@ -17,7 +17,7 @@ struct DebugDrawer : public b2Draw, public QGraphicsItem {
     QColor color;
     bool filled;
 
-    b2DD (const b2Color &c, bool f) : color(toQt(c)), filled(f) {}
+    b2DD (const QColor &c, bool f) : color(c), filled(f) {}
 
     virtual ~b2DD (void) = default;
 
@@ -31,8 +31,12 @@ struct DebugDrawer : public b2Draw, public QGraphicsItem {
   };
 
   std::vector<std::unique_ptr<b2DD>> _draws;
+  float alpha;
 
+  DebugDrawer (int zvalue, float alpha);
   virtual ~DebugDrawer (void);
+
+  QColor makeColor (const b2Color &c) const;
 
   void DrawPolygon(const b2Vec2* vertices, int32 vertexCount,
                    const b2Color& color) override;

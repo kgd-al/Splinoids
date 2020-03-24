@@ -9,9 +9,20 @@ namespace visu {
 
 GraphicSimulation::GraphicSimulation(QStatusBar *sbar, gui::StatsView *stats)
   : _scene (new QGraphicsScene), _sbar(sbar), _stats(stats),
-    _timeLabel(new QLabel ("x")), _genLabel(new QLabel ("x")) {
+    _timeLabel(new QLabel ("Not started yet")), _genLabel(new QLabel ("")),
+    _selection(nullptr) {
+
   _sbar->addPermanentWidget(_timeLabel);
   _sbar->addPermanentWidget(_genLabel);
+
+  _stats->setupFields({
+    "-- Counts --",
+    "Critters", "Plants", "Corpses", "Feedings", "Fights",
+
+    "-- Energy --",
+    "[E] Plants", "[E] Corpses", "[E] Splinoids", "[E] Reserve",
+    "[E] Total"
+  });
 }
 
 GraphicSimulation::~GraphicSimulation (void) = default;
@@ -19,8 +30,14 @@ GraphicSimulation::~GraphicSimulation (void) = default;
 void GraphicSimulation::postInit(void) {
   Simulation::postInit();
 
-  _graphicEnvironment = new Environment (environment());
+  _graphicEnvironment =
+    new Environment (environment(),
+                     [this] (const simu::Critter *c) { return visuCritter(c); },
+                     [this] (const simu::Foodlet *f) { return visuFoodlet(f); }
+  );
+
   _scene->addItem(_graphicEnvironment);
+  _scene->addItem(_graphicEnvironment->overlay());
   _scene->setSceneRect(_graphicEnvironment->boundingRect());
 
 #ifndef NDEBUG
@@ -36,6 +53,10 @@ void GraphicSimulation::step (void) {
     if (p.first->body().IsAwake())
       p.second->updatePosition();
 
+  for (const auto &p: _foodlets)
+    if (p.first->isCorpse())
+      p.second->update();
+
 #ifndef NDEBUG
   if (config::Visualisation::b2DebugDraw()) doDebugDrawNow();
 #endif
@@ -44,16 +65,30 @@ void GraphicSimulation::step (void) {
                       + QString::fromStdString(_time.pretty()));
   _genLabel->setText("[" + QString::number(_minGen) + ";"
                      + QString::number(_maxGen) + "]");
+}
 
-  _stats->update("Critters", _critters.size());
-  _stats->update("Plants", _plants.size());
+void GraphicSimulation::processStats(const Stats &s) const {
+  _stats->update("Critters", s.ncritters, 0);
+  _stats->update("Plants", s.nplants, 0);
+  _stats->update("Corpses", s.ncorpses, 0);
+
+  _stats->update("Feedings", s.nfeedings, 0);
+  _stats->update("Fights", s.nfights, 0);
+
+  _stats->update("[E] Plants", s.eplants, 2);
+  _stats->update("[E] Corpses", s.ecorpses, 2);
+
+  _stats->update("[E] Splinoids", s.ecritters, 2);
+
+  _stats->update("[E] Reserve", s.ereserve, 2);
+  _stats->update("[E] Total", s.eplants+s.ecorpses+s.ecritters+s.ereserve, 2);
 }
 
 simu::Critter*
 GraphicSimulation::addCritter (const CGenome &genome,
-                               float x, float y, float e) {
+                               float x, float y, float a, float e) {
 
-  auto *sc = Simulation::addCritter(genome, x, y, e);
+  auto *sc = Simulation::addCritter(genome, x, y, a, e);
   assert(sc);
 
   auto *vc = new Critter (*sc);
@@ -66,34 +101,47 @@ GraphicSimulation::addCritter (const CGenome &genome,
 }
 
 void GraphicSimulation::delCritter (simu::Critter *critter) {
-  Simulation::delCritter(critter);
   auto it = _critters.find(critter);
   assert(it != _critters.end());
 
-  _scene->removeItem(it->second);
+  visu::Critter *vcritter = it->second;
+  _scene->removeItem(vcritter);
   _critters.erase(it);
+
+  if (_selection && critter == &_selection->object()) {
+    _selection = nullptr;
+    emit selectionDeleted();
+  }
+
+  delete vcritter;
+  Simulation::delCritter(critter);
 }
 
-simu::Plant* GraphicSimulation::addPlant(float x, float y, float s, float e) {
-  auto *sp = Simulation::addPlant(x, y, s, e);
-  assert(sp);
+simu::Foodlet*
+GraphicSimulation::addFoodlet(simu::BodyType t,
+                              float x, float y, float s, float e) {
+  auto *sf = Simulation::addFoodlet(t, x, y, s, e);
+  assert(sf);
 
-  auto *vp = new Plant (*sp);
-  assert(vp);
+  auto *vf = new Foodlet (*sf);
+  assert(vf);
 
-  _scene->addItem(vp);
-  _plants.emplace(sp, vp);
+  _scene->addItem(vf);
+  _foodlets.emplace(sf, vf);
 
-  return sp;
+  return sf;
 }
 
-void GraphicSimulation::delPlant(simu::Plant *plant) {
-  Simulation::delPlant(plant);
-  auto it = _plants.find(plant);
-  assert(it != _plants.end());
+void GraphicSimulation::delFoodlet(simu::Foodlet *foodlet) {
+  auto it = _foodlets.find(foodlet);
+  assert(it != _foodlets.end());
 
+  visu::Foodlet *vfoodlet= it->second;
   _scene->removeItem(it->second);
-  _plants.erase(it);
+  _foodlets.erase(it);
+
+  delete vfoodlet;
+  Simulation::delFoodlet(foodlet);
 }
 
 } // end of namespace visu

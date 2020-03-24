@@ -8,17 +8,58 @@
 
 namespace simu {
 
+struct Foodlet;
 struct Critter;
+
+struct CollisionMonitor;
 
 class Environment {
 public:
   using Genome = genotype::Environment;
 
+  struct FeedingEvent {
+    Critter *critter;
+    Foodlet *foodlet;
+
+    friend bool operator< (const FeedingEvent &lhs, const FeedingEvent &rhs) {
+      if (lhs.critter != rhs.critter) return lhs.critter < rhs.critter;
+      return lhs.foodlet < rhs.foodlet;
+    }
+  };
+  using FeedingEvents = std::set<FeedingEvent>;
+
+  using FightingKey = std::pair<Critter*, Critter*>;
+  using FightingData = std::set<std::pair<b2Fixture*, b2Fixture*>>;
+  using FightingEvents = std::map<FightingKey, FightingData>;
+
+  using PendingDeletions = std::set<std::pair<Critter*, b2Fixture*>>;
+
+  struct FightingDrawData {
+    P2D vA, vB; // Velocity of corresponding body
+    P2D pA, pB; // World position of corresponding fixture's COM
+    P2D C, C_;  // Combat axis (raw and normalized)
+    float VA, VB; // Combat intensity
+  };
+#ifndef NDEBUG
+  std::vector<FightingDrawData> fightingDrawData;
+#endif
+
 private:
   Genome _genome;
+
   b2World _physics;
+  CollisionMonitor *_cmonitor;
 
   b2Body *_edges;
+  b2BodyUserData _edgesUserData;
+
+  FeedingEvents _feedingEvents;
+  FightingEvents _fightingEvents;
+
+  // Destroyed spline that must be deleted after the physical step
+  PendingDeletions _pendingDeletions;
+
+  float _energyReserve;
 
 public:
   Environment(const Genome &g);
@@ -48,9 +89,27 @@ public:
     return _edges;
   }
 
+  const auto& feedingEvents (void) const {
+    return _feedingEvents;
+  }
+
+  const auto& fightingEvents (void) const {
+    return _fightingEvents;
+  }
+
   void vision (const Critter *c) const;
 
   virtual void step (void);
+
+  void modifyEnergyReserve (float e) {
+    _energyReserve += e;
+  }
+
+  float energy (void) const {
+    return _energyReserve;
+  }
+
+  static float dt (void);
 
 private:
   void createEdges (void);

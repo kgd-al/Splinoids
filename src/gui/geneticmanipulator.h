@@ -6,6 +6,7 @@
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QComboBox>
+#include <QProgressBar>
 
 #include "../visu/critter.h"
 
@@ -14,6 +15,8 @@ namespace gui {
 struct CritterProxy;
 struct GeneSlider;
 struct GeneColorPicker;
+struct ColorLabel;
+struct PrettyBar;
 
 class MiniViewer : public QGraphicsView {
 public:
@@ -43,6 +46,8 @@ public:
 
   using VisionSliders = std::array<GeneSlider*, 4>;
 
+  using StatusBars = std::array<PrettyBar*, 1+1+2*S_v>;
+
 private:
   MiniViewer *_viewer;
   CritterProxy *_proxy;
@@ -56,15 +61,16 @@ private:
 
   VisionSliders _vSliders;
 
-  struct CritterData {
-    QLabel *firstname, *lastname;
-    QComboBox *sex;
-    QLabel *mass;
-  } _dataWidgets;
+  StatusBars _sBars;
 
-  QBoxLayout *_contentsLayout, *_innerLayout;
+  QLabel *_lFirstname, *_lLastname;
+  QComboBox *_bSex;
+  QMap<QString, QLabel*> _dataWidgets;
+  QVector<ColorLabel*> _rLabels;
+
+  QBoxLayout *_contentsLayout, *_innerLayout, *_retinaLayout;
   QLayout *_genesLayout, *_statsLayout;
-  QPushButton *_editButton, *_hideButton;
+  QPushButton *_saveButton, *_printButton, *_editButton, *_hideButton;
 
   bool _updating, _readonly;
 
@@ -79,6 +85,14 @@ public:
     _readonly = !_readonly;
     setReadOnly(_readonly);
   }
+
+  void readCurrentStatus (void);
+
+  void saveSubjectGenotype (void);
+  void saveSubjectGenotype (const QString &filename) const;
+
+  void printSubjectPhenotype (void);
+  void printSubjectPhenotype (const QString &filename) const;
 
 signals:
   void keyReleased (QKeyEvent *e);
@@ -99,6 +113,17 @@ private:
   void buildViewer (void);
   void buildGenesLayout (void);
   void buildStatsLayout (void);
+
+  QLayout* buildBarsLayout (void);
+  QLayout* buildRetinaLayout (void);
+
+  template <typename T>
+  void set (const QString &l, T (simu::Critter::*f) (void) const,
+            const std::function<QString(float)> &formatter = [] (float v) {
+              return QString::number(v, 'f', 2); }) {
+
+      _dataWidgets[l]->setText(formatter((_subject->object().*f)()));
+  }
 };
 
 } // end of namespace gui

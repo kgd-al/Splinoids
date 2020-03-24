@@ -75,8 +75,8 @@ PREPEND(GNTP_SRC "src/genotype" ${GNTP_SRC})
 set(SIMU_SRC
     "critter.h"
     "critter.cpp"
-    "plant.h"
-    "plant.cpp"
+    "foodlet.h"
+    "foodlet.cpp"
     "environment.h"
     "environment.cpp"
     "simulation.h"
@@ -85,6 +85,8 @@ set(SIMU_SRC
     "config.cpp"
     "time.h"
     "time.cpp"
+    "ssga.h"
+    "ssga.cpp"
 #    "types.h"
 #    "types.cpp"
 #    "simulation.h"
@@ -210,8 +212,8 @@ if (NOT CLUSTER_BUILD)
     set(VISU_SRC
         "critter.h"
         "critter.cpp"
-        "plant.h"
-        "plant.cpp"
+        "foodlet.h"
+        "foodlet.cpp"
         "environment.h"
         "environment.cpp"
         "graphicsimulation.h"
@@ -231,6 +233,8 @@ if (NOT CLUSTER_BUILD)
         "geneticmanipulator.cpp"
         "statsview.h"
         "statsview.cpp"
+        "joystick.h"
+        "joystick.cpp"
     )
 
     PREPEND(GUI_SRC "src/gui" ${GUI_SRC})

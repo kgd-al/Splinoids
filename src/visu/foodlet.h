@@ -1,29 +1,27 @@
-#ifndef VISU_PLANT_H
-#define VISU_PLANT_H
+#ifndef VISU_FOODLET_H
+#define VISU_FOODLET_H
 
 #include <QGraphicsItem>
 
-#include "../simu/plant.h"
+#include "../simu/foodlet.h"
 
 namespace visu {
 
-class Plant : public QGraphicsItem {
+class Foodlet : public QGraphicsItem {
 private:
-  simu::Plant &_plant;
+  simu::Foodlet &_foodlet;
   QPainterPath _body;
 
 public:
-  Plant(simu::Plant &plant);
+  Foodlet(simu::Foodlet &foodlet);
 
   const auto& object (void) const {
-    return _plant;
+    return _foodlet;
   }
 
   auto& object (void) {
-    return _plant;
+    return _foodlet;
   }
-
-  void update (void);
 
   QRectF boundingRect (void) const;
 
@@ -33,4 +31,4 @@ public:
 
 } // end of namespace visu
 
-#endif // VISU_PLANT_H
+#endif // VISU_FOODLET_H

@@ -3,6 +3,29 @@
 
 namespace simu {
 
+Critter::FixtureData::FixtureData (FixtureType t, const Color &c,
+                                   uint si, Side fs, uint ai)
+  : type(t), color(c), sindex(si), sside(fs), aindex(ai), centerOfMass(P2D()) {}
+
+std::ostream& operator<< (std::ostream &os, const Critter::Side &s) {
+  return os << (s == Critter::Side::LEFT ? "L" : "R");
+}
+
+std::ostream& operator<< (std::ostream &os, const Critter::FixtureData &fd) {
+  if (fd.type == Critter::FixtureType::BODY)
+    return os << "B";
+  else
+    return os << fd.sindex << fd.sside << fd.aindex;
+}
+
+Critter::FixtureData* Critter::get (b2Fixture *f) {
+  return static_cast<FixtureData*>(f->GetUserData());
+}
+
+b2BodyUserData* Critter::get (b2Body *b) {
+  return static_cast<b2BodyUserData*>(b->GetUserData());
+}
+
 bool intersection (const P2D &l0, const P2D &l1,
                    const P2D &r0, const P2D &r1,
                    P2D &i) {
@@ -28,6 +51,10 @@ bool intersection (const P2D &l0, const P2D &l1,
   i = l0 + t * s1;
 //  std::cerr << ">> " << i << std::endl;
   return true;
+}
+
+P2D ySymmetrical (const P2D &p) {
+  return {p.x,-p.y};
 }
 
 using CubicCoefficients = std::array<real, 4>;
@@ -61,19 +88,65 @@ P2D pointAt (int t, const P2D &p0, const P2D &c0, const P2D &c1, const P2D &p1){
 }
 
 Critter::Critter(const Genome &g, b2Body *body, float e)
-  : _genotype(g), _size(MIN_SIZE), _body(*body), _energy(e) {
+  : _genotype(g), _size(MIN_SIZE), _body(*body) {
+
+  static const float initEnergyRatio =
+    1 + config::Simulation::healthToEnergyRatio();
 
   _visionRange = computeVisionRange(_genotype.vision.width);
 
   _b2Body = nullptr;
 
-  updateShape();
+  // Debug
+  _masses.fill(0);
+  _currHealth.fill(0);
+
+  updateShape();  
+
   _motors = { { Motor::LEFT, 0 }, { Motor::RIGHT, 0 } };
+  clockSpeed(.5);
+  assert(0 <= _clockSpeed && _clockSpeed < 10);
+
+  _age = 0;
+  _energy = e / initEnergyRatio;
+//  _maxEnergy = initialEnergyStorage();
+
+  // Update current healths
+  _currHealth[0] = e * (1 - 1/initEnergyRatio) / config::Simulation::healthToEnergyRatio();
+  for (uint i=0; i<SPLINES_COUNT; i++)
+    for (Side s: {Side::LEFT, Side::RIGHT})
+      _currHealth[1+splineIndex(i, s)] = splineMaxHealth(i, s);
+
+  _destroyed.reset(0);
+
+//  std::cerr << "Received " << e << " energy\n"
+//            << bodyHealth() << " = " << bodyMaxHealth() << " * (1 - " << e
+//              << " / " << initEnergyRatio << ")\n"
+//            << "C" << id() << " energy breakdown:\n"
+//            << "\tReserve " << _energy << " / " << maxUsableEnergy() << "\n"
+//            << "\t Health " << bodyHealth()
+//              << " / " << bodyMaxHealth() << "\n"
+//            << "\t  Total " << totalEnergy() << std::endl;
+
+  utils::iclip_max(_energy, _masses[0]);  // WARNING Loss of precision
+  assert(_energy <= _masses[0]);
+  assert(bodyHealth() <= bodyMaxHealth());
+
+//  std::cerr << "Splinoid " << id() << "\n";
+//  std::cerr << "     Body health: " << bodyHealth() << " / " << bodyMaxHealth()
+//            << "\n";
+
+//  for (Side s: {Side::LEFT, Side::RIGHT})
+//    for (uint i=0; i<SPLINES_COUNT; i++)
+//      std::cerr << "Spline " << (s == Side::LEFT ? "L" : "R") << i
+//                << " health: " << splineHealth(i, s) << " / "
+//                << splineMaxHealth(i) << "\n";
+//  std::cerr << std::endl;
 
   const auto &v = _genotype.vision;
   uint rs_h = 2 * v.precision + 1;
   uint rs = 2 * rs_h;
-  _retina.resize(rs, nullptr);
+  _retina.resize(rs, Color());
   _raysEnd.resize(rs, P2D(0,0));
   _raysFraction.resize(rs, 1);
 
@@ -84,69 +157,105 @@ Critter::Critter(const Genome &g, b2Body *body, float e)
   };
 
   float r = _visionRange;
-  for (uint i=0; i<2; i++) {
-    int sgn = (i == 0? 1 : -1);
-    for (uint j=0; j<rs_h; j++) {
-      float da = 0;
-      if (v.precision > 0) da = .5 * v.width * (j / float(v.precision) - 1);
-      float a = sgn * (a0 + v.angleRelative + da);
-//      std::cerr << "[" << i << "," << j << "] a0 = "
-//                << 180*a0/M_PI << "; da = " << 180*da/M_PI
-//                << "; a = " << 180*a/M_PI << std::endl;
-      _raysEnd[i*rs_h+j] =
-        _raysStart[i] + r * P2D(std::cos(a), std::sin(a));
+  for (uint i=0; i<rs_h; i++) {
+    float da = 0;
+    if (v.precision > 0) da = .5 * v.width * (i / float(v.precision) - 1);
+    float a = a0 + v.angleRelative + da;
+//    std::cerr << "[" << i << "] a0 = "
+//              << 180*a0/M_PI << "; da = " << 180*da/M_PI
+//              << "; a = " << 180*a/M_PI << std::endl;
 
-//      std::cerr << "E[" << i*rs_h+j << "] = " << _raysEnd[i*rs_h+j]
-//                << " = " << _raysStart[i] << " + "
-//                << r * P2D(std::cos(a), std::sin(a)) << std::endl;
-    }
-    std::cerr << std::endl;
+    uint il = rs_h-i-1, ir = rs_h+i;
+    _raysEnd[il] = _raysStart[0] + r * P2D(std::cos(a), std::sin(a));
+    _raysEnd[ir] = _raysEnd[il];
+    _raysEnd[ir].y *= -1;
+
+//    std::cerr << "E[" << il << "] = " << _raysEnd[il]
+//              << " = " << _raysStart[0] << " + "
+//              << r * P2D(std::cos(a), std::sin(a)) << std::endl;
+//    std::cerr << "E[" << ir << "] = " << _raysEnd[ir]
+//                 << " = { " << _raysEnd[il].x << ", " << -_raysEnd[il].y
+//                 << " }" << std::endl;
+//    std::cerr << std::endl;
   }
+//  std::cerr << std::endl;
+
+  _objectUserData.type = BodyType::CRITTER;
+  _objectUserData.ptr.critter = this;
+  _body.SetUserData(&_objectUserData);
 }
 
 
 void Critter::step(Environment &env) {
-//  std::cerr << "Critter " << id() << " at " << pos() << ", angle = "
-//            << 180*rotation()/M_PI << std::endl;
-
   // Launch a bunch of rays
   performVision(env);
 
-  // Apply requested motor output
-  for (auto &m: _motors) {
-    P2D f = _body.GetWorldVector({config::Simulation::critterBaseSpeed()*m.second,0}),
-        p = _body.GetWorldPoint({0, int(m.first)*.5f*bodyRadius()});
-    _body.ApplyForce(f, p, true);
+  // Query neural network
+  neuralStep();
+
+  // Distribute energy
+  energyConsumption(env);
+
+//  if (id() == ID(2) && _age >.01)  _age = 1;
+
+  // Age-specific tasks
+  _age += _clockSpeed * env.dt() * config::Simulation::baselineAgingSpeed();
+  if (_age < 1/3.)
+    growthStep();
+  else if (_age < 2/3.)
+    reproduction();
+  else
+    senescence();
+
+  // TODO Smell?
+}
+
+void Critter::autopsy (void) const {
+  if (!isDead())  std::cerr << "Please don't\n";
+  else {
+    std::cerr << "Critter " << id() << " died of";
+    if (tooOld())   std::cerr << " old age";
+    if (starved())  std::cerr << " starvation";
+    if (fatallyInjured()) std::cerr << " injuries";
+    std::cerr << "\n";
   }
 }
 
-struct CritterVisionCallback : public b2RayCastCallback {
-  float closestFraction;
-  b2Fixture *closestContact;
-  b2Body *self;
+// =============================================================================
+// == Substeps
 
-  CritterVisionCallback (b2Body *self) : self(self) { assert(self); }
-
-  void reset (void) {
-    closestFraction = 1;
-    closestContact = nullptr;
-  }
-
-  float ReportFixture(b2Fixture *fixture, const b2Vec2 &/*point*/,
-                      const b2Vec2 &/*normal*/, float fraction) override {
-//    std::cerr << "Found fixture " << fixture << " at " << fraction
-//              << " of type " << fixture->GetBody()->GetType()
-//              << std::endl;
-    if (self != fixture->GetBody()) {
-      closestContact = fixture;
-      closestFraction = fraction;
-    }
-    return fraction;
-  }
-};
+#define ERR \
+  std::cerr << __PRETTY_FUNCTION__ << " not implemented" << std::endl;
+#define ERR // TODO
 
 void Critter::performVision(const Environment &env) {
-  CritterVisionCallback cvc (&_body);
+  struct CritterVisionCallback : public b2RayCastCallback {
+    float closestFraction;
+    b2Fixture *closestContact;
+    b2Body *self;
+
+    CritterVisionCallback (b2Body *self) : self(self) { assert(self); }
+
+    void reset (void) {
+      closestFraction = 1;
+      closestContact = nullptr;
+    }
+
+    float ReportFixture(b2Fixture *fixture, const b2Vec2 &/*point*/,
+                        const b2Vec2 &/*normal*/, float fraction) override {
+  //    std::cerr << "Found fixture " << fixture << " at " << fraction
+  //              << " of type " << fixture->GetBody()->GetType()
+  //              << std::endl;
+      if (self != fixture->GetBody()) {
+        closestContact = fixture;
+        closestFraction = fraction;
+        return fraction;
+
+      } else
+        return -1;
+    }
+  } cvc (&_body);
+
   uint n = _raysEnd.size(), h = n/2;
   for (uint ie=0; ie<n; ie++) {
     cvc.reset();
@@ -159,15 +268,106 @@ void Critter::performVision(const Environment &env) {
 //      std::cerr << "Raycast(" << ie << "): " << cvc.closestFraction
 //                << " with " << cvc.closestContact << std::endl;
 
-      _retina[ie] = static_cast<const Color*>(cvc.closestContact->GetUserData());
+      b2Body *other = cvc.closestContact->GetBody();
+      switch (get(other)->type) {
+      case BodyType::CRITTER:
+        _retina[ie] = get(cvc.closestContact)->color;
+        break;
+      case BodyType::PLANT:
+      case BodyType::CORPSE:
+        _retina[ie] = *static_cast<const Color*>(
+                        cvc.closestContact->GetUserData());
+        break;
+
+      case BodyType::OBSTACLE:
+        _retina[ie] = utils::uniformStdArray<Color>(1);
+        break;
+
+      default:
+        throw std::logic_error("Invalid body type");
+      }
+
       _raysFraction[ie] = cvc.closestFraction;
 
     } else {
-      _retina[ie] = nullptr;
+      _retina[ie] = Color();
       _raysFraction[ie] = 1;
     }
   }
 }
+
+void Critter::neuralStep(void) {  ERR
+  // Set inputs
+  // Process n propagation steps
+  // Collect outputs
+
+  // Apply requested motor output
+  for (auto &m: _motors) {
+    float s = config::Simulation::critterBaseSpeed() * m.second * _clockSpeed;
+    P2D f = _body.GetWorldVector({s,0}),
+        p = _body.GetWorldPoint({0, int(m.first)*.5f*bodyRadius()});
+    _body.ApplyForce(f, p, true);
+  }
+}
+
+void Critter::energyConsumption (Environment &env) {  ERR
+  float dt = env.dt();
+  float de = 0;
+
+  de += config::Simulation::baselineEnergyConsumption();
+  de += config::Simulation::motorEnergyConsumption()
+        * (std::fabs(_motors[Motor::LEFT]) + std::fabs(_motors[Motor::RIGHT]));
+  de *= _clockSpeed;
+  de *= dt;
+
+  // Check for regeneration
+  decltype(_currHealth) mhA {0};
+  float mh = 0;
+  for (uint i=0; i<2*SPLINES_COUNT+1; i++) {
+    mhA[i] = _masses[i] - _currHealth[i];
+    assert(mhA[i] >= 0);
+    mh += mhA[i];
+  }
+  if (mh > 0) {
+    static const float h2ER = config::Simulation::healthToEnergyRatio();
+//    std::cerr << "C" << id() << " missing health (total): " << mh << "\n";
+    float r = config::Simulation::baselineRegenerationRate() * _clockSpeed * dt;
+//    std::cerr << "Maximal energy for regeneration: " << r << "\n";
+    r = std::min(r, mh / h2ER);
+//    std::cerr << " Capped energy for regeneration: " << r << "\n";
+
+    float r_ = r * h2ER;
+    for (uint i=0; i<2*SPLINES_COUNT+1; i++) {
+//      std::cerr << "\tAllocated " << r_ * mhA[i] / mh << " = " << r_
+//                << " * " << mhA[i] << " / " << mh << std::endl;
+      _currHealth[i] += r_ * mhA[i] / mh;
+    }
+
+    r -= r_ * mhA[0] / mh;  // Body health is kept as muscular energy
+    de += r;
+  }
+
+  de = std::min(de, _energy);
+  _energy -= de;
+  env.modifyEnergyReserve(de);
+}
+
+void Critter::growthStep (void) { ERR
+
+}
+
+void Critter::reproduction (void) { ERR
+
+}
+
+void Critter::senescence (void) { ERR
+
+}
+
+#undef ERR
+
+// =============================================================================
+// == Internal shape-defining routines
 
 void Critter::updateShape(void) {
   updateSplines();
@@ -276,13 +476,17 @@ b2Fixture* Critter::addBodyFixture (void) {
   b2FixtureDef fd;
   fd.shape = &s;
   fd.density = BODY_DENSITY;
+  fd.restitution = .1;
   fd.friction = .3;
-  fd.userData = const_cast<Color*>(&bodyColor());
 
-  return _body.CreateFixture(&fd);
+  FixtureData cfd (FixtureType::BODY, bodyColor());
+
+  return addFixture(fd, cfd);
 }
 
-b2Fixture* Critter::addPolygonFixture (uint i, const Vertices &v) {
+b2Fixture* Critter::addPolygonFixture (uint splineIndex, Side side,
+                                       uint artifactIndex,
+                                       const Vertices &v) {
 //  float ccs = 0;
 //  uint n = v.size();
 //  for (uint i=0; i<n; i++)
@@ -319,10 +523,32 @@ b2Fixture* Critter::addPolygonFixture (uint i, const Vertices &v) {
   b2FixtureDef fd;
   fd.shape = &s;
   fd.density = ARTIFACTS_DENSITY;
+  fd.restitution = .05;
   fd.friction = 0.;
-  fd.userData = const_cast<Color*>(&splineColor(i));
 
-  return _body.CreateFixture(&fd);
+  FixtureData cfd (FixtureType::ARTIFACT, splineColor(splineIndex),
+                   splineIndex, side, artifactIndex);
+
+  return addFixture(fd, cfd);
+}
+
+b2Fixture* Critter::addFixture (const b2FixtureDef &def,
+                                const FixtureData &data) {
+
+  b2Fixture *f = _body.CreateFixture(&def);
+  auto pair = _b2FixturesUserData.emplace(f, data);
+  if (!pair.second)
+    utils::doThrow<std::logic_error>(
+      "Unable to insert fixture ", data, " in collection");
+
+  f->SetUserData(&pair.first->second);
+  assert(f);
+  return f;
+}
+
+void Critter::delFixture (b2Fixture *f) {
+  _body.DestroyFixture(f);
+  _b2FixturesUserData.erase(f);
 }
 
 bool Critter::insideBody(const P2D &p) const {
@@ -338,17 +564,30 @@ void Critter::updateObjects(void) {
   static constexpr auto P = SPLINES_PRECISION;
   static constexpr auto N = 2*SPLINES_PRECISION-1;
 
-  collisionObjects.clear();
+  for (auto &v: collisionObjects) v.clear();
 
-  if (_b2Body)  _body.DestroyFixture(_b2Body);
+  if (_b2Body)  delFixture(_b2Body);
   _b2Body = addBodyFixture();
+
+  b2MassData massData;  // Wastefull but doesn't seem to be a way around
+  _b2Body->GetMassData(&massData);
+  get(_b2Body)->centerOfMass = massData.center;
+  _masses[0] = massData.mass;
 
   for (uint i=0; i<SPLINES_COUNT; i++) {
     if (dimorphism(i) == 0) continue;
+    if (destroyedSpline(i, Side::LEFT) && destroyedSpline(i, Side::RIGHT))
+      continue;
+
     std::vector<Vertices> objects;
 
-    for (b2Fixture *f: _b2Artifacts[i]) _body.DestroyFixture(f);
-    _b2Artifacts[i].clear();
+    for (Side s: {Side::LEFT, Side::RIGHT}) {
+      uint k = splineIndex(i, s);
+      for (b2Fixture *f: _b2Artifacts[k]) delFixture(f);
+      _b2Artifacts[k].clear();
+    }
+    _masses[1+splineIndex(i, Side::LEFT)] =
+      _masses[1+splineIndex(i, Side::RIGHT)] = 0;
 
     // Sample spline at requested resolution and split concave quads
     const auto &d = _splinesData[i];
@@ -357,6 +596,10 @@ void Critter::updateObjects(void) {
       p[t] = pointAt(t, d.pl0, d.cl0, d.cl1, d.p1);
     for (uint t=1; t<P; t++)
       p[t+P-1] = pointAt(t, d.p1, d.cr0, d.cr1, d.pr0);
+
+//    std::cerr << "Spline " << i << " points:";
+//    for (const auto &p_: p) std::cerr << " " << p_;
+//    std::cerr << std::endl;
 
     for (uint k=0; k<P-2; k++)
       testConvex({ p[k], p[k+1], p[N-k-2], p[N-k-1] }, objects);
@@ -372,7 +615,7 @@ void Critter::updateObjects(void) {
         ++it;
     }
 
-    // Create left components
+    // Create right components
     uint n = objects.size();
     for (uint i=0; i<n; i++) {
       const Vertices &v = objects[i];
@@ -381,13 +624,45 @@ void Critter::updateObjects(void) {
       objects.push_back(v_);
     }
 
+    // TODO only create for non-destroyed splines
     // Create b2 object
-    for (Vertices &v: objects)
-      _b2Artifacts[i].push_back(addPolygonFixture(i, v));
+    uint n2 = objects.size();
+    for (uint j=0; j<n2; j++) {
+      Side side = j<n ? Side::LEFT : Side::RIGHT;
+      uint k = splineIndex(i, side);
+      if (destroyedSpline(i, side)) continue;
+
+      b2Fixture *f = addPolygonFixture(i, side, j%n, objects[j]);
+      _b2Artifacts[k].push_back(f);
+
+      f->GetMassData(&massData);
+      _masses[1+k] += massData.mass;
+      get(f)->centerOfMass = massData.center;
+
+//      std::cerr << "C" << id() << "F" << *get(f)
+//                << " COM: " << massData.center << " ("
+//                << body().GetWorldPoint(massData.center) << ")" << std::endl;
+
+//      std::cerr << "C" << id() << ": Spline " << side << i << " += "
+//                << massData.mass << "; masses[1+" << k << "] = " << _masses[1+k]
+//                << std::endl;
+    }
+
+//    // Update com for right-hand side fixtures
+//    for (uint i=0; i<SPLINES_COUNT; i++) {
+//      const auto &lA = _b2Artifacts[i], rA = _b2Artifacts[i+SPLINES_COUNT];
+//      assert(lA.size() == rA.size());
+//      for (uint j=0; j<lA.size(); j++) {
+//        get(rA[j])->centerOfMass =
+//            ySymmetrical(get(lA[j])->centerOfMass);
+//      }
+//    }
 
     // Register for debug
-    collisionObjects.insert(collisionObjects.end(),
-                            objects.begin(), objects.end());
+    for (uint j=0; j<n; j++) {
+      collisionObjects[i].push_back(objects[j]);
+      collisionObjects[i+SPLINES_COUNT].push_back(objects[j+n]);
+    }
   }
 }
 
@@ -405,7 +680,39 @@ float Critter::efficiency(float age) {
 }
 
 float Critter::computeVisionRange(float visionWidth) {
-  return 10/visionWidth;
+  return std::max(.5f, std::min(10/visionWidth, 20.f));
+}
+
+bool Critter::applyHealthDamage (const FixtureData &d, float amount) {
+  uint i = 0;
+  if (d.type != FixtureType::BODY) i += 1 + splineIndex(d.sindex, d.sside);
+  float &v = _currHealth[i];
+
+//  std::cerr << "Applying " << amount << " of damage to " << d
+//            << ", resulting health is " << v << " >> ";
+
+  v -= amount;
+  utils::iclip_min(0.f, v);
+
+//  std::cerr << v << std::endl;
+
+  return v <= 0 && i > 0;
+}
+
+void Critter::destroySpline(b2Fixture *f) {
+  const Critter::FixtureData &fd = *Critter::get(f);
+  uint k = splineIndex(fd.sindex, fd.sside);
+
+//  std::cerr << "Spline C" << id() << "S" << fd.sside << fd.sindex
+//            << " was destroyed" << std::endl;
+
+  _destroyed.set(k);
+  _masses[1+k] = 0;
+
+  for (b2Fixture *f_: _b2Artifacts[k]) delFixture(f_);
+  _b2Artifacts[k].clear();
+
+  collisionObjects[k].clear();
 }
 
 } // end of namespace simu

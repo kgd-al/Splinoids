@@ -2,9 +2,12 @@
 #include <QFormLayout>
 #include <QSlider>
 #include <QLabel>
+#include <QProgressBar>
 #include <QPushButton>
+#include <QToolButton>
 #include <QGraphicsSceneMouseEvent>
 #include <QKeyEvent>
+#include <QFileDialog>
 
 #include "geneticmanipulator.h"
 
@@ -38,21 +41,15 @@ public:
   QRectF boundingRect (void) const {
     QRectF r;
     if (object) {
-//      QTransform t;
-//      t.rotate(90);
-//      r = t.mapRect(object->minimalBoundingRect());
-      r = object->minimalBoundingRect();
+      QRectF ombr = object->minimalBoundingRect();
+      r.setRect(ombr.y(), ombr.x(), ombr.height(), ombr.width());
     }
-//    qDebug() << r;
     return r;
   }
 
   void paint (QPainter *painter, const QStyleOptionGraphicsItem*, QWidget*) {
     if (object) {
       painter->save();
-        painter->rotate(90);
-        object->doPaint(painter);
-
         QPen pen = painter->pen();
         pen.setStyle(Qt::DotLine);
         pen.setColor(Qt::red);
@@ -65,19 +62,22 @@ public:
         pen.setWidthF(0.);
         painter->setPen(pen);
         painter->drawRect(boundingRect());
+
+        painter->rotate(90);
+        object->doPaint(painter);
       painter->restore();
     }
   }
 
-  void mousePressEvent(QGraphicsSceneMouseEvent */*e*/) override {
-//    QGraphicsItem::mousePressEvent(e);
-//    qDebug() << "Pressed";
-  }
+//  void mousePressEvent(QGraphicsSceneMouseEvent */*e*/) override {
+////    QGraphicsItem::mousePressEvent(e);
+////    qDebug() << "Pressed";
+//  }
 
-  void mouseReleaseEvent(QGraphicsSceneMouseEvent *e) override {
-    if (Qt::ShiftModifier == e->modifiers())
-      object->save();
-  }
+//  void mouseReleaseEvent(QGraphicsSceneMouseEvent *e) override {
+//    if (Qt::ShiftModifier == e->modifiers())
+//      objectprintve();
+//  }
 };
 
 // =============================================================================
@@ -99,13 +99,12 @@ MiniViewer::~MiniViewer (void) {
 }
 
 void MiniViewer::resizeEvent(QResizeEvent */*e*/) {
-//  qDebug() << sceneRect();
   fitInView(scene()->sceneRect(), Qt::KeepAspectRatio);
 }
 
 // =============================================================================
 
-static constexpr const char *names [] {
+static constexpr const char *snames [] {
   "SA",
   "EA", "EL",
   "DX0", "DY0", "DX1", "DY1",
@@ -200,14 +199,46 @@ private:
 
 // =============================================================================
 
-struct GeneColorPicker : public QLabel {
+static constexpr const char *cnames [] {
+  "SXX", "BXX", "SXY", "BXY"
+};
+
+
+struct ColorLabel : public QLabel {
   using Color = genotype::Color;
 
-  template <typename B>
-  GeneColorPicker (const B &b, uint i, uint j)
-    : i(i), j(j), min(b.min), max(b.max), readonly(false) {
+  ColorLabel (void) {
     setAutoFillBackground(true);
   }
+
+  void noValue (void) {
+    setColorValue ({0,0,0});
+  }
+
+  void setValue (const Color &c) {
+    setColorValue(c);
+  }
+
+  void mouseReleaseEvent(QMouseEvent*) {
+    qDebug() << "Want to change color...";
+  }
+
+protected:
+  QColor color;
+
+  void setColorValue (const Color &c) {
+    color = toQt(c);
+    QPalette p = palette();
+    p.setColor(QPalette::Window, color);
+    setPalette(p);
+    update();
+  }
+};
+
+struct GeneColorPicker : public ColorLabel {
+  template <typename B>
+  GeneColorPicker (const B &b, uint i, uint j)
+    : i(i), j(j), min(b.min), max(b.max), readonly(false) {}
 
   void setReadOnly (bool r) {
     readonly = r;
@@ -215,12 +246,12 @@ struct GeneColorPicker : public QLabel {
   }
 
   void noValue (void) {
-    setValue ({.5,.5,.5});
+    setColorValue ({.5,.5,.5});
     setEnabled(false);
   }
 
   void setGeneValue (const Color &c) {
-    setValue(c);
+    setColorValue(c);
     setEnabled(true && !readonly);
   }
 
@@ -231,25 +262,118 @@ struct GeneColorPicker : public QLabel {
 private:
   const uint i, j;
   const Color::value_type min, max;
-  QColor color;
   bool readonly;
+};
 
-  void setValue (const Color &c) {
-    color = toQt(c);
-    QPalette p = palette();
-    p.setColor(QPalette::Window, color);
-    setPalette(p);
-    update();
+// =============================================================================
+
+struct PrettyBar : public QProgressBar {
+  static constexpr float SCALE = 1000;
+  enum Type {
+    BODY_HEALTH, BODY_ENERGY, SPLINE_HEALTH
+  };
+  Type type;
+  QColor chunkColor;
+
+  PrettyBar (Type t) : QProgressBar() {
+    type = t;
+
+    QColor c;
+    if (t == BODY_HEALTH)           c = QColor(Qt::red);
+    else if (t == BODY_ENERGY)      c = QColor(Qt::blue);
+    else if (t == SPLINE_HEALTH) {  c = QColor(Qt::darkRed);
+      setOrientation(Qt::Vertical);
+    }
+    chunkColor = c;
+    setStyle(chunkColor);
+
+    if (type != SPLINE_HEALTH)
+          setFormat("%v / %m");
+    else  setTextVisible(false);
+  }
+
+  void setMaximum (float m) {
+    if (m == 0) {
+      setStyle(palette().base().color());
+      QProgressBar::setRange(-1, -1);
+
+    } else {
+      setStyle(chunkColor);
+      QProgressBar::setRange(0, SCALE * m);
+    }
+  }
+
+  void setValue (float v, bool destroyed) {
+    if (type == SPLINE_HEALTH) {
+      if (destroyed)
+        setFormat("Destroyed");
+      else if (v == 0)
+        setFormat("Inactive");
+      else
+        setFormat("");
+    }
+    QProgressBar::setValue(SCALE * v);
+  }
+
+  void setStyle (const QColor &cc) {
+    QString styleSheet =
+      "QProgressBar {"
+        " border: 0px;"
+        " border-radius: 5px;";
+    if (type != SPLINE_HEALTH)
+      styleSheet += " text-align: center;";
+    styleSheet +=
+      " } "
+      "QProgressBar::chunk { background-color: #"
+      + QString::number(cc.rgb(), 16)
+      + "; border-radius: 5px }";
+    setStyleSheet(styleSheet);
+  }
+
+  void paintEvent(QPaintEvent *e) {
+    QProgressBar::paintEvent(e);
+
+    const QString &f = format();
+    if (!isTextVisible() && !format().isEmpty()) {
+      QRect cr = contentsRect(), br;
+      QPainter painter (this);
+      QPen pen = painter.pen();
+      painter.translate(cr.center());
+      painter.rotate(-90);
+      painter.translate(-cr.center());
+//      painter.setPen(Qt::NoPen);
+      painter.drawText(cr, Qt::AlignCenter, f, &br);
+      if (f == "Inactive")  pen.setColor(Qt::gray);
+      painter.setPen(pen);
+//      painter.fillRect(br, Qt::red);
+      painter.drawText(br, Qt::AlignCenter, f);
+//      qDebug() << "DrawText(" << text() << cr << ") >> " << br;
+      if (f == "Destroyed") {
+        painter.drawLine(br.topLeft(), br.bottomRight());
+        painter.drawLine(br.bottomLeft(), br.topRight());
+      }
+    }
   }
 };
 
 // =============================================================================
 
-QFrame* line (void) {
-  QFrame* l = new QFrame();
-  l->setFrameShape(QFrame::HLine);
-  l->setFrameShadow(QFrame::Sunken);
-  return l;
+QWidget* line (const QString &text = QString()) {
+  if (text.isEmpty()) {
+    QFrame *f = new QFrame;
+    f->setFrameShape(QFrame::HLine);
+    f->setFrameShadow(QFrame::Sunken);
+    return f;
+
+  } else {
+    QWidget *holder = new QWidget;
+    QHBoxLayout *layout = new QHBoxLayout;
+    holder->setLayout(layout);
+    layout->addWidget(line(), 1);
+    layout->addWidget(new QLabel(text), 0);
+    layout->addWidget(line(), 1);
+    return holder;
+  }
 }
 
 QFrame* filler (bool vertical = false) {
@@ -271,8 +395,20 @@ GeneticManipulator::GeneticManipulator(QWidget *parent)
   buildStatsLayout();
   buildGenesLayout();
 
-  _editButton = new QPushButton ("");
+  _saveButton = new QPushButton;
+  _saveButton->setIcon(QIcon::fromTheme("document-save"));
+
+  _printButton = new QPushButton;
+  _printButton->setIcon(QIcon::fromTheme("document-print"));
+
+  _editButton = new QPushButton;
   _hideButton = new QPushButton ("Close");
+
+  connect(_saveButton, &QPushButton::clicked,
+          this, qOverload<>(&GeneticManipulator::saveSubjectGenotype));
+
+  connect(_printButton, &QPushButton::clicked,
+          this, qOverload<>(&GeneticManipulator::printSubjectPhenotype));
 
   connect(_editButton, &QPushButton::clicked,
           this, &GeneticManipulator::toggleReadOnly);
@@ -291,6 +427,8 @@ GeneticManipulator::GeneticManipulator(QWidget *parent)
 
     QHBoxLayout *buttonsLayout = new QHBoxLayout;
     buttonsLayout->addWidget(filler(false));
+    buttonsLayout->addWidget(_saveButton, 0, Qt::AlignCenter);
+    buttonsLayout->addWidget(_printButton, 0, Qt::AlignCenter);
     buttonsLayout->addWidget(_editButton, 0, Qt::AlignCenter);
     buttonsLayout->addWidget(_hideButton, 0, Qt::AlignCenter);
     buttonsLayout->addWidget(filler(false));
@@ -304,33 +442,139 @@ GeneticManipulator::GeneticManipulator(QWidget *parent)
   setSubject(nullptr);
 }
 
+void GeneticManipulator::saveSubjectGenotype(void) {
+  static const QString defaultExt =
+    QString::fromStdString( _subject->object().genotype().extension());
+
+  QString defaultFile = _lFirstname->text() + "_" +_lLastname->text();
+  QString filename = QFileDialog::getSaveFileName(
+    this, "Save " + defaultFile + " to...",
+    defaultFile + defaultExt,
+    "Splinoids (*" + defaultExt + ")");
+
+  saveSubjectGenotype(filename);
+}
+
+void GeneticManipulator::saveSubjectGenotype(const QString &filename) const {
+  if (filename.isEmpty()) return;
+  _subject->saveGenotype(filename);
+}
+
+void GeneticManipulator::printSubjectPhenotype(void) {
+  static const QString defaultExt = ".png";
+
+  QString defaultFile = _lFirstname->text() + "_" +_lLastname->text();
+  QString filename = QFileDialog::getSaveFileName(
+    this, "Print " + defaultFile + " to...",
+    defaultFile + defaultExt,
+    "Image (*" + defaultExt + ")");
+
+  saveSubjectGenotype(filename);
+}
+
+void GeneticManipulator::printSubjectPhenotype(const QString &filename) const {
+  if (filename.isEmpty()) return;
+  _subject->printPhenotype(filename);
+}
+
 void GeneticManipulator::buildViewer(void) {
   _viewer = new MiniViewer (this, _proxy);
 }
 
-void GeneticManipulator::buildStatsLayout(void) {
-  QFormLayout *sl;
-  _statsLayout = sl = new QFormLayout;
+QLayout* GeneticManipulator::buildRetinaLayout(void) {
+  QHBoxLayout *l = new QHBoxLayout;
+  l->setSpacing(0);
 
-  sl->addRow(_dataWidgets.firstname = new QLabel,
-             _dataWidgets.lastname = new QLabel);
+  uint max = 2 * (1+2*genotype::Vision::config_t::precisionBounds().max) + 1;
+  _rLabels.resize(max);
+
+  for (uint i=0; i<max; i++) {
+    ColorLabel *cl = _rLabels[i] = new ColorLabel;
+    if (i == 0) {
+      cl->setText("Retina");
+      cl->setAlignment(Qt::AlignCenter);
+      cl->setStyleSheet("border: 1px solid gray");
+
+    } else {
+      cl->noValue();
+      cl->hide();
+    }
+    l->addWidget(cl);
+  }
+
+  return _retinaLayout = l;
+}
+
+QLayout* GeneticManipulator::buildBarsLayout (void) {
+  QVBoxLayout *layout = new QVBoxLayout;
+  QHBoxLayout *mainBarsLayout = new QHBoxLayout;
+  QHBoxLayout *subBarsLayout = new QHBoxLayout;
+
+  _sBars[0] = new PrettyBar (PrettyBar::BODY_ENERGY);
+  _sBars[1] = new PrettyBar (PrettyBar::BODY_HEALTH);
+  for (uint i=2; i<_sBars.size(); i++)
+    _sBars[i] = new PrettyBar (PrettyBar::SPLINE_HEALTH);
+
+  mainBarsLayout->addWidget(_sBars[0]);
+  mainBarsLayout->addWidget(_sBars[1]);
+
+  for (uint i=0; i<2*S_v; i++)  subBarsLayout->addWidget(_sBars[i+2]);
+
+  layout->addLayout(mainBarsLayout);
+  layout->addLayout(subBarsLayout);
+  return layout;
+}
+
+void GeneticManipulator::buildStatsLayout(void) {
+  QGridLayout *sl;
+  _statsLayout = sl = new QGridLayout;
+
+  sl->addWidget(_lFirstname = new QLabel, 0, 0, 1, 2);
+  sl->addWidget(_lLastname = new QLabel, 0, 2, 1, 2);
+  sl->addWidget(line(), 1, 0, 1, 4);
 
   QString headerStyleSheet = " font-size: 18px; font-weight: bold ";
-  _dataWidgets.firstname->setStyleSheet(headerStyleSheet);
-  _dataWidgets.lastname->setStyleSheet(headerStyleSheet);
+  _lFirstname->setStyleSheet(headerStyleSheet);
+  _lFirstname->setAlignment(Qt::AlignRight);
+  _lLastname->setStyleSheet(headerStyleSheet);
 
-  QComboBox *cbSex = new QComboBox;
-  cbSex->insertItem(simu::Critter::Sex::FEMALE, "female");
-  cbSex->insertItem(  simu::Critter::Sex::MALE, "male");
-  cbSex->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-  connect(cbSex, QOverload<int>::of(&QComboBox::currentIndexChanged),
+  QGridLayout *othersLayout = new QGridLayout;
+  sl->addLayout(othersLayout, 2, 0, 1, 4);
+
+  int widths [] { 75, 40 };
+  for (uint i=0; i<4; i++)
+    othersLayout->setColumnMinimumWidth(i, widths[i%2]);
+
+  _bSex = new QComboBox;
+  _bSex->insertItem(simu::Critter::Sex::FEMALE, "female");
+  _bSex->insertItem(  simu::Critter::Sex::MALE, "male");
+  _bSex->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+  connect(_bSex, QOverload<int>::of(&QComboBox::currentIndexChanged),
           this, &GeneticManipulator::sexChanged);
-  _dataWidgets.sex = cbSex;
-  sl->addRow(cbSex);
+  othersLayout->addWidget(_bSex, 0, 0, 1, 2);
 
-  sl->addRow("Mass", _dataWidgets.mass = new QLabel);
+  uint r = 0, c = 2;
+  const auto addLRow = [this, othersLayout, &r, &c] (const QString &l) {
+    QLabel *label = new QLabel(l);
+    label->setAlignment(Qt::AlignRight);
+    othersLayout->addWidget(label, r, c);
+    othersLayout->addWidget(_dataWidgets[l] = new QLabel, r, c+1);
+    c+=2;
+    if (c >= 4) c = 0, r++;
+  };
 
-  sl->addRow(filler(true));
+                    addLRow("Mass");
+  addLRow("Age");   addLRow("Clock");
+
+  othersLayout->addWidget(line("Vision"), r++, 0, 1, 4);
+  addLRow("Angle"); addLRow("Rotation");
+  addLRow("Width"); addLRow("Precision");
+  othersLayout->addLayout(buildRetinaLayout(), r++, 0, 1, 4);
+
+  othersLayout->addWidget(line("Wellfare"), r++, 0, 1, 4);
+  othersLayout->addLayout(buildBarsLayout(), r++, 0, 1, 4);
+
+  sl->addWidget(filler(true), 3, 0, 1, 4);
 }
 
 void GeneticManipulator::buildGenesLayout(void) {
@@ -341,8 +585,7 @@ void GeneticManipulator::buildGenesLayout(void) {
   _genesLayout = gl = new QVBoxLayout;
 
   QGridLayout *splinesLayout = new QGridLayout;
-  gl->addWidget(line());
-  gl->addWidget(new QLabel("Splines"));
+  gl->addWidget(line("Splines"));
   gl->addLayout(splinesLayout);
   for (uint i=0; i<S_v; i++) {
     for (uint j=0; j<SD_v; j++) {
@@ -363,13 +606,12 @@ void GeneticManipulator::buildGenesLayout(void) {
   }
 
   for (uint j=0; j<SD_v+3; j++)
-    splinesLayout->addWidget(new QLabel(names[j]), j, CGenome::SPLINES_COUNT);
+    splinesLayout->addWidget(new QLabel(snames[j]), j, S_v);
 
-  splinesLayout->addWidget(line(), SD_v, 0, 1, -1);
+  splinesLayout->addWidget(line("Dimorphism"), SD_v, 0, 1, -1);
 
   QGridLayout *colorsLayout = new QGridLayout;
-  gl->addWidget(line());
-  gl->addWidget(new QLabel("Colors"));
+  gl->addWidget(line("Colors"));
   gl->addLayout(colorsLayout);
 
   // Splines colors
@@ -389,6 +631,12 @@ void GeneticManipulator::buildGenesLayout(void) {
                             2*j+1, 0, 1, S_v);
   }
 
+  for (uint j=0; j<4; j++) {
+    QLabel *n = new QLabel(cnames[j]);
+    n->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+    colorsLayout->addWidget(n, j, S_v);
+  }
+
   gl->addWidget(filler(true));
 }
 
@@ -404,7 +652,7 @@ void GeneticManipulator::setReadOnly(bool r) {
   for (auto &da: _dSliders) for (auto *s: da) s->setReadOnly(r);
   for (auto &sc: _sPickers) for (auto *p: sc) p->setReadOnly(r);
   for (auto *p: _bPickers)  p->setReadOnly(r);
-  _dataWidgets.sex->setEnabled(!r);
+  _bSex->setEnabled(!r);
 
   // Set appropriate layout directions
   _contentsLayout->setDirection(
@@ -418,14 +666,47 @@ void GeneticManipulator::setReadOnly(bool r) {
 }
 
 void GeneticManipulator::setSubject(visu::Critter *s) {
+  using SCritter = simu::Critter;
+//  using VCritter = visu::Critter;
+
   _updating = true;
 
   _subject = s;
 
   _proxy->setObject(s);
 
+  _saveButton->setEnabled(_subject);
+  _printButton->setEnabled(_subject);
+
   if (_subject) {
-    const auto &g = s->object().genotype();
+    const simu::Critter &c = _subject->object();
+    const genotype::Critter &g = c.genotype();
+    static constexpr auto NO_SPECIES = phylogeny::SID::INVALID;
+
+    _lFirstname->setText("0x" + QString::number(long(g.id()), 16));
+
+    auto species = g.species();
+    _lLastname->setText(
+      species == NO_SPECIES ? NO_LASTNAME
+                            : "0x" + QString::number(long(species), 16));
+
+    _bSex->setEnabled(true && !_readonly);
+    _bSex->setCurrentIndex(int(c.genotype().cdata.sex));
+
+    const auto degrees = [] (float v) {
+      return QString::number(180. * v / M_PI, 'f', 1);
+    };
+
+    set("Mass", &SCritter::mass);
+    set("Angle", &SCritter::visionBodyAngle, degrees);
+    set("Rotation", &SCritter::visionRelativeRotation, degrees);
+    set("Width", &SCritter::visionWidth, degrees);
+    set("Precision", &SCritter::visionPrecision);
+
+    _rLabels[0]->hide();
+    for (uint i=1; i<=c.retina().size(); i++)  _rLabels[i]->show();
+    for (int i=c.retina().size()+1; i<_rLabels.size(); i++) _rLabels[i]->hide();
+
     for (uint i=0; i<S_v; i++) {
       for (uint j=0; j<SD_v; j++)
         _sSliders[i][j]->setGeneValue(g.splines[i].data[j]);
@@ -439,21 +720,25 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     for (uint j=0; j<2; j++)
       _bPickers[j]->setGeneValue(g.colors[j*(S_v+1)]);
 
-    _dataWidgets.sex->setEnabled(true && !_readonly);
-    _dataWidgets.sex->setCurrentIndex(
-      int(_subject->object().genotype().cdata.sex));
+    _sBars[0]->setMaximum(c.bodyMaxHealth());
+    _sBars[1]->setMaximum(c.maxUsableEnergy());
 
-    _dataWidgets.firstname->setText("0x" + QString::number(long(g.id()), 16));
+    for (uint i=0; i<S_v; i++)
+      for (SCritter::Side s: {SCritter::Side::LEFT, SCritter::Side::RIGHT})
+        _sBars[2+uint(s)*S_v+i]->setMaximum(c.splineMaxHealth(i, s));
 
-    static constexpr auto NO_SPECIES = phylogeny::SID::INVALID;
-    auto species = g.species();
-    _dataWidgets.lastname->setText(
-      species == NO_SPECIES ? NO_LASTNAME
-                            : "0x" + QString::number(long(species), 16));
-
-    _dataWidgets.mass->setText(QString::number(_subject->object().mass()));
+    readCurrentStatus();
 
   } else {
+    _lFirstname->setText(NO_FIRSTNAME);
+    _lLastname->setText(NO_LASTNAME);
+
+    _bSex->setEnabled(false);
+    for (QLabel *l: _dataWidgets) l->setText("");
+
+    _rLabels[0]->show();
+    for (int i=1; i<_rLabels.size(); i++)  _rLabels[i]->hide();
+
     for (uint i=0; i<S_v; i++) {
       for (uint j=0; j<SD_v; j++) _sSliders[i][j]->noValue();
       for (uint j=0; j<2; j++)    _dSliders[i][j]->noValue();
@@ -463,17 +748,36 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
 
     for (uint j=0; j<2; j++)  _bPickers[j]->noValue();
 
-    _dataWidgets.sex->setEnabled(false);
-
-    _dataWidgets.firstname->setText("Nobody");
-    _dataWidgets.lastname->setText("Doe");
-
-    _dataWidgets.mass->setText("0");
+    for (PrettyBar *b: _sBars)  b->setMaximum(0.f);
   }
 
   updateWindowName();
 
   _updating = false;
+}
+
+void GeneticManipulator::readCurrentStatus(void) {
+  using SCritter = simu::Critter;
+
+  const simu::Critter &c = _subject->object();
+
+  const auto percent = [] (float v) {
+    return QString::number(100 * v, 'f', 1) + "%";
+  };
+  set("Age", &SCritter::age, percent);
+  set("Clock", &SCritter::clockSpeed, percent);
+
+  const auto &r = c.retina();
+  for (uint i=0; i<r.size(); i++) _rLabels[i+1]->setValue(r[i]);
+
+  _sBars[0]->setValue(c.usableEnergy(), false);
+  _sBars[1]->setValue(c.bodyHealth(), false);
+
+  for (uint i=0; i<S_v; i++)
+    for (SCritter::Side s: {SCritter::Side::LEFT, SCritter::Side::RIGHT})
+      _sBars[2+uint(s)*S_v+i]->setValue(c.splineHealth(i, s),
+                                        c.destroyedSpline(i, s));
+
 }
 
 void GeneticManipulator::updateSubject(void) {
@@ -522,6 +826,5 @@ void GeneticManipulator::keyReleaseEvent(QKeyEvent *e) {
   emit keyReleased(e);
   _proxy->update();
 }
-
 
 } // end of namespace gui

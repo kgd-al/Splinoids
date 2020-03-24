@@ -106,10 +106,12 @@ void Critter::updateShape (void) {
 
 #ifndef NDEBUG
   _polygons.clear();
-  for (const auto &s: _critter.collisionObjects) {
-    QPolygonF p;
-    for (const auto &v: s)  p << toQt(v);
-    _polygons.push_back(p);
+  for (const auto &v: _critter.collisionObjects) {
+    for (const auto &s: v) {
+      QPolygonF p;
+      for (const auto &v: s)  p << toQt(v);
+      _polygons.push_back(p);
+    }
   }
   _b2polygons.clear();  uint fixtures = 0;
   const b2Fixture *f = _critter.fixturesList();
@@ -163,8 +165,8 @@ void Critter::updateVision(void) {
 }
 
 QRectF Critter::boundingRect (void) const {
-  int S = _critter.bodySize();
-  return QRectF(-.5*S, -.5*S, S, S).united(_maximalBoundingRect);
+  int S = _critter.bodyRadius();
+  return QRectF(-S, -S, 2*S, 2*S).united(_maximalBoundingRect);
 }
 
 void Critter::paint(QPainter *painter,
@@ -173,13 +175,55 @@ void Critter::paint(QPainter *painter,
   doPaint(painter);
 }
 
+QColor Critter::bodyColor(void) const {
+  switch (config::Visualisation::renderType()) {
+  case RenderingType::REGULAR:  return _bcolor;
+  case RenderingType::ENERGY: {
+    float r = _critter.usableEnergy() / _critter.maxUsableEnergy();
+    return QColor::fromRgbF(r, r, 0);
+  }
+  case RenderingType::HEALTH: {
+    float r = _critter.bodyHealth() / _critter.bodyMaxHealth();
+    return QColor::fromRgbF(r, 0, 0);
+  }
+  }
+  assert(false);
+}
+
+QColor Critter::splineColor(uint i, Side s) const {
+  switch (config::Visualisation::renderType()) {
+  case RenderingType::REGULAR:  return _acolors[i];
+  case RenderingType::ENERGY:   return QColor(Qt::black);
+  case RenderingType::HEALTH: {
+    float r = _critter.splineHealth(i, s) / _critter.splineMaxHealth(i, s);
+    return QColor::fromRgbF(r, 0, 0);
+  }
+  }
+  assert(false);
+}
+
+bool Critter::shouldDrawSpline(uint i, Side s) const {
+  if (_critter.destroyedSpline(i, s)) return false;
+  switch (config::Visualisation::renderType()) {
+  case RenderingType::REGULAR:  return true;
+  case RenderingType::ENERGY:   return false;
+  case RenderingType::HEALTH:   return _critter.activeSpline(i, s);
+  }
+  return true;
+}
+
+static const auto doSymmetrical = [] (QPainter *p, auto f) {
+  p->save();
+    f(p, Critter::Side::LEFT);
+    p->scale(1, -1);
+    f(p, Critter::Side::RIGHT);
+  p->restore();
+};
+
 void Critter::doPaint (QPainter *painter) const {
 #ifndef NDEBUG
-  if (config::Visualisation::b2DebugDraw()) return;
+//  if (config::Visualisation::b2DebugDraw()) return;
 #endif
-
-  if (config::Visualisation::renderingType() != RenderingType::NORMAL)
-    return;
 
   painter->save();
     QPen pen = painter->pen();
@@ -215,31 +259,27 @@ void Critter::doPaint (QPainter *painter) const {
 //        painter->setPen(pen);
 
         if (config::Visualisation::opaqueBodies())
-          painter->fillPath(_body, _bcolor);
+          painter->fillPath(_body, bodyColor());
 
-        if (!config::Visualisation::drawInnerEdges()) {
-          painter->scale(1,  1);
-          for (const auto &a: _artifacts) painter->drawPath(a);
+        if (!config::Visualisation::drawInnerEdges())
+          doSymmetrical(painter, [this] (QPainter *p, Side s) {
+            for (uint i=0; i<SPLINES_COUNT; i++)
+              if (shouldDrawSpline(i, s))
+                p->drawPath(_artifacts[i]);
+          });
 
-          painter->scale(1, -1);
-          for (const auto &a: _artifacts) painter->drawPath(a);
-        }
+        doSymmetrical(painter, [this] (QPainter *p, Side s) {
+          for (uint i=0; i<SPLINES_COUNT; i++)
+            if (shouldDrawSpline(i, s))
+              p->fillPath(_artifacts[i], splineColor(i, s));
+        });
 
-        painter->scale(1,  1);
-        for (uint i=0; i<SPLINES_COUNT; i++)
-          painter->fillPath(_artifacts[i], _acolors[i]);
-
-        painter->scale(1, -1);
-        for (uint i=0; i<SPLINES_COUNT; i++)
-          painter->fillPath(_artifacts[i], _acolors[i]);
-
-        if (config::Visualisation::drawInnerEdges()) {
-          painter->scale(1,  1);
-          for (const auto &a: _artifacts) painter->drawPath(a);
-
-          painter->scale(1, -1);
-          for (const auto &a: _artifacts) painter->drawPath(a);
-        }
+        if (config::Visualisation::drawInnerEdges())
+          doSymmetrical(painter, [this] (QPainter *p, Side s) {
+            for (uint i=0; i<SPLINES_COUNT; i++)
+              if (shouldDrawSpline(i, s))
+                p->drawPath(_artifacts[i]);
+          });
       painter->restore();
 
       debugDrawAbove(painter);
@@ -260,16 +300,15 @@ void Critter::doPaint (QPainter *painter) const {
       painter->drawPath(_body);
     }
 
-    if (config::Visualisation::drawVision() >= 1) {
+    if (config::Visualisation::drawVision() >= 1 && isSelected()) {
       painter->save();
         pen.setColor(visionFillColor.darker());
         pen.setStyle(Qt::SolidLine);
         painter->setPen(pen);
         painter->setBrush(visionFillColor);
-        painter->drawPath(_visionCone);
-        painter->scale(1, -1);
-        painter->drawPath(_visionCone);
-        painter->scale(1, -1);
+        doSymmetrical(painter, [this] (QPainter *p, Side) {
+          p->drawPath(_visionCone);
+        });
 
         if (config::Visualisation::drawVision() >= 2) {
           const auto &s = object().raysStart();
@@ -281,7 +320,7 @@ void Critter::doPaint (QPainter *painter) const {
             QPointF pstart = toQt(s[i<h?0:1]),
                     pmax = toQt(e[i]),
                     pend = pstart + l[i] * (pmax-pstart);
-            QColor color = r[i] ? toQt(*r[i]) : QColor();
+            QColor color = toQt(r[i]);
             pen.setColor(color);
             painter->setPen(pen);
             painter->drawLine(pstart, pend);
@@ -314,7 +353,6 @@ void Critter::debugDrawAbove (QPainter *painter) const {
   const auto &d = config::Visualisation::debugDraw;
   QPen pen = painter->pen();
   if (d.any()) {
-    painter->scale(1, 1);
     painter->save();
       for (uint i=0; i<SPLINES_COUNT; i++) {
         const auto &s = _critter.splinesData()[i];
@@ -389,13 +427,13 @@ void Critter::debugDrawAbove (QPainter *painter) const {
   // draw motor outputs
   painter->save();
     static constexpr float mo_W = .1;
-    float S = object().bodySize();
-    float R = .25 * S;
-    float L = .1 * S;
+    float R = object().bodyRadius();
+    float offset = .5 * R;
+    float length = .2 * R;
 
     for (Motor m: EnumUtils<Motor>::iterator()) {
       float o = object().motorOutput(m);
-      QRectF r (0, -int(m) * R-.5*mo_W, L * o, mo_W);
+      QRectF r (0, -int(m) * offset-.5*mo_W, length * o, mo_W);
       painter->fillRect(r, QColor::fromRgbF(1, 0, 0, std::fabs(o)));
     }
   painter->restore();
@@ -412,11 +450,11 @@ void Critter::debugDrawAbove (QPainter *painter) const {
 }
 #endif
 
-void Critter::save (QString filename) const {
-  if (filename.isEmpty())
-    filename =
-      QFileDialog::getSaveFileName(nullptr, QString("Select filename"),
-                                   QString(), QString("*.png"));
+void Critter::saveGenotype(const QString &filename) const {
+  _critter.genotype().toFile(filename.toStdString());
+}
+
+void Critter::printPhenotype (const QString &filename) const {
   if (filename.isEmpty())
     return;
 

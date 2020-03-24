@@ -73,6 +73,9 @@ public:
 
   Vision vision;
 
+  float minClockSpeed, maxClockSpeed;
+  float matureAge, oldAge;
+
   BOCData cdata;
   phylogeny::Genealogy gdata;
 
@@ -99,7 +102,7 @@ public:
   }
 
   std::string extension (void) const override {
-    return ".crt.json";
+    return ".spln.json";
   }
 
   void to_jsonExtension (json &j) const override {
@@ -128,6 +131,10 @@ DECLARE_GENOME_FIELD(Critter, Critter::Dimorphism, dimorphism)
 DECLARE_GENOME_FIELD(Critter, Critter::Colors, colors)
 DECLARE_GENOME_FIELD(Critter, Vision, vision)
 DECLARE_GENOME_FIELD(Critter, BOCData, cdata)
+DECLARE_GENOME_FIELD(Critter, float, minClockSpeed)
+DECLARE_GENOME_FIELD(Critter, float, maxClockSpeed)
+DECLARE_GENOME_FIELD(Critter, float, matureAge)
+DECLARE_GENOME_FIELD(Critter, float, oldAge)
 
 } // end of namespace gntp
 
@@ -159,6 +166,11 @@ struct EDNA_CONFIG_FILE(Critter) {
   using BC = Bounds<genotype::Color::value_type>;
   DECLARE_PARAMETER(BC, color_bounds)
   DECLARE_PARAMETER(MutationRates, colors_mutationRates)
+
+  DECLARE_PARAMETER(Bounds<float>, minClockSpeedBounds)
+  DECLARE_PARAMETER(Bounds<float>, maxClockSpeedBounds)
+  DECLARE_PARAMETER(Bounds<float>, matureAgeBounds)
+  DECLARE_PARAMETER(Bounds<float>, oldAgeBounds)
 
   using Crossover = genotype::BOCData::config_t;
   DECLARE_SUBCONFIG(Crossover, configCrossover)

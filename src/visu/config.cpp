@@ -18,12 +18,17 @@ DEFINE_SUBCONFIG(Simulation, configSimulation)
 DEFINE_PARAMETER(float, viewZoom, 100)//100)
 DEFINE_PARAMETER(bool, opaqueBodies, true)
 DEFINE_PARAMETER(bool, drawInnerEdges, false)
-DEFINE_PARAMETER(int, drawVision, 0)
+DEFINE_PARAMETER(int, drawVision, 2)
+DEFINE_PARAMETER(RenderingType, renderType, RenderingType::REGULAR)
 
-DEFINE_PARAMETER(RenderingType, renderingType, RenderingType::NORMAL)
+DEFINE_PARAMETER(int, showFights, 2)
 
-DEFINE_PARAMETER(float, zoomFactor, 1)
+DEFINE_PARAMETER(bool, showGrid, true)
+
+DEFINE_PARAMETER(float, selectionZoomFactor, 8)
 DEFINE_PARAMETER(uint, substepsSpeed, 1)
+
+DEFINE_DEBUG_PARAMETER(int, drawFightingDebug, 5)
 
 #ifndef NDEBUG
 DEFINE_DEBUG_PARAMETER(int, showCollisionObjects, 0)

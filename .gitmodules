@@ -7,3 +7,6 @@
 [submodule "qt-collapsible-section"]
 	path = qt-collapsible-section
 	url = https://github.com/Elypson/qt-collapsible-section.git
+[submodule "cnl"]
+	path = cnl
+	url = https://github.com/johnmcfarlane/cnl.git

@@ -7,19 +7,40 @@
 
 namespace visu {
 
+struct Critter;
+struct Foodlet;
+
+struct Overlay;
 struct DebugDrawer;
 
 class Environment : public QGraphicsItem {
   simu::Environment &_environment;
+
+  using stvCritterMapping =
+    std::function<const visu::Critter*(const simu::Critter*)>;
+  const stvCritterMapping stvCritter;
+
+  using stvFoodletMapping =
+    std::function<const visu::Foodlet*(const simu::Foodlet*)>;
+  const stvFoodletMapping stvFoodlet;
+
+  Overlay *_overlay;
+  friend struct Overlay;
 
 #ifndef NDEBUG
   DebugDrawer *_ddrawer;
 #endif
 
 public:
-  Environment (simu::Environment &e);
+  Environment (simu::Environment &e,
+               stvCritterMapping stvC,
+               stvFoodletMapping stvF);
 
   virtual ~Environment (void);
+
+  Overlay* overlay (void) const {
+    return _overlay;
+  }
 
   QRectF simuBoundingRect (void) const {
     const auto S = _environment.size();
@@ -42,6 +63,22 @@ public:
     return _ddrawer;
   }
 #endif
+};
+
+class Overlay : public QGraphicsItem { // Clone of env but at higher z value
+  Environment &env;
+
+public:
+  Overlay (Environment &e, int zvalue);
+
+  QRectF boundingRect(void) const {
+    return env.boundingRect();
+  }
+
+  void paint (QPainter *painter, const QStyleOptionGraphicsItem*, QWidget*);
+
+private:
+  void drawFights (QPainter *painter, const QRectF &drawBounds) const;
 };
 
 } // end namespace visu

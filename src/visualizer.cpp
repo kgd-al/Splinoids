@@ -2,24 +2,25 @@
 #include <QMainWindow>
 #include <QSettings>
 #include <QTimer>
+#include <QSplitter>
 
 #include "kgd/external/cxxopts.hpp"
 
 #include "gui/mainview.h"
 
-//#include "visu/controller.h"
-
 //#include "config/dependencies.h"
 
-//bool isValidSeed(const std::string& s) {
-//  return !s.empty()
-//    && std::all_of(s.begin(),
-//                    s.end(),
-//                    [](char c) { return std::isdigit(c); }
-//    );
-//}
+long isValidSeed(const std::string& s) {
+  char* p;
+  long l = strtol(s.c_str(), &p, 10);
+  return p? l : -1;
+}
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {  
+  // To prevent missing linkages
+  std::cerr << config::PTree::rsetSize() << std::endl;
+//  std::cerr << phylogeny::SID::INVALID << std::endl;
+
   using CGenome = genotype::Critter;
   using EGenome = genotype::Environment;
 
@@ -31,14 +32,22 @@ int main(int argc, char *argv[]) {
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::QUIET;
 
-  decltype(simu::Simulation::InitData::seed) rngSeed = -1;
+  simu::Simulation::InitData idata {};
+  idata.ienergy = 1000;
+  idata.cRatio = 1. / (1+config::Simulation::plantEnergyDensity());
+  idata.nCritters = 50;
+  idata.cRange = .25;
+  idata.pRange = 1;
+  idata.seed = -1;
 
-//  std::string envGenomeArg, plantGenomeArg;
+  int startspeed = 1;
 
-//  genotype::Environment envGenome;
-//  genotype::Plant plantGenome;
+  std::string eGenomeArg = "-1", cGenomeArg = "-1";
 
-//  std::string loadSaveFile, loadConstraints, loadFields;
+  genotype::Environment eGenome;
+  genotype::Critter cGenome;
+
+  std::string loadSaveFile, loadConstraints, loadFields;
 
 //  std::string morphologiesSaveFolder, screenshotSaveFile;
 
@@ -58,7 +67,23 @@ int main(int argc, char *argv[]) {
      cxxopts::value(configFile))
     ("v,verbosity", "Verbosity level. " + config::verbosityValues(),
      cxxopts::value(verbosity))
-    ("seed", "Seed value for simulation's RNG", cxxopts::value(rngSeed))
+
+
+    ("e,energy", "Total energy of the system", cxxopts::value(idata.ienergy))
+    ("n,ins", "Initial number of splinoids", cxxopts::value(idata.nCritters))
+    ("s,seed", "Seed value for simulation's RNG", cxxopts::value(idata.seed))
+    ("sratio", "Initial fraction of energy devoted to the splinoids",
+     cxxopts::value(idata.cRatio))
+
+    ("start", "Whether to start running immendiatly after initialisation"
+              " (and optionally at which speed > 1)",
+     cxxopts::value(startspeed)->implicit_value("1"))
+
+    ("env-genome", "Environment's genome or a random seed",
+     cxxopts::value(eGenomeArg))
+    ("spln-genome", "Splinoid genome to start from or a random seed",
+     cxxopts::value(cGenomeArg))
+
 //    ("d,duration", "Simulation duration. ",
 //     cxxopts::value(duration))
 //    ("f,data-folder", "Folder under which to store the computational outputs",
@@ -66,10 +91,6 @@ int main(int argc, char *argv[]) {
 //    ("overwrite", "Action to take if the data folder is not empty: either "
 //                  "[a]bort or [p]urge",
 //     cxxopts::value(overwrite))
-//    ("e,environment", "Environment's genome or a random seed",
-//     cxxopts::value(envGenomeArg))
-//    ("p,plant", "Plant genome to start from or a random seed",
-//     cxxopts::value(plantGenomeArg))
 //    ("l,load", "Load a previously saved simulation",
 //     cxxopts::value(loadSaveFile))
 //    ("load-constraints", "Constraints to apply on dependencies check",
@@ -131,57 +152,68 @@ int main(int argc, char *argv[]) {
   QApplication a(argc, argv);
   setlocale(LC_NUMERIC,"C");
 
-  QSettings settings ("kgd", "Untitled");
+  QSettings settings ("kgd", "Splinoids");
 
-//  visu::GraphicSimulation s;
+  QMainWindow w;
+  gui::StatsView *stats = new gui::StatsView;
+  visu::GraphicSimulation s (w.statusBar(), stats);
 
-//  QMainWindow *w = new QMainWindow;
-//  gui::MainView *v = new gui::MainView(s.environment(), w);
-//  visu::Controller c (s, *w, v);
+  gui::MainView *v = new gui::MainView (s, stats, w.menuBar());
 
-//  if (loadSaveFile.empty()) {
+  QSplitter splitter;
+  splitter.addWidget(v);
+  splitter.addWidget(stats);
+  w.setCentralWidget(&splitter);
+  w.setWindowTitle("Splinoids main window");
+
+  // ===========================================================================
+  // == Simulation setup
+
+  if (loadSaveFile.empty()) {
 //    config::Simulation::setupConfig(configFile, verbosity);
-//    if (configFile.empty()) config::Simulation::printConfig("");
-//    genotype::Plant::printMutationRates(std::cout, 2);
+    if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
+    if (configFile.empty()) config::Simulation::printConfig("");
+    genotype::Critter::printMutationRates(std::cout, 2);
 
-//    if (!isValidSeed(envGenomeArg)) {
-//      std::cout << "Reading environment genome from input file '"
-//                << envGenomeArg << "'" << std::endl;
-//      envGenome = genotype::Environment::fromFile(envGenomeArg);
+    if (!isValidSeed(eGenomeArg)) {
+      std::cout << "Reading environment genome from input file '"
+                << eGenomeArg << "'" << std::endl;
+      eGenome = EGenome::fromFile(eGenomeArg);
 
-//    } else {
-//      rng::FastDice dice (std::stoi(envGenomeArg));
-//      std::cout << "Generating environment genome from rng seed "
-//                << dice.getSeed() << std::endl;
-//      envGenome = genotype::Environment::random(dice);
-//    }
-//    envGenome.toFile("last", 2);
+    } else {
+      rng::FastDice dice (std::stoi(eGenomeArg));
+      std::cout << "Generating environment genome from rng seed "
+                << dice.getSeed() << std::endl;
+      eGenome = EGenome::random(dice);
+    }
+    eGenome.toFile("last", 2);
 
-//    if (!isValidSeed(plantGenomeArg)) {
-//      std::cout << "Reading plant genome from input file '"
-//                << plantGenomeArg << "'" << std::endl;
-//      plantGenome = genotype::Plant::fromFile(plantGenomeArg);
+    if (!isValidSeed(cGenomeArg)) {
+      std::cout << "Reading splinoid genome from input file '"
+                << cGenomeArg << "'" << std::endl;
+      cGenome = CGenome::fromFile(cGenomeArg);
 
-//    } else {
-//      rng::FastDice dice (std::stoi(plantGenomeArg));
-//      std::cout << "Generating plant genome from rng seed "
-//                << dice.getSeed() << std::endl;
-//      plantGenome = genotype::Plant::random(dice);
-//    }
+    } else {
+      rng::FastDice dice (std::stoi(cGenomeArg));
+      std::cout << "Generating splinoid genome from rng seed "
+                << dice.getSeed() << std::endl;
+      cGenome = CGenome::random(dice);
+      for (uint i=0; i<5000; i++) cGenome.mutate(dice);
+    }
 
-//    plantGenome.toFile("last", 2);
+    cGenome.toFile("last", 2);
 
-//    std::cout << "Environment:\n" << envGenome
-//              << "\nPlant:\n" << plantGenome
-//              << std::endl;
+    std::cout << "Environment:\n" << eGenome
+              << "\nSplinoid:\n" << cGenome
+              << std::endl;
 
-//    s.init(envGenome, plantGenome);
+    s.init(eGenome, cGenome, idata);
 
-//  } else {
+  } else {
 //    visu::GraphicSimulation::load(loadSaveFile, s, loadConstraints, loadFields);
 //    if (verbosity != Verbosity::QUIET)
 //      config::Simulation::printConfig();
-//  }
+  }
 
 //  if (!outputFolder.empty())
 //    s.setDataFolder(outputFolder, simu::Simulation::Overwrite(overwrite));
@@ -198,9 +230,6 @@ int main(int argc, char *argv[]) {
 
 //    s.setDuration(simu::Environment::DurationSetType(duration[0]), dvalue);
 //  }
-
-//  // Load settings
-//  w->setGeometry(settings.value("geometry").toRect());
 
 //  int ret = 0;
 //  if (!morphologiesSaveFolder.empty()) {
@@ -233,70 +262,32 @@ int main(int argc, char *argv[]) {
 //    if (config::Simulation::DEBUG_NO_METABOLISM())
 //      c.step();
 
-//    if (speed != 0) {
-//      QTimer::singleShot(500, [&c, speed] {
-//        if (speed > 0)  c.play(true);
-//        c.setSpeed(std::abs(speed));
-//      });
-//    }
-
 //    ret = a.exec();
 
 //    s.abort();
 //    s.step();
 //  }
 
-//  if (w->geometry().isValid()) {
-////    std::cerr << "Saving " <<
-//    settings.setValue("geometry", w->geometry());
-//  }
-
-  // To prevent missing linkages
-  std::cerr << config::PTree::rsetSize() << std::endl;
-//  std::cerr << phylogeny::SID::INVALID << std::endl;
-
-//  config::Simulation::setupConfig(configFile, verbosity);
-//  if (configFile.empty()) config::Simulation::printConfig("");
-  rng::FastDice dice;
-  if (rngSeed >= 0) dice.reset(rngSeed);
-
-  CGenome::printMutationRates(std::cout, 2);
-  CGenome cgenome = CGenome::random(dice);
-  for (uint i=0; i<5000; i++) cgenome.mutate(dice);
-  std::cerr << "Initial splinoid genome: " << cgenome << std::endl;
-
-  EGenome egenome = EGenome::random(dice);
-
-  simu::Simulation::InitData idata {};
-  idata.ienergy = 10;
-  idata.nCritters = 1;//5;
-  idata.seed = rngSeed;
-
-  QMainWindow w;
-  gui::StatsView *stats = new gui::StatsView;
-  visu::GraphicSimulation s (w.statusBar(), stats);
-  s.init(egenome, cgenome, idata);
-
-  gui::MainView v (s, stats);
-
-  QWidget *holder = new QWidget;
-  QLayout *topLayout = new QVBoxLayout;
-  holder->setLayout(topLayout);
-  topLayout->addWidget(&v);
-  topLayout->addWidget(stats);
-  w.setCentralWidget(holder);
-
-  w.setWindowTitle("Splinoids main window");
+  // ===========================================================================
+  // Final preparations
   w.show();
 
-  v.fitInView(s.bounds(), Qt::KeepAspectRatio);
-  v.selectNext();
+  // Load settings
+  w.setGeometry(settings.value("geometry").toRect());
 
-  QTimer::singleShot(1000, [&v] {
-    v.start();
+
+  v->fitInView(s.bounds(), Qt::KeepAspectRatio);
+  v->selectNext();
+
+  QTimer::singleShot(100, [&v, startspeed] {
+    if (startspeed) v->start(startspeed);
+    else            v->stop();
   });
 
   auto ret = a.exec();
+
+  // Save settings
+  if (w.geometry().isValid())  settings.setValue("geometry", w.geometry());
 
   return ret;
 }

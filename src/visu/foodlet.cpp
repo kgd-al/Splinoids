@@ -1,4 +1,4 @@
-#include "plant.h"
+#include "foodlet.h"
 
 #include "config.h"
 
@@ -16,24 +16,24 @@
 
 namespace visu {
 
-Plant::Plant(simu::Plant &plant) : _plant(plant) {
+Foodlet::Foodlet(simu::Foodlet &foodlet) : _foodlet(foodlet) {
 //  setFlag(ItemIsSelectable, true);
   setAcceptedMouseButtons(Qt::NoButton);
-  setPos(toQt(plant.body().GetPosition()));
+  setPos(toQt(_foodlet.body().GetPosition()));
   setZValue(1);
 }
 
-QRectF Plant::boundingRect (void) const {
-  float S = _plant.size();
-  return QRectF(-.5*S, -.5*S, S, S);
+QRectF Foodlet::boundingRect (void) const {
+  float R = _foodlet.radius();
+  return QRectF(-R, -R, 2*R, 2*R);
 }
 
-void Plant::paint(QPainter *painter,
+void Foodlet::paint(QPainter *painter,
                   const QStyleOptionGraphicsItem*, QWidget*) {
-  float S = _plant.size();
+  float R = _foodlet.radius();
   painter->setPen(Qt::NoPen);
-  painter->setBrush(toQt(_plant.color()));
-  painter->drawEllipse({0,0}, .5*S, .5*S);
+  painter->setBrush(toQt(_foodlet.color()));
+  painter->drawEllipse({0,0}, R, R);
 }
 
 } // end of namespace visu

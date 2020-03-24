@@ -2,8 +2,9 @@
 #define SIMULATION_H
 
 #include "critter.h"
-#include "plant.h"
+#include "foodlet.h"
 #include "environment.h"
+#include "ssga.h"
 
 #include "time.h"
 #include "config.h"
@@ -12,18 +13,23 @@ namespace simu {
 
 class Simulation {
 protected:
-  std::set<Critter*> _critters;
   phylogeny::GIDManager _gidManager;
+  std::set<Critter*> _critters;
 
-  std::set<Plant*> _plants;
+  uint _nextPlantID;
+  std::set<Foodlet*> _foodlets;
 
   std::unique_ptr<Environment> _environment;
-  float _energyReserve;
   rng::FastDice _dice;
 
-  Time _time;
+  Time _startTime, _time, _endTime;
   uint _minGen, _maxGen;
 
+  SSGA _ssga;
+
+  std::ofstream _statsLogger;
+
+  float _systemExpectedEnergy;
 
 public:
   struct InitData {
@@ -47,6 +53,10 @@ public:
   Simulation();
   virtual ~Simulation (void);
 
+  bool finished (void) const {
+    return _endTime <= _time;
+  }
+
   auto& environment (void) {
     return *_environment;
   }
@@ -55,17 +65,21 @@ public:
     return _environment->physics();
   }
 
+  const auto& currTime (void) const {
+    return _time;
+  }
+
   void init (const Environment::Genome &egenome,
              Critter::Genome cgenome, const InitData &data = InitData{});
 
   virtual void postInit (void) {}
 
   virtual Critter* addCritter (const CGenome &genome,
-                               float x, float y, float e);
+                               float x, float y, float a, float e);
   virtual void delCritter (Critter *critter);
 
-  virtual Plant* addPlant (float x, float y, float s, float e);
-  virtual void delPlant (Plant *plant);
+  virtual Foodlet* addFoodlet (BodyType t, float x, float y, float r, float e);
+  virtual void delFoodlet (Foodlet *foodlet);
 
   void clear (void);
   virtual void preClear (void) {}
@@ -73,6 +87,27 @@ public:
   virtual void step (void);
 
   float totalEnergy (void) const;
+
+protected:
+  struct Stats {
+    uint ncritters, ncorpses, nplants;
+    uint nfights, nfeedings;
+
+    float ecritters, ecorpses, eplants, ereserve;
+  };
+  virtual void processStats (const Stats&) const {}
+
+private:
+  void produceCorpses (void);
+  void steadyStateGA (void);
+
+  void decomposition (void);
+  void plantRenewal (float bounds = -1);
+
+  void logStats (void);
+
+  // Compensate for variations in total energy
+  void correctFloatingErrors (void);
 };
 
 } // end of namespace simu
