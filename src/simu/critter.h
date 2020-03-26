@@ -41,7 +41,7 @@ public:
     Side sside;  // Side (left if original, right if mirrored)
     uint aindex;  // Index of artifact sub-component (UNUSED)
 
-    P2D centerOfMass; // Must be set after creation // WARNING Brittle
+//    P2D centerOfMass; // Must be set after creation // WARNING Brittle
 
     FixtureData (FixtureType t, const Color &c,
                  uint si, Side fs, uint ai);
@@ -95,7 +95,7 @@ private:
   b2Fixture *_b2Body;
   std::array<std::vector<b2Fixture*>, 2*SPLINES_COUNT> _b2Artifacts;
   std::map<b2Fixture*, FixtureData> _b2FixturesUserData;
-  std::array<float, 1+2*SPLINES_COUNT> _masses;
+  std::array<decimal, 1+2*SPLINES_COUNT> _masses;
 
   std::map<Motor, float> _motors;
 
@@ -108,7 +108,7 @@ private:
   float _clockSpeed;
   float _age;
 
-  float /*_maxEnergy,*/ _energy; // Only for main body
+  decimal /*_maxEnergy,*/ _energy; // Only for main body
 
   /* Each portion managed independantly
    * Indices are
@@ -117,7 +117,7 @@ private:
    *   [S+1, 2*S-1] right splines
    * Where S in the number of splines (SPLINES_COUNT)
    */
-  std::array<float, 1+2*SPLINES_COUNT> _currHealth;
+  std::array<decimal, 1+2*SPLINES_COUNT> _currHealth;
   std::bitset<2*SPLINES_COUNT> _destroyed;
 
   // Potential extension
@@ -128,7 +128,9 @@ public:
   using Vertices = std::vector<P2D>;
   std::array<std::vector<Vertices>, 2*SPLINES_COUNT> collisionObjects;
 
-  Critter(const Genome &g, b2Body *body, float e);
+  bool brainDead; // TODO for external control
+
+  Critter(const Genome &g, b2Body *body, decimal e);
 
   void step (Environment &env);
 
@@ -205,23 +207,23 @@ public:
   // v in [0;1]
   auto clockSpeed (float v) {
     assert(0 <= v && v <= 1);
-    return _clockSpeed = v * _genotype.minClockSpeed
-                       + (1-v) * _genotype.maxClockSpeed;
+    return _clockSpeed = (1-v) * _genotype.minClockSpeed
+                       +    v  * _genotype.maxClockSpeed;
   }
 
   auto age (void) const {
     return _age;
   }
 
-  auto maxUsableEnergy (void) const {
+  decimal maxUsableEnergy (void) const {
     return _masses[0];
   }
 
-  auto usableEnergy (void) const {
+  decimal usableEnergy (void) const {
     return _energy;
   }
 
-  auto totalEnergy (void) const {
+  decimal totalEnergy (void) const {
     return _energy + config::Simulation::healthToEnergyRatio() * _currHealth[0];
   }
 
@@ -263,10 +265,11 @@ public:
   }
 
   // Returns true if a spline was destroyed
-  bool applyHealthDamage(const FixtureData &d, float amount);
+  bool applyHealthDamage(const FixtureData &d, float amount, Environment &env);
 
   // Perform the actual suppression (outside of the world-tick)
-  void destroySpline (b2Fixture *f);
+  // splineIndex should be obtained through the dedicated function
+  void destroySpline (uint splineIndex);
 
   void updateShape (void);
 
@@ -276,7 +279,7 @@ public:
     return _motors.at(m);
   }
 
-  void feed (float de) {
+  void feed (decimal de) {
     assert(0 <= de && de <= maxUsableEnergy() - _energy);
     _energy += de;
   }
@@ -355,12 +358,12 @@ public:
   // age in [0,1]
   static float efficiency (float age);
 
-  static float energyForCreation (void) {
+  static decimal energyForCreation (void) {
     return 2*maximalEnergyStorage(MIN_SIZE);
   }
 
-  static float maximalEnergyStorage (float size) {
-    return M_PI * size * size * RADIUS * RADIUS * BODY_DENSITY;
+  static decimal maximalEnergyStorage (float size) {
+    return decimal(M_PI * size * size * RADIUS * RADIUS * BODY_DENSITY);
   }
 
   static float computeVisionRange (float visionWidth);
@@ -372,6 +375,7 @@ private:
   void performVision (const Environment &env);
   void neuralStep (void);
   void energyConsumption (Environment &env);
+  void regeneration (Environment &env);
 
   void growthStep (void);
   void reproduction (void);

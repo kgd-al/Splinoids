@@ -124,6 +124,9 @@ add_subdirectory(box2d)
 
 set(SIMU_LIBS box2d)
 
+#include_directories(cnl/include)
+#add_subdirectory(cnl)
+
 ################################################################################
 ## Target (simulation)
 ################################################################################

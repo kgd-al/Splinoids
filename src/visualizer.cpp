@@ -8,6 +8,8 @@
 
 #include "gui/mainview.h"
 
+#include <QDebug>
+
 //#include "config/dependencies.h"
 
 long isValidSeed(const std::string& s) {
@@ -42,6 +44,7 @@ int main(int argc, char *argv[]) {
 
   int startspeed = 1;
 
+  int taurus = -1;
   std::string eGenomeArg = "-1", cGenomeArg = "-1";
 
   genotype::Environment eGenome;
@@ -70,8 +73,13 @@ int main(int argc, char *argv[]) {
 
 
     ("e,energy", "Total energy of the system", cxxopts::value(idata.ienergy))
-    ("n,ins", "Initial number of splinoids", cxxopts::value(idata.nCritters))
     ("s,seed", "Seed value for simulation's RNG", cxxopts::value(idata.seed))
+    ("n,i-splinoids", "Initial number of splinoids",
+     cxxopts::value(idata.nCritters))
+    ("i-prange", "Region in which initial plants are placed",
+     cxxopts::value(idata.pRange))
+    ("i-crange", "Region in which initial splinoids are placed",
+     cxxopts::value(idata.cRange))
     ("sratio", "Initial fraction of energy devoted to the splinoids",
      cxxopts::value(idata.cRatio))
 
@@ -83,6 +91,9 @@ int main(int argc, char *argv[]) {
      cxxopts::value(eGenomeArg))
     ("spln-genome", "Splinoid genome to start from or a random seed",
      cxxopts::value(cGenomeArg))
+
+    ("taurus", "Whether the environment is a taurus or uses fixed boundaries",
+      cxxopts::value(taurus))
 
 //    ("d,duration", "Simulation duration. ",
 //     cxxopts::value(duration))
@@ -186,6 +197,7 @@ int main(int argc, char *argv[]) {
                 << dice.getSeed() << std::endl;
       eGenome = EGenome::random(dice);
     }
+    if (taurus != -1) eGenome.taurus = taurus;
     eGenome.toFile("last", 2);
 
     if (!isValidSeed(cGenomeArg)) {
@@ -273,7 +285,9 @@ int main(int argc, char *argv[]) {
   w.show();
 
   // Load settings
+  qDebug() << "Loaded MainWindow::Geometry:" << settings.value("geometry").toRect();
   w.setGeometry(settings.value("geometry").toRect());
+  qDebug() << "MainWindow::Geometry:" << w.geometry();
 
 
   v->fitInView(s.bounds(), Qt::KeepAspectRatio);
@@ -287,7 +301,9 @@ int main(int argc, char *argv[]) {
   auto ret = a.exec();
 
   // Save settings
+  qDebug() << "MainWindow::Geometry:" << w.geometry();
   if (w.geometry().isValid())  settings.setValue("geometry", w.geometry());
+  qDebug() << "Saved MainWindow::Geometry:" << settings.value("geometry").toRect();
 
   return ret;
 }

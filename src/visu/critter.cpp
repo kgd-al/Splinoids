@@ -38,7 +38,6 @@ Critter::Critter(simu::Critter &critter) : _critter(critter) {
     _acolors[i] = toQt(critter.splineColor(i));
 }
 
-
 void Critter::updatePosition (void) {
   setPos(_critter.x(), _critter.y());
 }
@@ -179,11 +178,11 @@ QColor Critter::bodyColor(void) const {
   switch (config::Visualisation::renderType()) {
   case RenderingType::REGULAR:  return _bcolor;
   case RenderingType::ENERGY: {
-    float r = _critter.usableEnergy() / _critter.maxUsableEnergy();
+    float r = float(_critter.usableEnergy() / _critter.maxUsableEnergy());
     return QColor::fromRgbF(r, r, 0);
   }
   case RenderingType::HEALTH: {
-    float r = _critter.bodyHealth() / _critter.bodyMaxHealth();
+    float r = float(_critter.bodyHealth() / _critter.bodyMaxHealth());
     return QColor::fromRgbF(r, 0, 0);
   }
   }
@@ -195,7 +194,7 @@ QColor Critter::splineColor(uint i, Side s) const {
   case RenderingType::REGULAR:  return _acolors[i];
   case RenderingType::ENERGY:   return QColor(Qt::black);
   case RenderingType::HEALTH: {
-    float r = _critter.splineHealth(i, s) / _critter.splineMaxHealth(i, s);
+    float r = float(_critter.splineHealth(i, s) / _critter.splineMaxHealth(i, s));
     return QColor::fromRgbF(r, 0, 0);
   }
   }

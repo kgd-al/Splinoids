@@ -67,6 +67,12 @@ void GraphicSimulation::step (void) {
                      + QString::number(_maxGen) + "]");
 }
 
+void GraphicSimulation::prePhysicsStep (void) {
+  if (_selection) {
+
+  }
+}
+
 void GraphicSimulation::processStats(const Stats &s) const {
   _stats->update("Critters", s.ncritters, 0);
   _stats->update("Plants", s.nplants, 0);
@@ -75,18 +81,19 @@ void GraphicSimulation::processStats(const Stats &s) const {
   _stats->update("Feedings", s.nfeedings, 0);
   _stats->update("Fights", s.nfights, 0);
 
-  _stats->update("[E] Plants", s.eplants, 2);
-  _stats->update("[E] Corpses", s.ecorpses, 2);
+  _stats->update("[E] Plants", float(s.eplants), 2);
+  _stats->update("[E] Corpses", float(s.ecorpses), 2);
 
-  _stats->update("[E] Splinoids", s.ecritters, 2);
+  _stats->update("[E] Splinoids", float(s.ecritters), 2);
 
-  _stats->update("[E] Reserve", s.ereserve, 2);
-  _stats->update("[E] Total", s.eplants+s.ecorpses+s.ecritters+s.ereserve, 2);
+  _stats->update("[E] Reserve", float(s.ereserve), 2);
+  _stats->update("[E] Total",
+                 float(s.eplants+s.ecorpses+s.ecritters+s.ereserve), 2);
 }
 
 simu::Critter*
 GraphicSimulation::addCritter (const CGenome &genome,
-                               float x, float y, float a, float e) {
+                               float x, float y, float a, simu::decimal e) {
 
   auto *sc = Simulation::addCritter(genome, x, y, a, e);
   assert(sc);
@@ -119,7 +126,7 @@ void GraphicSimulation::delCritter (simu::Critter *critter) {
 
 simu::Foodlet*
 GraphicSimulation::addFoodlet(simu::BodyType t,
-                              float x, float y, float s, float e) {
+                              float x, float y, float s, simu::decimal e) {
   auto *sf = Simulation::addFoodlet(t, x, y, s, e);
   assert(sf);
 

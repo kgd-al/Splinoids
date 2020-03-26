@@ -13,13 +13,13 @@ class Foodlet {
   uint _id;
   b2Body &_body;
   float _radius;
-  float _energy, _maxEnergy;
+  decimal _energy, _maxEnergy;
   config::Color _color;
   config::Color _baseColor;
   b2BodyUserData _userData;
 
 public:
-  Foodlet(BodyType type, uint id, b2Body *body, float radius, float energy);
+  Foodlet(BodyType type, uint id, b2Body *body, float radius, decimal energy);
 
   auto type (void) const {
     return _type;
@@ -45,15 +45,15 @@ public:
     return _radius;
   }
 
-  static float maxStorage (BodyType type, float radius);
+  static decimal maxStorage(BodyType type, float radius);
 
-  float energy (void) const {
+  decimal energy (void) const {
     return _energy;
   }
 
-  void consumed (float e);
+  void consumed (decimal e);
 
-  float fullness (void) const {
+  decimal fullness (void) const {
     return _energy / _maxEnergy;
   }
 

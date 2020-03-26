@@ -28,10 +28,7 @@ public:
   void prePhysicsStep(const std::set<Critter*> &pop);
   void postPhysicsStep(const std::set<Critter*> &pop);
 
-  genotype::Critter getRandomGenome (rng::FastDice &dice) const {
-    return genotype::Critter::random(dice);
-  }
-
+  genotype::Critter getRandomGenome (rng::FastDice &dice, uint mutations) const;
   genotype::Critter getGoodGenome (rng::FastDice &dice) const;
 
 //  void step (const std::set<Critter*> &pop);

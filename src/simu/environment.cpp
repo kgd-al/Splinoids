@@ -18,27 +18,24 @@ struct CollisionMonitor : public b2ContactListener {
   static constexpr int debugFeeding = 1;
   static constexpr int debugFighting = 1;
 
-  using FeedingEvent = Environment::FeedingEvent;
-  Environment::FeedingEvents &fe;
+//  using FeedingEvent = Environment::FeedingEvent;
+//  Environment::FeedingEvents &fe;
 
-  using FightingKey = Environment::FightingKey;
-  using FightingData = Environment::FightingData;
-  Environment::FightingEvents &fi;
+//  using FightingKey = Environment::FightingKey;
+//  using FightingData = Environment::FightingData;
+//  Environment::FightingEvents &fi;
 
-  Environment::PendingDeletions &pd;
+//  Environment::PendingDeletions &pd;
 
-  using FightingDrawData = Environment::FightingDrawData;
+//  using FightingDrawData = Environment::FightingDrawData;
 
-  IFDEBUG(std::vector<FightingDrawData> &fddVector);
+//  IFDEBUG(std::vector<FightingDrawData> &fddVector);
 
-  float dt;
+//  float dt;
 
-  CollisionMonitor (Environment::FeedingEvents &fe,
-                    Environment::FightingEvents &fi,
-                    Environment::PendingDeletions &pd,
-                    IFDEBUGCOMMA(std::vector<FightingDrawData> &fdd)
-                    float dt)
-    : fe(fe), fi(fi), pd(pd), IFDEBUGCOMMA(fddVector(fdd)) dt(dt)  {}
+  Environment &e;
+
+  CollisionMonitor (Environment &e) : e(e) {}
 
   Critter* critter (const b2BodyUserData &d) {
     if (d.type == BodyType::CRITTER)  return d.ptr.critter;
@@ -58,12 +55,27 @@ struct CollisionMonitor : public b2ContactListener {
     b2Body *bA = fA->GetBody(), *bB = fB->GetBody();
     const b2BodyUserData &dA = *Critter::get(bA),
                          &dB = *Critter::get(bB);
-    Critter *cA = critter(dA), *cB = critter(dB);
-    Foodlet *pA = foodlet(dA), *pB = foodlet(dB);
+    BodyType tA = dA.type, tB = dB.type;
 
-    if (cA && cB)       registerFightStart(cA, fA, cB, fB);
-    else if (cA && pB)  registerFeedStart(cA, fA, pB);
-    else if (cB && pA)  registerFeedStart(cB, fB, pA);
+    if (tA == BodyType::CRITTER && tB == BodyType::CRITTER)
+      registerFightStart(critter(dA), fA, critter(dB), fB);
+
+    else if (tA == BodyType::CRITTER && tB == BodyType::PLANT)
+      registerFeedStart(critter(dA), fA, foodlet(dB));
+
+    else if (tB == BodyType::CRITTER && tA == BodyType::PLANT)
+      registerFeedStart(critter(dB), fB, foodlet(dA));
+
+    else if (tA == BodyType::CRITTER && tB == BodyType::WARP_ZONE)
+      requestTeleport(critter(dA));
+
+    else if (tB == BodyType::CRITTER && tA == BodyType::WARP_ZONE)
+      requestTeleport(critter(dB));
+
+    else
+      std::cerr << "Collision between types " << uint(tA) << " & " << uint(tB)
+                << std::endl;
+
 //    else // ignore
 //      utils::doThrow<std::logic_error>(
 //        "Unexpected collision start between types ",
@@ -116,65 +128,88 @@ struct CollisionMonitor : public b2ContactListener {
       std::swap(cA, cB);  std::swap(fA, fB);
     }
 
-    fi[{cA,cB}].insert({fA,fB});
+    Environment::FightingData &d = e._fightingEvents[std::make_pair(cA,cB)];
+    d.fixtures.insert({fA,fB});
   }
 
   void processFightStep (Critter *cA, b2Fixture *fA,
                          Critter *cB, b2Fixture *fB) {
 
-    Environment::FightingDrawData fdd;
-    fdd.vA = cA->body().GetLinearVelocity();
-    fdd.vB = cB->body().GetLinearVelocity();
+    if (cA->id() > cB->id()) {  // ensure order
+      std::swap(cA, cB);  std::swap(fA, fB);
+    }
 
-    const Critter::FixtureData &fdA = *Critter::get(fA);
-    const Critter::FixtureData &fdB = *Critter::get(fB);
+    Environment::FightingData &d = e._fightingEvents.at(std::make_pair(cA, cB));
+    d.velocities[0] = cA->body().GetLinearVelocity();
+    d.velocities[1] = cB->body().GetLinearVelocity();
 
-    fdd.pA = cA->body().GetWorldPoint(fdA.centerOfMass);
-    fdd.pB = cB->body().GetWorldPoint(fdB.centerOfMass);
-    fdd.C = fdd.pB - fdd.pA;
-    fdd.C_ = fdd.C;
-    fdd.C_.Normalize();
+//    // TODO URGENT Move back to environment and process only once per critter pair
 
-    fdd.VA = b2Dot(fdd.vA,  fdd.C_);
-    fdd.VB = b2Dot(fdd.vB, -fdd.C_);
+//    Environment::FightingDrawData fdd;
+//    fdd.vA = cA->body().GetLinearVelocity();
+//    fdd.vB = cB->body().GetLinearVelocity();
 
-    float alpha = (fB->GetDensity())
-        / (fA->GetDensity() + fB->GetDensity());
+//    // Ignore small enough collisions
+//    if (fdd.vA.Length() + fdd.vB.Length() < 1e-2) return;
 
-    float N = config::Simulation::combatBaselineIntensity() * (
-        cA->body().GetMass() * fdd.VA * fdd.VA
-      + cB->body().GetMass() * fdd.VB * fdd.VB);
+//    const Critter::FixtureData &fdA = *Critter::get(fA);
+//    const Critter::FixtureData &fdB = *Critter::get(fB);
 
-    float deA = alpha * .5 * N,
-          deB = (1 - alpha) * .5 * N;
+//    fdd.pA = cA->body().GetWorldPoint(fdA.centerOfMass);
+//    fdd.pB = cB->body().GetWorldPoint(fdB.centerOfMass);
+//    fdd.C = fdd.pB - fdd.pA;
+//    fdd.C_ = fdd.C;
+//    fdd.C_.Normalize();
 
-    if (debugFighting > 1)
-      std::cerr << "\tFixtures C" << cA->id() << "F" << fdA << " and "
-                << "C" << cB->id() << "F" << fdB << "\n"
-                << "\t    at " << cA->body().GetWorldPoint(fdA.centerOfMass)
-                << " and " << cB->body().GetWorldPoint(fdB.centerOfMass)
-                << "\n"
-                << "\t\t C = " << fdd.C << "\n"
-                << "\t\tC' = " << fdd.C_ << "\n"
-                << "\t\tVA = " << fdd.VA << " = " << fdd.vA << "."
-                  << fdd.C_ << "\n"
-                << "\t\tVB = " << fdd.VB << " = " << fdd.vB << "."
-                  << fdd.C_ << "\n"
-                << "\t\trA = " << fA->GetDensity() << "\trB = "
-                  << fB->GetDensity() << "\n"
-                << "\t\t N = " << N << "\n"
-                << "\t\tdA = " << deA << "\n"
-                << "\t\tdB = " << deB << "\n";
+//    fdd.VA = b2Dot(fdd.vA,  fdd.C_);
+//    fdd.VB = b2Dot(fdd.vB, -fdd.C_);
 
-    bool aSplineDestroyed = cA->applyHealthDamage(fdA, deA);
-    if (aSplineDestroyed) pd.insert({cA, fA});
+//    float alpha = (fB->GetDensity())
+//        / (fA->GetDensity() + fB->GetDensity());
 
-    bool bSplineDestroyed = cB->applyHealthDamage(fdB, deB);
-    if (bSplineDestroyed) pd.insert({cB, fB});
+//    float N = config::Simulation::combatBaselineIntensity() * (
+//        cA->body().GetMass() * fdd.VA * fdd.VA
+//      + cB->body().GetMass() * fdd.VB * fdd.VB);
 
-#ifndef NDEBUG
-    fddVector.push_back(fdd);
-#endif
+//    float deA = alpha * .5 * N,
+//          deB = (1 - alpha) * .5 * N;
+
+//    if (debugFighting > 1)
+//      std::cerr << "\tFixtures C" << cA->id() << "F" << fdA << " and "
+//                << "C" << cB->id() << "F" << fdB << "\n"
+//                << "\t    at " << cA->body().GetWorldPoint(fdA.centerOfMass)
+//                << " and " << cB->body().GetWorldPoint(fdB.centerOfMass)
+//                << "\n"
+//                << "\t\t C = " << fdd.C << "\n"
+//                << "\t\tC' = " << fdd.C_ << "\n"
+//                << "\t\tVA = " << fdd.VA << " = " << fdd.vA << "."
+//                  << fdd.C_ << "\n"
+//                << "\t\tVB = " << fdd.VB << " = " << fdd.vB << "."
+//                  << fdd.C_ << "\n"
+//                << "\t\trA = " << fA->GetDensity() << "\trB = "
+//                  << fB->GetDensity() << "\n"
+//                << "\t\t N = " << N << "\n"
+//                << "\t\tdA = " << deA << "\n"
+//                << "\t\tdB = " << deB << "\n";
+
+//    bool aSplineDestroyed = cA->applyHealthDamage(fdA, deA, e);
+//    if (aSplineDestroyed)
+//      e._pendingDeletions.insert({cA, Critter::splineIndex(fdA)});
+//    if (aSplineDestroyed)
+//      std::cerr << "Spline " << fdA << " (" << Critter::splineIndex(fdA)
+//                << ") should be destroyed\n";
+
+//    bool bSplineDestroyed = cB->applyHealthDamage(fdB, deB, e);
+//    if (bSplineDestroyed)
+//      e._pendingDeletions.insert({cB, Critter::splineIndex(fdB)});
+
+//    if (bSplineDestroyed)
+//      std::cerr << "Spline " << fdB << " (" << Critter::splineIndex(fdB)
+//                << ") should be destroyed\n";
+
+//#ifndef NDEBUG
+//    e.fightingDrawData.push_back(fdd);
+//#endif
   }
 
   void registerFightEnd (Critter *cA, b2Fixture *fA,
@@ -192,11 +227,11 @@ struct CollisionMonitor : public b2ContactListener {
     }
 
     Environment::FightingKey k {cA,cB};
-    auto it = fi.find(k);
-    if (it != fi.end()) {
+    auto it = e._fightingEvents.find(k);
+    if (it != e._fightingEvents.end()) {
       it->second.erase({fA,fB});
       if (it->second.empty())
-        fi.erase(it);
+        e._fightingEvents.erase(it);
     } else
       utils::doThrow<std::logic_error>(
         "Removal of conflict ", cA->id(), "-", cB->id(),
@@ -211,21 +246,22 @@ struct CollisionMonitor : public b2ContactListener {
       std::cerr << "Feeding started by C" << c->id() << " on P" << p->id()
                 << std::endl;
 
-    fe.insert({c,p});
+    e._feedingEvents.insert({c,p});
   }
 
   void processFeedStep (Critter *c, b2Fixture *f, Foodlet *p) {
-    static const float &dE = config::Simulation::energyAbsorptionRate();
+    static const decimal &dE = config::Simulation::energyAbsorptionRate();
     if (f->GetShape()->GetType() != b2Shape::e_circle)  return;
     if (p->energy() <= 0) return;
 
-    float e = std::min(dE * dt, p->energy());
-    e = std::min(e, c->storableEnergy());
-    c->feed(e);
-    p->consumed(e);
+    decimal E = dE * e.dt();
+    E = std::min(E, p->energy());
+    E = std::min(E, c->storableEnergy());
+    c->feed(E);
+    p->consumed(E);
 
     if (debugFeeding > 1)
-      std::cerr << "Transfering " << e << " from " << p->id()
+      std::cerr << "Transfering " << E << " from " << p->id()
                 << " to " << c->id() << " (" << p->energy()
                 << " remaining)" << std::endl;
   }
@@ -235,15 +271,17 @@ struct CollisionMonitor : public b2ContactListener {
       std::cerr << "Feeding concluded by C" << c->id() << " on P" << p->id()
                 << std::endl;
 
-    fe.erase({c,p});
+    e._feedingEvents.erase({c,p});
+  }
+
+  void requestTeleport (Critter *c) {
+    e._teleportRequests.insert(c);
   }
 };
 
 Environment::Environment(const Genome &g)
   : _genome(g), _physics({0,0}),
-    _cmonitor(new CollisionMonitor(_feedingEvents, _fightingEvents,
-                                   _pendingDeletions,
-                                   IFDEBUGCOMMA(fightingDrawData) dt())) {
+    _cmonitor(new CollisionMonitor(*this)) {
 
   createEdges();
   _physics.SetContactListener(_cmonitor);
@@ -256,6 +294,13 @@ Environment::~Environment (void) {
   delete _cmonitor;
 }
 
+void Environment::modifyEnergyReserve (decimal e) {
+//  std::cerr << "Environment received " << (e>0?"+":"") << e << ", reserves are "
+//            << _energyReserve;
+  _energyReserve += e;
+//  std::cerr << " >> " << _energyReserve << std::endl;
+}
+
 void Environment::step (void) {
 
   // Box2D parameters
@@ -266,11 +311,14 @@ void Environment::step (void) {
   fightingDrawData.clear();
 #endif
   _pendingDeletions.clear();
+  _teleportRequests.clear();
 
-  _physics.Step(dt(), V_ITER, P_ITER);
+  _physics.Step(float(dt()), V_ITER, P_ITER);
 
   for (const auto &d: _pendingDeletions)
     d.first->destroySpline(d.second);
+
+  for (Critter *c: _teleportRequests) doTeleport(c);
 
 //  std::cerr << "Physical step took " << _physics.GetProfile().step
 //            << " ms" << std::endl;
@@ -282,23 +330,117 @@ void Environment::createEdges(void) {
     { HS, HS }, { -HS, HS }, { -HS, -HS }, { HS, -HS }
   };
 
-  b2ChainShape edgesShape;
-  edgesShape.CreateLoop(edgesVertices, 4);
-
   b2BodyDef edgesBodyDef;
   edgesBodyDef.type = b2_staticBody;
   edgesBodyDef.position.Set(0, 0);
 
   _edges = _physics.CreateBody(&edgesBodyDef);
-  _edges->CreateFixture(&edgesShape, 0);
 
-  _edgesUserData.type = BodyType::OBSTACLE;
+  b2ChainShape edgesShape;
+  edgesShape.CreateLoop(edgesVertices, 4);
+
+  b2FixtureDef edgesFixture;
+  edgesFixture.shape = &edgesShape;
+  edgesFixture.density = 0;
+  edgesFixture.isSensor = isTaurus();
+
+  _edges->CreateFixture(&edgesFixture);
+
+  _edgesUserData.type = isTaurus() ? BodyType::WARP_ZONE : BodyType::OBSTACLE;
   _edgesUserData.ptr.obstacle = nullptr;
   _edges->SetUserData(&_edgesUserData);
 }
 
-float Environment::dt (void) {
-  static const float DT = 1.f / config::Simulation::secondsPerDay();
+void Environment::processFight(void) {
+  // TODO URGENT Move back to environment and process only once per critter pair
+
+  FightingDrawData fdd;
+  fdd.vA = cA->body().GetLinearVelocity();
+  fdd.vB = cB->body().GetLinearVelocity();
+
+  // Ignore small enough collisions
+  if (fdd.vA.Length() + fdd.vB.Length() < 1e-2) return;
+
+  const Critter::FixtureData &fdA = *Critter::get(fA);
+  const Critter::FixtureData &fdB = *Critter::get(fB);
+
+  fdd.pA = cA->body().GetWorldPoint(fdA.centerOfMass);
+  fdd.pB = cB->body().GetWorldPoint(fdB.centerOfMass);
+  fdd.C = fdd.pB - fdd.pA;
+  fdd.C_ = fdd.C;
+  fdd.C_.Normalize();
+
+  fdd.VA = b2Dot(fdd.vA,  fdd.C_);
+  fdd.VB = b2Dot(fdd.vB, -fdd.C_);
+
+  float alpha = (fB->GetDensity())
+      / (fA->GetDensity() + fB->GetDensity());
+
+  float N = config::Simulation::combatBaselineIntensity() * (
+      cA->body().GetMass() * fdd.VA * fdd.VA
+    + cB->body().GetMass() * fdd.VB * fdd.VB);
+
+  float deA = alpha * .5 * N,
+        deB = (1 - alpha) * .5 * N;
+
+  if (debugFighting > 1)
+    std::cerr << "\tFixtures C" << cA->id() << "F" << fdA << " and "
+              << "C" << cB->id() << "F" << fdB << "\n"
+              << "\t    at " << cA->body().GetWorldPoint(fdA.centerOfMass)
+              << " and " << cB->body().GetWorldPoint(fdB.centerOfMass)
+              << "\n"
+              << "\t\t C = " << fdd.C << "\n"
+              << "\t\tC' = " << fdd.C_ << "\n"
+              << "\t\tVA = " << fdd.VA << " = " << fdd.vA << "."
+                << fdd.C_ << "\n"
+              << "\t\tVB = " << fdd.VB << " = " << fdd.vB << "."
+                << fdd.C_ << "\n"
+              << "\t\trA = " << fA->GetDensity() << "\trB = "
+                << fB->GetDensity() << "\n"
+              << "\t\t N = " << N << "\n"
+              << "\t\tdA = " << deA << "\n"
+              << "\t\tdB = " << deB << "\n";
+
+  bool aSplineDestroyed = cA->applyHealthDamage(fdA, deA, e);
+  if (aSplineDestroyed)
+    e._pendingDeletions.insert({cA, Critter::splineIndex(fdA)});
+  if (aSplineDestroyed)
+    std::cerr << "Spline " << fdA << " (" << Critter::splineIndex(fdA)
+              << ") should be destroyed\n";
+
+  bool bSplineDestroyed = cB->applyHealthDamage(fdB, deB, e);
+  if (bSplineDestroyed)
+    e._pendingDeletions.insert({cB, Critter::splineIndex(fdB)});
+
+  if (bSplineDestroyed)
+    std::cerr << "Spline " << fdB << " (" << Critter::splineIndex(fdB)
+              << ") should be destroyed\n";
+
+#ifndef NDEBUG
+  e.fightingDrawData.push_back(fdd);
+#endif
+}
+
+void Environment::doTeleport(Critter *c) {
+  b2Body &b = c->body();
+  auto a = b.GetAngle();
+  P2D p0 = b.GetPosition(), p1 = p0;
+
+  if (p1.x < -extent())      p1.x += size();
+  else if (p1.x > extent())  p1.x -= size();
+
+  if (p1.y < -extent())      p1.y += size();
+  else if (p1.y > extent())  p1.y -= size();
+
+  if (p0 != p1) b.SetTransform(p1, a);
+
+  if (p0 != p1)
+    std::cerr << "Teleporting C" << c->id() << " from " << p0 << " to "
+              << p1 << std::endl;
+}
+
+decimal Environment::dt (void) {
+  static const decimal DT = 1.f / config::Simulation::secondsPerDay();
   return DT;
 }
 

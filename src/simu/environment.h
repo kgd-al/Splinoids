@@ -14,6 +14,7 @@ struct Critter;
 struct CollisionMonitor;
 
 class Environment {
+  friend CollisionMonitor;
 public:
   using Genome = genotype::Environment;
 
@@ -29,14 +30,19 @@ public:
   using FeedingEvents = std::set<FeedingEvent>;
 
   using FightingKey = std::pair<Critter*, Critter*>;
-  using FightingData = std::set<std::pair<b2Fixture*, b2Fixture*>>;
+  struct FightingData {
+    std::array<P2D, 2> velocities;
+    std::set<std::pair<b2Fixture*,b2Fixture*>> fixtures;
+  };
   using FightingEvents = std::map<FightingKey, FightingData>;
 
-  using PendingDeletions = std::set<std::pair<Critter*, b2Fixture*>>;
+//  using PendingDeletions = std::set<std::pair<Critter*, uint>>;
+
+  using TeleportRequests = std::set<Critter*>;
 
   struct FightingDrawData {
-    P2D vA, vB; // Velocity of corresponding body
-    P2D pA, pB; // World position of corresponding fixture's COM
+    P2D vA, vB; // Velocity of bodies
+//    P2D pA, pB; // World position of corresponding fixture's COM
     P2D C, C_;  // Combat axis (raw and normalized)
     float VA, VB; // Combat intensity
   };
@@ -56,10 +62,12 @@ private:
   FeedingEvents _feedingEvents;
   FightingEvents _fightingEvents;
 
-  // Destroyed spline that must be deleted after the physical step
-  PendingDeletions _pendingDeletions;
+  // Destroyed splines that must be deleted after the physical step
+//  PendingDeletions _pendingDeletions;
 
-  float _energyReserve;
+  TeleportRequests _teleportRequests;
+
+  decimal _energyReserve;
 
 public:
   Environment(const Genome &g);
@@ -75,6 +83,10 @@ public:
 
   auto extent (void) const {
     return .5 * size();
+  }
+
+  bool isTaurus (void) const {
+    return _genome.taurus;
   }
 
   const auto& physics (void) const {
@@ -101,18 +113,19 @@ public:
 
   virtual void step (void);
 
-  void modifyEnergyReserve (float e) {
-    _energyReserve += e;
-  }
+  void modifyEnergyReserve (decimal e);
 
-  float energy (void) const {
+  decimal energy (void) const {
     return _energyReserve;
   }
 
-  static float dt (void);
+  static decimal dt(void);
 
 private:
   void createEdges (void);
+
+  void processFight (void);
+  void doTeleport (Critter *c);
 };
 
 } // end of namespace simu

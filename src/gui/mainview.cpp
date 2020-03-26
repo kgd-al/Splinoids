@@ -36,8 +36,8 @@ struct BoolAction : public QAction {
 
 template <typename T>
 struct EnumAction : public QAction {
-  std::string baseText;
   T &value;
+  QString details;
 
   using Incrementer = std::function<T(T)>;
   const Incrementer incrementer;
@@ -45,26 +45,27 @@ struct EnumAction : public QAction {
   using Formatter = std::function<std::ostream&(std::ostream&, const T&)>;
   const Formatter formatter;
 
-  EnumAction (const QString &name, QWidget *parent,
+  EnumAction (const QString &name, const QString &details, QWidget *parent,
               T &v, Incrementer i, Formatter f)
-    : QAction(name, parent), baseText(name.toStdString()),
-      value(v), incrementer(i), formatter(f) {
+    : QAction(name, parent),
+      value(v), details(details), incrementer(i), formatter(f) {
 
     connect(this, &QAction::triggered, this, &EnumAction::next);
-    updateText();
+    updateStatus();
   }
 
   void next (void) {
     value = incrementer(value);
-    updateText();
+    updateStatus();
   }
 
-  void updateText (void) {
+  void updateStatus (void) {
     std::ostringstream oss;
-    oss << baseText << " (";
+    oss << details.toStdString()
+        << "; Current status for " << text().toStdString() << ": ";
     formatter(oss, value);
     oss << ")";
-    setText(QString::fromStdString(oss.str()));
+    setStatusTip(QString::fromStdString(oss.str()));
   }
 };
 
@@ -97,7 +98,7 @@ void MainView::addEnumAction (QMenu *m, const QString &iname,
                               const Inc<T> &next, const Fmt<T> &format) {
 
   addAction(m,
-            new details::EnumAction<T>(name, this, v, next, format),
+            new details::EnumAction<T>(name, details, this, v, next, format),
             iname, details, k, f);
 }
 
@@ -156,6 +157,10 @@ void MainView::buildActions(void) {
 
   QMenu *mVisu = _mbar->addMenu("Visu");
 
+  addBoolAction(mVisu, "", "Show all", "",
+                Qt::Key_Home, [this] { showAll(); },
+                _zoomout);
+
   addAction(mVisu, "zoom-in", "Zoom in", "",
             Qt::KeypadModifier + Qt::Key_Plus, [this] {
     config::Visualisation::selectionZoomFactor.ref() /= 2.;
@@ -175,7 +180,7 @@ void MainView::buildActions(void) {
   QMenu *mGui = _mbar->addMenu("GUI");
 
   QString sd = "Sploinoid data";
-  addAction(mGui, "", sd, "", Qt::Key_G,
+  addAction(mGui, "", sd, "", Qt::Key_C,
             [this, sd] {
     toggleCharacterSheet();
     _actions[sd]->setChecked(_manipulator->isVisible());
@@ -185,6 +190,10 @@ void MainView::buildActions(void) {
 
 
   QMenu *mDraw = _mbar->addMenu("Draw");
+
+  addBoolAction(mDraw, "", "Grid", "",
+                Qt::Key_G, [this] { _simu.graphicsEnvironment()->update(); },
+                config::Visualisation::showGrid.ref());
 
   addBoolAction(mDraw, "", "Inner edges", "",
                 Qt::Key_I, [this] { scene()->update(); },
@@ -264,7 +273,7 @@ void MainView::buildActions(void) {
 MainView::MainView (visu::GraphicSimulation &simulation,
                     StatsView *stats, QMenuBar *bar)
   : _simu(simulation), _stats(stats), _mbar(bar),
-    _running(false), _stepping(false) {
+    _running(false), _stepping(false), _zoomout(true) {
 
   setScene(simulation.scene());
   setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
@@ -274,7 +283,9 @@ MainView::MainView (visu::GraphicSimulation &simulation,
   auto Z = config::Visualisation::viewZoom();
   scale(Z, -Z);
 
-  new Graphics_view_zoom(this);
+  auto *zoomer = new Graphics_view_zoom(this);
+  connect(zoomer, &Graphics_view_zoom::zoomed,
+          [this] { _zoomout = false; showAll(); });
 
   connect(&_stepTimer, &QTimer::timeout, this, &MainView::step);
 
@@ -288,7 +299,8 @@ MainView::MainView (visu::GraphicSimulation &simulation,
 
   using J = PersitentJoystick;
   _joystick.setSignalManagedButtons({
-    J::START, J::A, J::X, J::B, J::LB, J::RB
+    J::START, J::SELECT, J::A, J::X, J::B, J::LB, J::RB,
+    J::DPAD_LEFT, J::DPAD_UP, J::DPAD_RIGHT, J::DPAD_DOWN
   });
   connect(&_joystick, &J::buttonChanged, this, &MainView::joystickEvent);
 
@@ -342,6 +354,11 @@ void MainView::step(void) {
 
   if (!_running & !_stepping)  return;
 
+  if (selection()) {
+    // Use joystick status to update controlled critter
+    externalCritterControl();
+  }
+
   QPointF prevSelectionPos;
   if (selection()) prevSelectionPos = selection()->pos();
 
@@ -352,9 +369,6 @@ void MainView::step(void) {
     QPointF newSelectionPos = selection()->pos();
     if (newSelectionPos != prevSelectionPos)
       focusOnSelection();
-
-    // Use joystick status to update controlled critter
-    externalCritterControl();
 
     _manipulator->readCurrentStatus();
   }
@@ -367,33 +381,32 @@ void MainView::step(void) {
 
 void MainView::joystickEvent (JButton b, PersitentJoystick::Value v) {
 //  std::cerr << "Joystick event " << b << " = " << v << std::endl;
+  if (!v) return;
+
+  static const auto maybe = [] (MainView *v, const QString &k) {
+    QAction *a = v->_actions[k];
+    if (a)  a->trigger();
+    else
+      qDebug() << "Invalid action " << k << " requested. Valid ones are:\n\t"
+               << v->_actions.keys();
+  };
 
   switch (b) {
-  case JButton::START:
-    if (v)  _actions["SSAction"]->trigger();
-    break;
+  case JButton::START:  maybe(this, "SSAction"); break;
+  case JButton::SELECT: maybe(this, "Sploinoid data"); break;
 
-  case JButton::A:
-    if (v)  _actions["Step"]->trigger();
-    break;
+  case JButton::A:          maybe(this, "Step"); break;
 
-  case JButton::LB:
-    if (v)  _actions["Zoom out"]->trigger();
-    break;
+  case JButton::LB:         maybe(this, "Zoom out"); break;
+  case JButton::RB:         maybe(this, "Zoom in"); break;
 
-  case JButton::RB:
-    if (v)  _actions["Zoom in"]->trigger();
+  case JButton::DPAD_LEFT:  maybe(this, "Select previous"); break;
+  case JButton::DPAD_RIGHT: maybe(this, "Select next"); break;
+  case JButton::DPAD_UP:    maybe(this, "Type");  break;
+  case JButton::DPAD_DOWN:  maybe(this, "Vision"); break;
+  default:
+    std::cerr << "Unhandled button type " << b << "\n";
     break;
-
-  case JButton::X:
-    if (v)  _actions["Select previous"]->trigger();
-    break;
-
-  case JButton::B:
-    if (v)  _actions["Select next"]->trigger();
-    break;
-
-  default:  break;
   }
 }
 
@@ -405,14 +418,18 @@ void MainView::keyReleaseEvent(QKeyEvent *e) {
 void MainView::mouseReleaseEvent(QMouseEvent *e) {
   QGraphicsView::mouseReleaseEvent(e);
 
-  QGraphicsItem *i = itemAt(e->pos());
   visu::Critter *c = nullptr;
-  if (i)   c = dynamic_cast<visu::Critter*>(i);
+  QList<QGraphicsItem*> I = items(e->pos());
+  for (QGraphicsItem *i: I) {
+    c = dynamic_cast<visu::Critter*>(i);
 
-//  if (c)
-//    std::cerr << "Clicked critter " << c->object().id() << " at "
-//              << c->x() << "," << c->y() << ": " << c->object().genotype()
-//              << std::endl;
+    if (c) {
+//      std::cerr << "Clicked critter " << c->object().id() << " at "
+//                << c->x() << "," << c->y() << ": " << c->object().genotype()
+//                << std::endl;
+      break;
+    }
+  }
 
   if (Qt::NoModifier == e->modifiers())
     selectionChanged(c);
@@ -426,6 +443,14 @@ void MainView::mouseMoveEvent(QMouseEvent *e) {
   QString s = QString::number(p.x()) + " x " + QString::number(p.y());
   _simu.statusBar()->showMessage(s, 0);
   QGraphicsView::mouseMoveEvent(e);
+}
+
+void MainView::resizeEvent(QResizeEvent *e) {
+  QGraphicsView::resizeEvent(e);
+  if (selection())
+    focusOnSelection();
+  else if (_zoomout)
+    showAll();
 }
 
 void MainView::selectNext(void) {
@@ -468,13 +493,20 @@ void MainView::selectionChanged(visu::Critter *c) {
 //  q << "SelectionChanged from "
 //    << (_selection? int(_selection->object().id()) : -1);
 
-  if (selection()) selection()->setSelected(false);
+  if (selection()) {
+    selection()->setSelected(false);
+    selection()->object().brainDead = false;
+  }
+
   _simu.setSelection(c);
 
   if (c) {
     selection()->setSelected(true);
+    selection()->object().brainDead = true;
     focusOnSelection();
-  }
+
+  } else if (_zoomout)
+    showAll();
 
   _manipulator->setSubject(c);
 
@@ -498,6 +530,13 @@ void MainView::focusOnSelection (void) {
   fitInView(r, Qt::KeepAspectRatio);
 }
 
+void MainView::showAll(void) {
+  if (_zoomout)
+    fitInView(_simu.graphicsEnvironment()->boundingRect(),
+              Qt::KeepAspectRatio);
+  _actions["Show all"]->setChecked(_zoomout);
+}
+
 void MainView::externalCritterControl(void) {
   static const std::map<PersitentJoystick::MyOwnControllerMapping, Motor>
     j2m_map {
@@ -510,6 +549,15 @@ void MainView::externalCritterControl(void) {
     if (!isnan(v))  selection()->object().setMotorOutput(-v, p.second);
 //    std::cerr << ""
   }
+
+  float lt = .5*(1+_joystick.axisValue(PersitentJoystick::AXIS_L_T)),
+        rt = .5*(1+_joystick.axisValue(PersitentJoystick::AXIS_R_T)),
+        s = .5;
+  if (rt > 0)
+    s = .5*(1+rt);
+  else if (lt > 0)
+    s = .5*(1-lt);
+  selection()->object().clockSpeed(s);
 }
 
 void MainView::toggleCharacterSheet(void) {

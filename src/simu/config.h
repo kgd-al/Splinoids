@@ -9,6 +9,8 @@
 
 namespace simu {
 
+using decimal = double;
+
 using P2D = b2Vec2;
 using real = decltype(P2D::x);
 
@@ -23,7 +25,13 @@ struct Critter;
 struct Foodlet;
 struct Obstacle;
 
-enum class BodyType { CRITTER, PLANT, CORPSE, OBSTACLE };
+enum class BodyType {
+  CRITTER,
+  CORPSE,
+  PLANT,
+  OBSTACLE,
+  WARP_ZONE
+};
 
 struct b2BodyUserData {
   BodyType type;
@@ -39,6 +47,10 @@ namespace config {
 struct PTree;
 
 struct CONFIG_FILE(Simulation) {
+  using decimal = simu::decimal;
+
+  static constexpr float epsilonE = 1e-6;
+
   DECLARE_SUBCONFIG(genotype::Critter::config_t, configCritter)
   DECLARE_SUBCONFIG(genotype::Environment::config_t, configEnvironment)
 
@@ -46,23 +58,26 @@ struct CONFIG_FILE(Simulation) {
 
   DECLARE_PARAMETER(std::string, logFile)
 
+  DECLARE_PARAMETER(Color, emptyColor)
+  DECLARE_PARAMETER(Color, obstacleColor)
+
   // Foodlets
   DECLARE_PARAMETER(float, plantMinRadius)
   DECLARE_PARAMETER(float, plantMaxRadius)
   DECLARE_PARAMETER(float, plantEnergyDensity)
-  DECLARE_PARAMETER(float, decompositionRate)
+  DECLARE_PARAMETER(decimal, decompositionRate)
 
   // Splinoid constants
-  DECLARE_PARAMETER(float, healthToEnergyRatio)
+  DECLARE_PARAMETER(decimal, healthToEnergyRatio)
   DECLARE_PARAMETER(float, critterBaseSpeed)
   DECLARE_PARAMETER(float, combatBaselineIntensity)
 
-  // SPlinoid metabolic constants (per second, affected by clock speed)
+  // Splinoid metabolic constants (per second, affected by clock speed)
   DECLARE_PARAMETER(float, baselineAgingSpeed)
-  DECLARE_PARAMETER(float, baselineEnergyConsumption)
-  DECLARE_PARAMETER(float, baselineRegenerationRate)
-  DECLARE_PARAMETER(float, motorEnergyConsumption)
-  DECLARE_PARAMETER(float, energyAbsorptionRate)
+  DECLARE_PARAMETER(decimal, baselineEnergyConsumption)
+  DECLARE_PARAMETER(decimal, baselineRegenerationRate)
+  DECLARE_PARAMETER(decimal, motorEnergyConsumption)
+  DECLARE_PARAMETER(decimal, energyAbsorptionRate)
 
   // Durations of world and physics
   DECLARE_PARAMETER(uint, b2VelocityIter)
@@ -72,6 +87,7 @@ struct CONFIG_FILE(Simulation) {
   DECLARE_PARAMETER(uint, daysPerYear)
 
   // Other
+  DECLARE_PARAMETER(bool, screwTheEntropy)
   DECLARE_PARAMETER(uint, ssgaMinPopSize)
 };
 

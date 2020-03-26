@@ -6,7 +6,7 @@
 
 namespace simu {
 
-Foodlet::Foodlet(BodyType type, uint id, b2Body *body, float r, float e)
+Foodlet::Foodlet(BodyType type, uint id, b2Body *body, float r, decimal e)
   : _type(type), _id(id), _body(*body), _radius(r), _energy(e) {
 
   assert(_type == BodyType::PLANT || _type == BodyType::CORPSE);
@@ -34,9 +34,9 @@ Foodlet::Foodlet(BodyType type, uint id, b2Body *body, float r, float e)
   updateColor();
 }
 
-float Foodlet::maxStorage (BodyType type, float radius) {
+decimal Foodlet::maxStorage (BodyType type, float radius) {
   static const float ped = config::Simulation::plantEnergyDensity();
-  static const float her = config::Simulation::healthToEnergyRatio();
+  static const decimal her = config::Simulation::healthToEnergyRatio();
 
   float s = M_PI * radius * radius;
   if (type == BodyType::PLANT)  s *= ped;
@@ -44,14 +44,14 @@ float Foodlet::maxStorage (BodyType type, float radius) {
   return s;
 }
 
-void Foodlet::consumed(float de) {
+void Foodlet::consumed(decimal de) {
   assert(0 <= de && de <= _energy);
   _energy -= de;
   updateColor();
 }
 
 void Foodlet::updateColor(void) {
-  float f = fullness();
+  float f = float(fullness());
   if (_type == BodyType::PLANT)
     _color = {0, .25f*(3+f), 0};
 
@@ -61,7 +61,8 @@ void Foodlet::updateColor(void) {
 
 void Foodlet::update(Environment &env) {
   if (_type == BodyType::CORPSE) {
-    float de = config::Simulation::decompositionRate() * env.dt();
+    decimal de = config::Simulation::decompositionRate() * env.dt();
+    utils::iclip_max(de, _energy);
     _energy -= de;
     env.modifyEnergyReserve(+de);
   }

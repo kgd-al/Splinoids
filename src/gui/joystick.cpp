@@ -4,6 +4,8 @@
 namespace gui {
 
 void PersitentJoystick::update (void) {
+  using M = MyOwnControllerMapping;
+
   JoystickEvent event;
   while (low_level_object.sample(&event)) {
     if (event.type == JS_EVENT_INIT)  continue;
@@ -12,7 +14,20 @@ void PersitentJoystick::update (void) {
 
     mappings[event.type][event.number] = event.value;
 
-    auto b = MyOwnControllerMapping(event.number);
+    auto b = M(event.number);
+
+    // Consider d-pad as both button and axis
+    if (event.type == JS_EVENT_AXIS) {
+      if (b == M::AXIS_DPAD_X)
+        b = event.value < 0 ? M::DPAD_LEFT : M::DPAD_RIGHT;
+      else if (b == M::AXIS_DPAD_Y)
+        b = event.value < 0 ? M::DPAD_DOWN : M::DPAD_UP;
+      if (b != M(event.number)) {
+        event.type = JS_EVENT_BUTTON;
+        event.value = (event.value != 0);
+      }
+    }
+
     if (event.type == JS_EVENT_BUTTON
         && signalMapped.find(b) != signalMapped.end())
       emit buttonChanged(b, event.value);

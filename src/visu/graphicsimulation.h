@@ -42,6 +42,14 @@ public:
     return _scene.get();
   }
 
+  const auto* graphicsEnvironment (void) const {
+    return _graphicEnvironment;
+  }
+
+  auto* graphicsEnvironment (void) {
+    return _graphicEnvironment;
+  }
+
   auto statusBar (void) {
     return _sbar;
   }
@@ -66,17 +74,19 @@ public:
     return _graphicEnvironment->boundingRect();
   }
 
-  void step (void) override;
-
   simu::Critter* addCritter(const CGenome &genome,
-                            float x, float y, float a, float e) override;
+                            float x, float y, float a,
+                            simu::decimal e) override;
   void delCritter (simu::Critter *critter) override;
 
   simu::Foodlet* addFoodlet(simu::BodyType t, float x, float y,
-                            float s, float e) override;
+                            float s, simu::decimal e) override;
   void delFoodlet(simu::Foodlet *foodlet) override;
 
   void postInit (void) override;
+
+  void step (void) override;
+  void prePhysicsStep(void) override;
 
 #ifndef NDEBUG
   void doDebugDrawNow (void) {

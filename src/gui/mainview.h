@@ -28,6 +28,7 @@ class MainView : public QGraphicsView {
   using JButton = PersitentJoystick::MyOwnControllerMapping;
 
   bool _running, _stepping;
+  bool _zoomout;
 
 public:
   MainView (visu::GraphicSimulation &simulation, StatsView *stats,
@@ -39,6 +40,8 @@ public:
 
   void mouseReleaseEvent(QMouseEvent *e) override;
   void mouseMoveEvent(QMouseEvent *e) override;
+
+  void resizeEvent(QResizeEvent *e) override;
 
   void selectNext (void);
   void selectPrevious (void);
@@ -52,6 +55,8 @@ public:
   void step (void);
 
   void toggleCharacterSheet (void);
+
+  void showAll();
 
 private:
   void buildActions (void);

@@ -5,7 +5,7 @@ namespace simu {
 
 Critter::FixtureData::FixtureData (FixtureType t, const Color &c,
                                    uint si, Side fs, uint ai)
-  : type(t), color(c), sindex(si), sside(fs), aindex(ai), centerOfMass(P2D()) {}
+  : type(t), color(c), sindex(si), sside(fs), aindex(ai)/*, centerOfMass(P2D())*/ {}
 
 std::ostream& operator<< (std::ostream &os, const Critter::Side &s) {
   return os << (s == Critter::Side::LEFT ? "L" : "R");
@@ -15,7 +15,7 @@ std::ostream& operator<< (std::ostream &os, const Critter::FixtureData &fd) {
   if (fd.type == Critter::FixtureType::BODY)
     return os << "B";
   else
-    return os << fd.sindex << fd.sside << fd.aindex;
+    return os << "S" << fd.sindex << fd.sside << fd.aindex;
 }
 
 Critter::FixtureData* Critter::get (b2Fixture *f) {
@@ -87,17 +87,16 @@ P2D pointAt (int t, const P2D &p0, const P2D &c0, const P2D &c1, const P2D &p1){
   }
 }
 
-Critter::Critter(const Genome &g, b2Body *body, float e)
+Critter::Critter(const Genome &g, b2Body *body, decimal e)
   : _genotype(g), _size(MIN_SIZE), _body(*body) {
 
-  static const float initEnergyRatio =
+  static const decimal initEnergyRatio =
     1 + config::Simulation::healthToEnergyRatio();
 
   _visionRange = computeVisionRange(_genotype.vision.width);
 
   _b2Body = nullptr;
 
-  // Debug
   _masses.fill(0);
   _currHealth.fill(0);
 
@@ -128,7 +127,7 @@ Critter::Critter(const Genome &g, b2Body *body, float e)
 //              << " / " << bodyMaxHealth() << "\n"
 //            << "\t  Total " << totalEnergy() << std::endl;
 
-  utils::iclip_max(_energy, _masses[0]);  // WARNING Loss of precision
+//  utils::iclip_max(_energy, _masses[0]);  // WARNING Loss of precision
   assert(_energy <= _masses[0]);
   assert(bodyHealth() <= bodyMaxHealth());
 
@@ -183,6 +182,8 @@ Critter::Critter(const Genome &g, b2Body *body, float e)
   _objectUserData.type = BodyType::CRITTER;
   _objectUserData.ptr.critter = this;
   _body.SetUserData(&_objectUserData);
+
+  brainDead = false;
 }
 
 
@@ -196,7 +197,8 @@ void Critter::step(Environment &env) {
   // Distribute energy
   energyConsumption(env);
 
-//  if (id() == ID(2) && _age >.01)  _age = 1;
+  // Regenerate body/artifacts as needed
+  regeneration(env);
 
   // Age-specific tasks
   _age += _clockSpeed * env.dt() * config::Simulation::baselineAgingSpeed();
@@ -280,7 +282,11 @@ void Critter::performVision(const Environment &env) {
         break;
 
       case BodyType::OBSTACLE:
-        _retina[ie] = utils::uniformStdArray<Color>(1);
+        _retina[ie] = config::Simulation::obstacleColor();
+        break;
+
+      case BodyType::WARP_ZONE:
+        _retina[ie] = config::Simulation::emptyColor();
         break;
 
       default:
@@ -290,16 +296,32 @@ void Critter::performVision(const Environment &env) {
       _raysFraction[ie] = cvc.closestFraction;
 
     } else {
-      _retina[ie] = Color();
+      _retina[ie] = config::Simulation::emptyColor();
       _raysFraction[ie] = 1;
     }
   }
 }
 
 void Critter::neuralStep(void) {  ERR
-  // Set inputs
-  // Process n propagation steps
-  // Collect outputs
+
+  if (!brainDead) {
+    // Set inputs
+    // Process n propagation steps
+    // Collect outputs
+
+    rng::FastDice dice;
+    if (dice(.1)) {
+      if (dice(.6))
+        _motors[Motor::LEFT] = _motors[Motor::RIGHT] = 1;
+      else if (dice(.2))
+        _motors[Motor::LEFT] = _motors[Motor::RIGHT] = -1;
+      else {
+        int d = dice.toss(-1,1);
+        _motors[Motor::LEFT] = d;
+        _motors[Motor::RIGHT] = -d;
+      }
+    }
+  }
 
   // Apply requested motor output
   for (auto &m: _motors) {
@@ -310,9 +332,9 @@ void Critter::neuralStep(void) {  ERR
   }
 }
 
-void Critter::energyConsumption (Environment &env) {  ERR
-  float dt = env.dt();
-  float de = 0;
+void Critter::energyConsumption (Environment &env) {
+  decimal dt = env.dt();
+  decimal de = 0;
 
   de += config::Simulation::baselineEnergyConsumption();
   de += config::Simulation::motorEnergyConsumption()
@@ -320,36 +342,51 @@ void Critter::energyConsumption (Environment &env) {  ERR
   de *= _clockSpeed;
   de *= dt;
 
+  de = std::min(de, _energy);
+  _energy -= de;
+  env.modifyEnergyReserve(de);
+}
+
+
+void Critter::regeneration (Environment &env) {
+  decimal dt = env.dt();
+  decimal dE = 0;
+
   // Check for regeneration
   decltype(_currHealth) mhA {0};
-  float mh = 0;
+  decimal mh = 0;
   for (uint i=0; i<2*SPLINES_COUNT+1; i++) {
     mhA[i] = _masses[i] - _currHealth[i];
     assert(mhA[i] >= 0);
     mh += mhA[i];
   }
-  if (mh > 0) {
-    static const float h2ER = config::Simulation::healthToEnergyRatio();
-//    std::cerr << "C" << id() << " missing health (total): " << mh << "\n";
-    float r = config::Simulation::baselineRegenerationRate() * _clockSpeed * dt;
-//    std::cerr << "Maximal energy for regeneration: " << r << "\n";
-    r = std::min(r, mh / h2ER);
-//    std::cerr << " Capped energy for regeneration: " << r << "\n";
 
-    float r_ = r * h2ER;
-    for (uint i=0; i<2*SPLINES_COUNT+1; i++) {
-//      std::cerr << "\tAllocated " << r_ * mhA[i] / mh << " = " << r_
-//                << " * " << mhA[i] << " / " << mh << std::endl;
-      _currHealth[i] += r_ * mhA[i] / mh;
-    }
+  if (mh == 0)  return;
 
-    r -= r_ * mhA[0] / mh;  // Body health is kept as muscular energy
-    de += r;
+  static const decimal h2ER = config::Simulation::healthToEnergyRatio();
+//  std::cerr << "C" << id() << " missing health (total): " << mh << "\n";
+  dE = config::Simulation::baselineRegenerationRate() * _clockSpeed * dt;
+//  std::cerr << "Maximal energy for regeneration: "
+//            << std::min(consumedEnergy, mh) << " = min(" << consumedEnergy << ", " << mh << ")\n";
+  dE = std::min(dE, mh);
+
+  for (uint i=0; i<2*SPLINES_COUNT+1; i++) {
+    if (mhA[i] == 0)  continue;
+//      std::cerr << "\t\t(B) health: " << _currHealth[i] << " / "
+//                << _masses[i] << " (" << 100*_currHealth[i]/_masses[i]
+//                << "%)\n";
+//    std::cerr << "\t[" << i << "] Regenerated " << consumedEnergy * mhA[i] / mh << " = "
+//              << consumedEnergy << " * " << 100*mhA[i]/mh << "% (" << mhA[i] << " / "
+//              << mh << ")" << std::endl;
+    _currHealth[i] += dE * mhA[i] / mh;
+
+//      std::cerr << "\t\t(A) health: " << _currHealth[i] << " / "
+//                << _masses[i] << " (" << 100*_currHealth[i]/_masses[i]
+//                << "%)\n";
   }
 
-  de = std::min(de, _energy);
-  _energy -= de;
-  env.modifyEnergyReserve(de);
+  _energy -= dE;
+  env.modifyEnergyReserve(dE - dE * h2ER * mhA[0] / mh);
 }
 
 void Critter::growthStep (void) { ERR
@@ -419,6 +456,142 @@ void Critter::updateSplines(void) {
 }
 
 #undef SET
+
+// Taken straight from b2_polygon.cpp
+// Modified to return bool instead of asserting
+bool box2dValidPolygon(const b2Vec2* vertices, int32 count) {
+  b2Assert(3 <= count && count <= b2_maxPolygonVertices);
+  if (count < 3)
+  {
+//    SetAsBox(1.0f, 1.0f);
+    return false;
+  }
+
+  int32 n = b2Min(count, b2_maxPolygonVertices);
+
+  // Perform welding and copy vertices into local buffer.
+  b2Vec2 ps[b2_maxPolygonVertices];
+  int32 tempCount = 0;
+  for (int32 i = 0; i < n; ++i)
+  {
+    b2Vec2 v = vertices[i];
+
+    bool unique = true;
+    for (int32 j = 0; j < tempCount; ++j)
+    {
+      if (b2DistanceSquared(v, ps[j]) < ((0.5f * b2_linearSlop) * (0.5f * b2_linearSlop)))
+      {
+        unique = false;
+        break;
+      }
+    }
+
+    if (unique)
+    {
+      ps[tempCount++] = v;
+    }
+  }
+
+  n = tempCount;
+  if (n < 3)
+  {
+    // Polygon is degenerate.
+//    b2Assert(false);
+//    SetAsBox(1.0f, 1.0f);
+    return false;
+  }
+
+  // Create the convex hull using the Gift wrapping algorithm
+  // http://en.wikipedia.org/wiki/Gift_wrapping_algorithm
+
+  // Find the right most point on the hull
+  int32 i0 = 0;
+  float x0 = ps[0].x;
+  for (int32 i = 1; i < n; ++i)
+  {
+    float x = ps[i].x;
+    if (x > x0 || (x == x0 && ps[i].y < ps[i0].y))
+    {
+      i0 = i;
+      x0 = x;
+    }
+  }
+
+  int32 hull[b2_maxPolygonVertices];
+  int32 m = 0;
+  int32 ih = i0;
+
+  for (;;)
+  {
+    b2Assert(m < b2_maxPolygonVertices);
+    hull[m] = ih;
+
+    int32 ie = 0;
+    for (int32 j = 1; j < n; ++j)
+    {
+      if (ie == ih)
+      {
+        ie = j;
+        continue;
+      }
+
+      b2Vec2 r = ps[ie] - ps[hull[m]];
+      b2Vec2 v = ps[j] - ps[hull[m]];
+      float c = b2Cross(r, v);
+      if (c < 0.0f)
+      {
+        ie = j;
+      }
+
+      // Collinearity check
+      if (c == 0.0f && v.LengthSquared() > r.LengthSquared())
+      {
+        ie = j;
+      }
+    }
+
+    ++m;
+    ih = ie;
+
+    if (ie == i0)
+    {
+      break;
+    }
+  }
+
+  if (m < 3)
+  {
+    // Polygon is degenerate.
+//    b2Assert(false);
+//    SetAsBox(1.0f, 1.0f);
+    return false;
+  }
+
+//  m_count = m;
+
+//  // Copy vertices.
+//  for (int32 i = 0; i < m; ++i)
+//  {
+//    m_vertices[i] = ps[hull[i]];
+//  }
+
+//  // Compute normals. Ensure the edges have non-zero length.
+//  for (int32 i = 0; i < m; ++i)
+//  {
+//    int32 i1 = i;
+//    int32 i2 = i + 1 < m ? i + 1 : 0;
+//    b2Vec2 edge = m_vertices[i2] - m_vertices[i1];
+//    b2Assert(edge.LengthSquared() > b2_epsilon * b2_epsilon);
+//    m_normals[i] = b2Cross(edge, 1.0f);
+//    m_normals[i].Normalize();
+//  }
+
+//  // Compute the polygon centroid.
+//  m_centroid = ComputeCentroid(m_vertices, m);
+
+  return true;
+}
+
 
 bool concave (const Critter::Vertices &o, uint &oai) {
   auto n = o.size();
@@ -494,6 +667,8 @@ b2Fixture* Critter::addPolygonFixture (uint splineIndex, Side side,
 //  std::cerr << "Polygon: ";
 //  for (auto p: v) std::cerr << " " << p;
 //  std::cerr << " (CCScore = " << ccs << ")" << std::endl;
+
+  if (!box2dValidPolygon(v.data(), v.size())) return nullptr;
 
   b2PolygonShape s;
   s.Set(v.data(), v.size());
@@ -571,7 +746,7 @@ void Critter::updateObjects(void) {
 
   b2MassData massData;  // Wastefull but doesn't seem to be a way around
   _b2Body->GetMassData(&massData);
-  get(_b2Body)->centerOfMass = massData.center;
+//  get(_b2Body)->centerOfMass = massData.center;
   _masses[0] = massData.mass;
 
   for (uint i=0; i<SPLINES_COUNT; i++) {
@@ -633,11 +808,13 @@ void Critter::updateObjects(void) {
       if (destroyedSpline(i, side)) continue;
 
       b2Fixture *f = addPolygonFixture(i, side, j%n, objects[j]);
+      if (!f) continue; // nullptr is returned is box2dValidPolygon returns false
+
       _b2Artifacts[k].push_back(f);
 
       f->GetMassData(&massData);
       _masses[1+k] += massData.mass;
-      get(f)->centerOfMass = massData.center;
+//      get(f)->centerOfMass = massData.center;
 
 //      std::cerr << "C" << id() << "F" << *get(f)
 //                << " COM: " << massData.center << " ("
@@ -683,25 +860,34 @@ float Critter::computeVisionRange(float visionWidth) {
   return std::max(.5f, std::min(10/visionWidth, 20.f));
 }
 
-bool Critter::applyHealthDamage (const FixtureData &d, float amount) {
+bool Critter::applyHealthDamage (const FixtureData &d, float amount,
+                                 Environment &env) {
+  decimal damount = amount;
+
   uint i = 0;
   if (d.type != FixtureType::BODY) i += 1 + splineIndex(d.sindex, d.sside);
-  float &v = _currHealth[i];
+  decimal &v = _currHealth[i];
 
-//  std::cerr << "Applying " << amount << " of damage to " << d
+//  std::cerr << "Applying " << damount << " of damage to C" << id() << d
 //            << ", resulting health is " << v << " >> ";
 
-  v -= amount;
-  utils::iclip_min(0.f, v);
+  damount = std::min(damount, v);
+  v -= damount;
 
-//  std::cerr << v << std::endl;
+  if (d.type == FixtureType::BODY)  // Return energy to environment
+    env.modifyEnergyReserve(+damount*config::Simulation::healthToEnergyRatio());
+
+//  std::cerr << v << "\n";
+//  if (d.type == FixtureType::BODY)  // Return energy to environment
+//    std::cerr << "\tReturning " << damount*config::Simulation::healthToEnergyRatio()
+//              << " energy to the environment\n";
+//  std::cerr << std::endl;
 
   return v <= 0 && i > 0;
 }
 
-void Critter::destroySpline(b2Fixture *f) {
-  const Critter::FixtureData &fd = *Critter::get(f);
-  uint k = splineIndex(fd.sindex, fd.sside);
+void Critter::destroySpline(uint splineIndex) {
+  uint k = splineIndex;
 
 //  std::cerr << "Spline C" << id() << "S" << fd.sside << fd.sindex
 //            << " was destroyed" << std::endl;

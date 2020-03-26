@@ -720,12 +720,12 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     for (uint j=0; j<2; j++)
       _bPickers[j]->setGeneValue(g.colors[j*(S_v+1)]);
 
-    _sBars[0]->setMaximum(c.bodyMaxHealth());
-    _sBars[1]->setMaximum(c.maxUsableEnergy());
+    _sBars[0]->setMaximum(float(c.bodyMaxHealth()));
+    _sBars[1]->setMaximum(float(c.maxUsableEnergy()));
 
     for (uint i=0; i<S_v; i++)
       for (SCritter::Side s: {SCritter::Side::LEFT, SCritter::Side::RIGHT})
-        _sBars[2+uint(s)*S_v+i]->setMaximum(c.splineMaxHealth(i, s));
+        _sBars[2+uint(s)*S_v+i]->setMaximum(float(c.splineMaxHealth(i, s)));
 
     readCurrentStatus();
 
@@ -770,12 +770,12 @@ void GeneticManipulator::readCurrentStatus(void) {
   const auto &r = c.retina();
   for (uint i=0; i<r.size(); i++) _rLabels[i+1]->setValue(r[i]);
 
-  _sBars[0]->setValue(c.usableEnergy(), false);
-  _sBars[1]->setValue(c.bodyHealth(), false);
+  _sBars[0]->setValue(float(c.usableEnergy()), false);
+  _sBars[1]->setValue(float(c.bodyHealth()), false);
 
   for (uint i=0; i<S_v; i++)
     for (SCritter::Side s: {SCritter::Side::LEFT, SCritter::Side::RIGHT})
-      _sBars[2+uint(s)*S_v+i]->setValue(c.splineHealth(i, s),
+      _sBars[2+uint(s)*S_v+i]->setValue(float(c.splineHealth(i, s)),
                                         c.destroyedSpline(i, s));
 
 }

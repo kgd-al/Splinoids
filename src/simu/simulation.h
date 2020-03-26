@@ -29,7 +29,7 @@ protected:
 
   std::ofstream _statsLogger;
 
-  float _systemExpectedEnergy;
+  decimal _systemExpectedEnergy;
 
 public:
   struct InitData {
@@ -75,25 +75,26 @@ public:
   virtual void postInit (void) {}
 
   virtual Critter* addCritter (const CGenome &genome,
-                               float x, float y, float a, float e);
+                               float x, float y, float a, decimal e);
   virtual void delCritter (Critter *critter);
 
-  virtual Foodlet* addFoodlet (BodyType t, float x, float y, float r, float e);
+  virtual Foodlet* addFoodlet (BodyType t, float x, float y, float r, decimal e);
   virtual void delFoodlet (Foodlet *foodlet);
 
   void clear (void);
   virtual void preClear (void) {}
 
   virtual void step (void);
+  virtual void prePhysicsStep (void) {}
 
-  float totalEnergy (void) const;
+  decimal totalEnergy(void) const;
 
 protected:
   struct Stats {
     uint ncritters, ncorpses, nplants;
     uint nfights, nfeedings;
 
-    float ecritters, ecorpses, eplants, ereserve;
+    decimal ecritters, ecorpses, eplants, ereserve;
   };
   virtual void processStats (const Stats&) const {}
 
@@ -108,6 +109,11 @@ private:
 
   // Compensate for variations in total energy
   void correctFloatingErrors (void);
+
+#ifndef NDEBUG
+  void detectBudgetFluctuations (float threshold = config::Simulation::epsilonE);
+#else
+#endif
 };
 
 } // end of namespace simu
