@@ -49,7 +49,7 @@ static constexpr float fPI = M_PI;
 DEFINE_GENOME_FIELD_WITH_BOUNDS(float, angleBody, "", 0.f, 0.f, fPI/2.f, fPI/2.f)
 DEFINE_GENOME_FIELD_WITH_BOUNDS(float, angleRelative, "", -fPI/2.f, -fPI/2.f, fPI/2.f, fPI/2.f)
 DEFINE_GENOME_FIELD_WITH_BOUNDS(float, width, "", fPI/60, fPI/60, 2*fPI/3.f, 2*fPI/3.f)
-DEFINE_GENOME_FIELD_WITH_BOUNDS(uint, precision, "", 0u, 0u, 10u, 10u)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(uint, precision, "", 0u, 0u, 5u, 5u)
 
 DEFINE_GENOME_MUTATION_RATES({
   EDNA_PAIR(    angleBody, 1),

@@ -30,6 +30,8 @@ class GraphicSimulation : public QObject, public simu::Simulation {
 
   visu::Critter *_selection;
 
+  uint _gstepTimeMs;
+
 public:
   GraphicSimulation(QStatusBar *sbar, gui::StatsView *stats);
   ~GraphicSimulation(void);
@@ -86,7 +88,6 @@ public:
   void postInit (void) override;
 
   void step (void) override;
-  void prePhysicsStep(void) override;
 
 #ifndef NDEBUG
   void doDebugDrawNow (void) {

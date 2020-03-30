@@ -3,6 +3,11 @@
 
 namespace simu {
 
+static constexpr bool debugMotors = 0;
+static constexpr bool debugMetabolism = 0;
+static constexpr bool debugRegen = 0;
+
+
 Critter::FixtureData::FixtureData (FixtureType t, const Color &c,
                                    uint si, Side fs, uint ai)
   : type(t), color(c), sindex(si), sside(fs), aindex(ai)/*, centerOfMass(P2D())*/ {}
@@ -97,6 +102,11 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e)
 
   _b2Body = nullptr;
 
+  _age = 0;
+  _efficiency = 0;
+  setEfficiencyCoeffs(matureAt(), _ec0Coeff, oldAt(), _ec1Coeff);
+  _nextGrowthStep = nextGrowthStepAt(0);
+
   _masses.fill(0);
   _currHealth.fill(0);
 
@@ -106,8 +116,8 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e)
   clockSpeed(.5);
   assert(0 <= _clockSpeed && _clockSpeed < 10);
 
-  _age = 0;
   _energy = e / initEnergyRatio;
+  _reproductionReserve = 0;
 //  _maxEnergy = initialEnergyStorage();
 
   // Update current healths
@@ -188,6 +198,9 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e)
 
 
 void Critter::step(Environment &env) {
+  // Driving improvement
+  drivingCorrections();
+
   // Launch a bunch of rays
   performVision(env);
 
@@ -201,13 +214,7 @@ void Critter::step(Environment &env) {
   regeneration(env);
 
   // Age-specific tasks
-  _age += _clockSpeed * env.dt() * config::Simulation::baselineAgingSpeed();
-  if (_age < 1/3.)
-    growthStep();
-  else if (_age < 2/3.)
-    reproduction();
-  else
-    senescence();
+  aging(env.dt());
 
   // TODO Smell?
 }
@@ -229,6 +236,17 @@ void Critter::autopsy (void) const {
 #define ERR \
   std::cerr << __PRETTY_FUNCTION__ << " not implemented" << std::endl;
 #define ERR // TODO
+
+void Critter::drivingCorrections(void) {
+  P2D velocity = _body.GetLinearVelocity();
+  if (velocity.Length() < 1e-3) return;
+
+  P2D tengentialNormal = _body.GetWorldVector({0,1}),
+      lateralVelocity = b2Dot(tengentialNormal, velocity) * tengentialNormal;
+
+  P2D zeroImpulse = -_body.GetMass() * lateralVelocity;
+  _body.ApplyLinearImpulseToCenter(zeroImpulse, true);
+}
 
 void Critter::performVision(const Environment &env) {
   struct CritterVisionCallback : public b2RayCastCallback {
@@ -325,10 +343,18 @@ void Critter::neuralStep(void) {  ERR
 
   // Apply requested motor output
   for (auto &m: _motors) {
-    float s = config::Simulation::critterBaseSpeed() * m.second * _clockSpeed;
+    float s = config::Simulation::critterBaseSpeed()
+        * m.second * _clockSpeed * _efficiency;
     P2D f = _body.GetWorldVector({s,0}),
         p = _body.GetWorldPoint({0, int(m.first)*.5f*bodyRadius()});
     _body.ApplyForce(f, p, true);
+
+    if (debugMotors)
+      std::cerr << "C" << id() << "Applied motor force for " << m.first
+                << " of " << s << " = "
+                << config::Simulation::critterBaseSpeed() << " * "
+                << m.second << " * " << _clockSpeed << " * "
+                << _efficiency<< std::endl;
   }
 }
 
@@ -342,11 +368,16 @@ void Critter::energyConsumption (Environment &env) {
   de *= _clockSpeed;
   de *= dt;
 
+  if (debugMetabolism)
+    std::cerr << "C" << id() << " de = " << de << " = ("
+              << config::Simulation::baselineEnergyConsumption() << " + "
+              << config::Simulation::motorEnergyConsumption() << ") * "
+              << _clockSpeed << " * " << dt << std::endl;
+
   de = std::min(de, _energy);
   _energy -= de;
   env.modifyEnergyReserve(de);
 }
-
 
 void Critter::regeneration (Environment &env) {
   decimal dt = env.dt();
@@ -364,41 +395,73 @@ void Critter::regeneration (Environment &env) {
   if (mh == 0)  return;
 
   static const decimal h2ER = config::Simulation::healthToEnergyRatio();
-//  std::cerr << "C" << id() << " missing health (total): " << mh << "\n";
+
+  if (debugRegen)
+    std::cerr << "C" << id() << " missing health (total): " << mh << "\n";
+
   dE = config::Simulation::baselineRegenerationRate() * _clockSpeed * dt;
-//  std::cerr << "Maximal energy for regeneration: "
-//            << std::min(consumedEnergy, mh) << " = min(" << consumedEnergy << ", " << mh << ")\n";
+
+  if (debugRegen)
+    std::cerr << "Maximal energy for regeneration: " << std::min(dE, mh)
+              << " = min(" << dE << ", " << mh << ") = min("
+              << config::Simulation::baselineRegenerationRate() << " * "
+              << _clockSpeed << " * " << dt << ", ...)\n";
+
   dE = std::min(dE, mh);
 
   for (uint i=0; i<2*SPLINES_COUNT+1; i++) {
     if (mhA[i] == 0)  continue;
-//      std::cerr << "\t\t(B) health: " << _currHealth[i] << " / "
-//                << _masses[i] << " (" << 100*_currHealth[i]/_masses[i]
-//                << "%)\n";
-//    std::cerr << "\t[" << i << "] Regenerated " << consumedEnergy * mhA[i] / mh << " = "
-//              << consumedEnergy << " * " << 100*mhA[i]/mh << "% (" << mhA[i] << " / "
-//              << mh << ")" << std::endl;
+
+    if (debugRegen > 2)
+      std::cerr << "\t\t(B) health: " << _currHealth[i] << " / "
+                << _masses[i] << " (" << 100*_currHealth[i]/_masses[i]
+                << "%)\n";
+
+    if (debugRegen > 1)
+      std::cerr << "\t[" << i << "] Regenerated " << dE * mhA[i] / mh << " = "
+                << dE << " * " << 100*mhA[i]/mh << "% (" << mhA[i] << " / "
+                << mh << ")" << std::endl;
+
     _currHealth[i] += dE * mhA[i] / mh;
 
-//      std::cerr << "\t\t(A) health: " << _currHealth[i] << " / "
-//                << _masses[i] << " (" << 100*_currHealth[i]/_masses[i]
-//                << "%)\n";
+    if (debugRegen > 2)
+      std::cerr << "\t\t(A) health: " << _currHealth[i] << " / "
+                << _masses[i] << " (" << 100*_currHealth[i]/_masses[i]
+                << "%)\n";
   }
 
   _energy -= dE;
   env.modifyEnergyReserve(dE - dE * h2ER * mhA[0] / mh);
 }
 
-void Critter::growthStep (void) { ERR
+void Critter::aging(float dt) { ERR
+  _age += _clockSpeed * dt * config::Simulation::baselineAgingSpeed();
 
-}
+  auto prevEfficiency = _efficiency;
+  _efficiency = efficiency(_age, matureAt(), _ec0Coeff, oldAt(), _ec1Coeff);
 
-void Critter::reproduction (void) { ERR
+  if (_age < matureAt()) {
+    // Maybe update body size and splines
+    if (prevEfficiency < _nextGrowthStep && _nextGrowthStep <= _efficiency) {
+      std::cerr << "Critter " << id() << " should grow " << std::endl;
 
-}
+      float newSize = _efficiency * (MAX_SIZE - MIN_SIZE) + MIN_SIZE;
+      std::cerr << "\tSize: " << _size << " >> " << newSize << std::endl;
 
-void Critter::senescence (void) { ERR
+      updateShape();
+    }
 
+  } else if (_age < oldAt()) {
+    if (prevEfficiency < 1) {
+      // create and register reproduction sensor
+    }
+    // only register change of state, accumulation is performed by neural step
+    // and actual reproduction by the environment
+
+  }/* else
+    senescence();
+    Nothing to do here. Efficiency value is straightly used by motion
+   */
 }
 
 #undef ERR
@@ -425,7 +488,7 @@ void Critter::updateSplines(void) {
   for (uint i=0; i<SPLINES_COUNT; i++) {
     genotype::Spline::Data &d = _genotype.splines[i].data;
     SplineData &sd = _splinesData[i];
-    float w = dimorphism(i);
+    float w = dimorphism(i) * _efficiency;
 
     P2D p0 = fromPolar(d[S::SA], r); SET(sd.p0, p0)
 
@@ -651,6 +714,8 @@ b2Fixture* Critter::addBodyFixture (void) {
   fd.density = BODY_DENSITY;
   fd.restitution = .1;
   fd.friction = .3;
+  fd.filter.categoryBits = uint16(CollisionFlag::CRITTER_BODY_FLAG);
+  fd.filter.maskBits = uint16(CollisionFlag::CRITTER_BODY_MASK);
 
   FixtureData cfd (FixtureType::BODY, bodyColor());
 
@@ -700,6 +765,8 @@ b2Fixture* Critter::addPolygonFixture (uint splineIndex, Side side,
   fd.density = ARTIFACTS_DENSITY;
   fd.restitution = .05;
   fd.friction = 0.;
+  fd.filter.categoryBits = uint16(CollisionFlag::CRITTER_SPLN_FLAG);
+  fd.filter.maskBits = uint16(CollisionFlag::CRITTER_SPLN_MASK);
 
   FixtureData cfd (FixtureType::ARTIFACT, splineColor(splineIndex),
                    splineIndex, side, artifactIndex);
@@ -841,23 +908,19 @@ void Critter::updateObjects(void) {
       collisionObjects[i+SPLINES_COUNT].push_back(objects[j+n]);
     }
   }
+
+  if (config::Simulation::b2FixedBodyCOM()) {
+    b2MassData d;
+    _body.GetMassData(&d);
+    d.center = {0,0};
+    _body.SetMassData(&d);
+  }
 }
 
 void Critter::setMotorOutput(float i, Motor m) {
   assert(-1 <= i && i <= 1);
   assert(EnumUtils<Motor>::isValid(m));
   _motors.at(m) = i;
-}
-
-float Critter::efficiency(float age) {
-  static constexpr float e = 1e-3, c0 = 1/3., c1 = 2/3.;
-  if (age < c0)       return std::tanh(age * std::atanh(1-e)/c0);
-  else if (age < c1)  return 1;
-  else                return utils::gauss(age, c1, -(1-c1)*(1-c1)/std::log(e));
-}
-
-float Critter::computeVisionRange(float visionWidth) {
-  return std::max(.5f, std::min(10/visionWidth, 20.f));
 }
 
 bool Critter::applyHealthDamage (const FixtureData &d, float amount,
@@ -899,6 +962,48 @@ void Critter::destroySpline(uint splineIndex) {
   _b2Artifacts[k].clear();
 
   collisionObjects[k].clear();
+
+  if (config::Simulation::b2FixedBodyCOM()) {
+    b2MassData d;
+    _body.GetMassData(&d);
+    d.center = {0,0};
+    _body.SetMassData(&d);
+  }
+}
+
+void Critter::setEfficiencyCoeffs(float c0, float &c0Coeff,
+                                  float c1, float &c1Coeff) {
+  static constexpr float e = 1e-3;
+  c0Coeff = std::atanh(1-e)/c0;
+  c1Coeff = std::sqrt(-(1-c1)*(1-c1)/(2*std::log(e)));
+}
+
+float Critter::efficiency(float age,
+                          float c0, float c0Coeff,
+                          float c1, float c1Coeff) {
+
+  if (age < c0)       return std::tanh(age * c0Coeff);
+  else if (age < c1)  return 1;
+  else                return utils::gauss(age, c1, c1Coeff);
+}
+
+float Critter::nextGrowthStepAt (uint currentStep) {
+  static const float N = config::Simulation::growthSubsteps();
+  assert(currentStep < N);
+  return (currentStep+1) / N;
+}
+
+float Critter::computeVisionRange(float visionWidth) {
+  return std::max(.5f, std::min(10/visionWidth, 20.f));
+}
+
+float Critter::lifeExpectancy (float clockSpeed) {
+  return 1. / (config::Simulation::baselineAgingSpeed() * clockSpeed);
+}
+
+float Critter::starvationDuration (float size, float energy, float clockSpeed) {
+  return energy
+      / (config::Simulation::baselineEnergyConsumption() * clockSpeed);
 }
 
 } // end of namespace simu

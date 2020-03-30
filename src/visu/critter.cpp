@@ -187,6 +187,7 @@ QColor Critter::bodyColor(void) const {
   }
   }
   assert(false);
+  return QColor();
 }
 
 QColor Critter::splineColor(uint i, Side s) const {
@@ -199,6 +200,7 @@ QColor Critter::splineColor(uint i, Side s) const {
   }
   }
   assert(false);
+  return QColor();
 }
 
 bool Critter::shouldDrawSpline(uint i, Side s) const {
@@ -330,13 +332,14 @@ void Critter::doPaint (QPainter *painter) const {
       painter->restore();
     }
 
+    float e = _critter.sizeRatio();
     pen.setColor(sexColors.value(_critter.sex()));
     pen.setStyle(Qt::SolidLine);
     pen.setJoinStyle(Qt::RoundJoin);
-    pen.setWidthF(.05);
+    pen.setWidthF(.05 * e);
     painter->setPen(pen);
     painter->drawPolyline(
-      QPolygonF({ QPointF(0., -.1), QPointF(.1, 0.), QPointF(0.,  .1) }));
+      QPolygonF({ QPointF(0., -.1*e), QPointF(.1*e, 0.), QPointF(0.,  .1*e) }));
   painter->restore();
 
 //  qDebug() << "Painted critter " << uint(_critter.genotype().id())
@@ -425,7 +428,8 @@ void Critter::debugDrawAbove (QPainter *painter) const {
 
   // draw motor outputs
   painter->save();
-    static constexpr float mo_W = .1;
+    float e = _critter.sizeRatio();
+    float mo_W = .1*e;
     float R = object().bodyRadius();
     float offset = .5 * R;
     float length = .2 * R;

@@ -27,6 +27,8 @@ class Environment : public QGraphicsItem {
   Overlay *_overlay;
   friend struct Overlay;
 
+  QPainterPath _edges;
+
 #ifndef NDEBUG
   DebugDrawer *_ddrawer;
 #endif

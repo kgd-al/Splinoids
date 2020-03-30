@@ -1,6 +1,8 @@
 #ifndef SIMULATION_H
 #define SIMULATION_H
 
+#include <chrono>
+
 #include "critter.h"
 #include "foodlet.h"
 #include "environment.h"
@@ -30,6 +32,9 @@ protected:
   std::ofstream _statsLogger;
 
   decimal _systemExpectedEnergy;
+
+  uint _stepTimeMs,
+        _splnTimeMs, _envTimeMs, _decayTimeMs, _regenTimeMs;
 
 public:
   struct InitData {
@@ -85,7 +90,6 @@ public:
   virtual void preClear (void) {}
 
   virtual void step (void);
-  virtual void prePhysicsStep (void) {}
 
   decimal totalEnergy(void) const;
 
@@ -97,6 +101,16 @@ protected:
     decimal ecritters, ecorpses, eplants, ereserve;
   };
   virtual void processStats (const Stats&) const {}
+
+  using clock = std::chrono::steady_clock;
+  using time_point = clock::time_point;
+
+  static time_point now (void) {  return clock::now(); }
+
+  template <typename D = std::chrono::milliseconds>
+  static auto durationFrom (const time_point &start) {
+    return std::chrono::duration_cast<D>(now() - start).count();
+  }
 
 private:
   void produceCorpses (void);

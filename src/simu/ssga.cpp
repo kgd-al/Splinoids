@@ -1,8 +1,25 @@
 #include "ssga.h"
+#include "config.h"
 
 namespace simu {
 
 SSGA::SSGA (void) : _enabled(false), _watching(false), _active(false) {}
+
+void SSGA::init(uint initPopSize) {
+  _minAllowedPopSize = initPopSize * config::Simulation::ssgaMinPopSizeRatio();
+}
+
+void SSGA::update(uint popSize) {
+  bool wasWatching = _watching;
+  _watching = (popSize < 2*_minAllowedPopSize);
+  if (wasWatching && !_watching) {
+    _active = false;
+    clear();
+    return;
+  }
+
+  _active = active(popSize);
+}
 
 void SSGA::clear(void) {}
 

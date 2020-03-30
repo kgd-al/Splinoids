@@ -26,6 +26,8 @@ Environment::Environment (simu::Environment &e,
   setZValue(-20);
 
   _overlay = new Overlay (*this, 20);
+
+#ifndef NDEBUG
   _ddrawer = new DebugDrawer (10, .5);
   _environment.physics().SetDebugDraw(_ddrawer);
   _ddrawer->SetFlags(
@@ -34,11 +36,42 @@ Environment::Environment (simu::Environment &e,
     | b2Draw::e_pairBit
 //    | b2Draw::e_centerOfMassBit
   );
+#endif
+
+  if (simu::Environment::boxEdges) {
+      b2Fixture *f = _environment.body()->GetFixtureList();
+      while (f) {
+        const b2PolygonShape *s =
+            dynamic_cast<const b2PolygonShape*>(f->GetShape());
+        auto n = s->m_count;
+        auto v = s->m_vertices;
+        QPolygonF p;
+        for (int i=0; i<n; i++) p << toQt(v[i]);
+        _edges.addPolygon(p);
+
+        f = f->GetNext();
+      }
+
+  } else {
+    const b2ChainShape *edgeVertices =
+      dynamic_cast<const b2ChainShape*>(
+        _environment.body()->GetFixtureList()->GetShape());
+    auto n = edgeVertices->m_count-1;
+    auto v = edgeVertices->m_vertices;
+    for (int i=0; i<n; i++) {
+      _edges.moveTo(toQt(v[i]));
+      _edges.lineTo(toQt(v[(i+1)%n]));
+    }
+  }
+
+  _edges.setFillRule(Qt::WindingFill);
 }
 
 Environment::~Environment (void) {
   delete _overlay;
+#ifndef NDEBUG
   delete _ddrawer;
+#endif
 }
 
 void drawVisionUnderlay (QPainter *painter, const QRectF &r) {
@@ -63,16 +96,16 @@ void Environment::paint (QPainter *painter,
   QRectF drawBounds = QRectF(options->rect).intersected(simuBoundingRect());
 
   painter->save();
+  if (simu::Environment::boxEdges)
+    painter->fillPath(_edges, Qt::black);
+
+  else {
     QPen pen = painter->pen();
     pen.setColor(Qt::black);
     pen.setWidth(1);
     painter->setPen(pen);
-    const b2ChainShape *edgeVertices =
-      dynamic_cast<const b2ChainShape*>(
-        _environment.body()->GetFixtureList()->GetShape());
-    auto n = edgeVertices->m_count-1;
-    auto v = edgeVertices->m_vertices;
-    for (int i=0; i<n; i++) painter->drawLine(toQt(v[i]), toQt(v[(i+1)%n]));
+    painter->drawPath(_edges);
+  }
   painter->restore();
 
   painter->fillRect(simuBoundingRect(), Qt::white);

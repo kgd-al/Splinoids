@@ -292,6 +292,12 @@ struct PrettyBar : public QProgressBar {
     else  setTextVisible(false);
   }
 
+  void noValue (void) {
+    setMaximum(0);
+    setValue(0, false);
+    setFormat("");
+  }
+
   void setMaximum (float m) {
     if (m == 0) {
       setStyle(palette().base().color());
@@ -311,7 +317,8 @@ struct PrettyBar : public QProgressBar {
         setFormat("Inactive");
       else
         setFormat("");
-    }
+    } else
+      setFormat("%v / %m");
     QProgressBar::setValue(SCALE * v);
   }
 
@@ -554,21 +561,29 @@ void GeneticManipulator::buildStatsLayout(void) {
   othersLayout->addWidget(_bSex, 0, 0, 1, 2);
 
   uint r = 0, c = 2;
-  const auto addLRow = [this, othersLayout, &r, &c] (const QString &l) {
+  const auto addLRow =
+    [this, othersLayout, &r, &c] (bool gene, QString l) {
     QLabel *label = new QLabel(l);
     label->setAlignment(Qt::AlignRight);
+    if (!gene) {
+      label->setStyleSheet("font-style: italic");
+      label->setText(label->text() + " ");
+    }
     othersLayout->addWidget(label, r, c);
     othersLayout->addWidget(_dataWidgets[l] = new QLabel, r, c+1);
     c+=2;
     if (c >= 4) c = 0, r++;
   };
 
-                    addLRow("Mass");
-  addLRow("Age");   addLRow("Clock");
+                            addLRow(false, "Mass");
+  addLRow(false, "Age");    addLRow(false, "Clock");
+  addLRow( true, "Adult");  addLRow( true, "Old");
+  addLRow(false, "Effcy");  addLRow(false, "Repro");
+  addLRow(false, "LSpeed"); addLRow(false, "RSpeed");
 
   othersLayout->addWidget(line("Vision"), r++, 0, 1, 4);
-  addLRow("Angle"); addLRow("Rotation");
-  addLRow("Width"); addLRow("Precision");
+  addLRow( true, "Angle");  addLRow(true, "Rotation");
+  addLRow( true, "Width");  addLRow(true, "Precision");
   othersLayout->addLayout(buildRetinaLayout(), r++, 0, 1, 4);
 
   othersLayout->addWidget(line("Wellfare"), r++, 0, 1, 4);
@@ -683,8 +698,6 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     const genotype::Critter &g = c.genotype();
     static constexpr auto NO_SPECIES = phylogeny::SID::INVALID;
 
-    _lFirstname->setText("0x" + QString::number(long(g.id()), 16));
-
     auto species = g.species();
     _lLastname->setText(
       species == NO_SPECIES ? NO_LASTNAME
@@ -698,10 +711,13 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     };
 
     set("Mass", &SCritter::mass);
+    set("Adult", &SCritter::matureAt);
+    set("Old", &SCritter::oldAt);
     set("Angle", &SCritter::visionBodyAngle, degrees);
     set("Rotation", &SCritter::visionRelativeRotation, degrees);
     set("Width", &SCritter::visionWidth, degrees);
-    set("Precision", &SCritter::visionPrecision);
+    set("Precision", &SCritter::visionPrecision,
+        [] (float v) { return QString::number(v, 'f', 0); });
 
     _rLabels[0]->hide();
     for (uint i=1; i<=c.retina().size(); i++)  _rLabels[i]->show();
@@ -748,7 +764,7 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
 
     for (uint j=0; j<2; j++)  _bPickers[j]->noValue();
 
-    for (PrettyBar *b: _sBars)  b->setMaximum(0.f);
+    for (PrettyBar *b: _sBars)  b->noValue();
   }
 
   updateWindowName();
@@ -764,8 +780,22 @@ void GeneticManipulator::readCurrentStatus(void) {
   const auto percent = [] (float v) {
     return QString::number(100 * v, 'f', 1) + "%";
   };
+
+  QString firstname;
+  if (c.isYouth())      firstname += "Young ";
+  else if (c.isElder()) firstname += "Old ";
+  firstname += "0x" + QString::number(long(c.genotype().id()), 16);
+  _lFirstname->setText(firstname);
+
   set("Age", &SCritter::age, percent);
   set("Clock", &SCritter::clockSpeed, percent);
+  set("Effcy", &SCritter::efficiency, percent);
+  set("Repro", &SCritter::reproductionReadiness, percent);
+
+  set("LSpeed", &SCritter::linearSpeed,
+      [] (float v) { return QString::number(v, 'f', 2) + " m/s"; });
+  set("RSpeed", &SCritter::angularSpeed,
+      [] (float v) { return QString::number(v, 'f', 2) + " r/s"; });
 
   const auto &r = c.retina();
   for (uint i=0; i<r.size(); i++) _rLabels[i+1]->setValue(r[i]);

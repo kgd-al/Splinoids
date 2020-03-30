@@ -9,7 +9,6 @@ namespace simu {
 struct Environment;
 
 class Foodlet {
-  BodyType _type;
   uint _id;
   b2Body &_body;
   float _radius;
@@ -22,15 +21,15 @@ public:
   Foodlet(BodyType type, uint id, b2Body *body, float radius, decimal energy);
 
   auto type (void) const {
-    return _type;
+    return _userData.type;
   }
 
   bool isPlant (void) const {
-    return _type == BodyType::PLANT;
+    return type() == BodyType::PLANT;
   }
 
   bool isCorpse (void) const {
-    return _type == BodyType::CORPSE;
+    return type() == BodyType::CORPSE;
   }
 
   auto id (void) const {

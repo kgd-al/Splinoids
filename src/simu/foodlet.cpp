@@ -7,9 +7,11 @@
 namespace simu {
 
 Foodlet::Foodlet(BodyType type, uint id, b2Body *body, float r, decimal e)
-  : _type(type), _id(id), _body(*body), _radius(r), _energy(e) {
+  : _id(id), _body(*body), _radius(r), _energy(e) {
 
-  assert(_type == BodyType::PLANT || _type == BodyType::CORPSE);
+  assert(type == BodyType::PLANT || type == BodyType::CORPSE);
+  _userData.type = type;
+  _userData.ptr.foodlet = this;
 
   b2CircleShape cs;
   cs.m_p.Set(0, 0);
@@ -21,13 +23,20 @@ Foodlet::Foodlet(BodyType type, uint id, b2Body *body, float r, decimal e)
   fd.restitution = 0;
   fd.userData = &_color;
 
+  if (isPlant()) {
+    fd.filter.categoryBits = uint16(CollisionFlag::PLANT_FLAG);
+    fd.filter.maskBits = uint16(CollisionFlag::PLANT_MASK);
+
+  } else if (isCorpse()) {
+    fd.filter.categoryBits = uint16(CollisionFlag::CORPSE_FLAG);
+    fd.filter.maskBits = uint16(CollisionFlag::CORPSE_MASK);
+  }
+
   _body.CreateFixture(&fd);
 
-  _userData.type = BodyType::PLANT;
-  _userData.ptr.foodlet = this;
   _body.SetUserData(&_userData);
 
-  _maxEnergy = maxStorage(_type, _radius);
+  _maxEnergy = maxStorage(type, _radius);
   assert(_energy <= _maxEnergy);
 
   _baseColor = utils::uniformStdArray<Color>(0);
@@ -52,15 +61,15 @@ void Foodlet::consumed(decimal de) {
 
 void Foodlet::updateColor(void) {
   float f = float(fullness());
-  if (_type == BodyType::PLANT)
+  if (isPlant())
     _color = {0, .25f*(3+f), 0};
 
-  else if (_type == BodyType::CORPSE)
+  else if (isCorpse())
     _color = {f*_baseColor[0], f*_baseColor[1], f*_baseColor[2]};
 }
 
 void Foodlet::update(Environment &env) {
-  if (_type == BodyType::CORPSE) {
+  if (isCorpse()) {
     decimal de = config::Simulation::decompositionRate() * env.dt();
     utils::iclip_max(de, _energy);
     _energy -= de;

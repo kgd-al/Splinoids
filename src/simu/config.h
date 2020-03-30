@@ -25,7 +25,7 @@ struct Critter;
 struct Foodlet;
 struct Obstacle;
 
-enum class BodyType {
+enum class BodyType : uint8 {
   CRITTER,
   CORPSE,
   PLANT,
@@ -40,6 +40,21 @@ struct b2BodyUserData {
     Foodlet *foodlet;
     Obstacle *obstacle; // Always null
   } ptr;
+};
+
+enum struct CollisionFlag : uint16 {
+  OBSTACLE_FLAG = 0x01,
+  CRITTER_BODY_FLAG = 0x02,
+  CRITTER_SPLN_FLAG = 0x04,
+  PLANT_FLAG = 0x08,
+  CORPSE_FLAG = 0x10,
+
+  ALL_MASK = 0x1F,
+  OBSTACLE_MASK = ALL_MASK,
+  CRITTER_BODY_MASK = ALL_MASK,
+  CRITTER_SPLN_MASK = ALL_MASK ^ CORPSE_FLAG,
+  PLANT_MASK = ALL_MASK,
+  CORPSE_MASK = ALL_MASK,
 };
 
 }
@@ -68,6 +83,7 @@ struct CONFIG_FILE(Simulation) {
   DECLARE_PARAMETER(decimal, decompositionRate)
 
   // Splinoid constants
+  DECLARE_PARAMETER(int, growthSubsteps)
   DECLARE_PARAMETER(decimal, healthToEnergyRatio)
   DECLARE_PARAMETER(float, critterBaseSpeed)
   DECLARE_PARAMETER(float, combatBaselineIntensity)
@@ -80,6 +96,7 @@ struct CONFIG_FILE(Simulation) {
   DECLARE_PARAMETER(decimal, energyAbsorptionRate)
 
   // Durations of world and physics
+  DECLARE_PARAMETER(bool, b2FixedBodyCOM)
   DECLARE_PARAMETER(uint, b2VelocityIter)
   DECLARE_PARAMETER(uint, b2PositionIter)
   DECLARE_PARAMETER(uint, ticksPerSecond)
@@ -88,7 +105,7 @@ struct CONFIG_FILE(Simulation) {
 
   // Other
   DECLARE_PARAMETER(bool, screwTheEntropy)
-  DECLARE_PARAMETER(uint, ssgaMinPopSize)
+  DECLARE_PARAMETER(uint, ssgaMinPopSizeRatio)  // Of the initial population size
 };
 
 } // end of namespace config

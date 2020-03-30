@@ -49,10 +49,9 @@ DEFINE_PARAMETER(float, plantMaxRadius, 1)
 DEFINE_PARAMETER(float, plantEnergyDensity, 4)
 DEFINE_PARAMETER(decimal, decompositionRate, .01)
 
+DEFINE_PARAMETER(int, growthSubsteps, 4)
 DEFINE_PARAMETER(decimal, healthToEnergyRatio, .05)
-
 DEFINE_PARAMETER(float, critterBaseSpeed, 4)
-
 DEFINE_PARAMETER(float, combatBaselineIntensity, .1)
 
 DEFINE_PARAMETER(float, baselineAgingSpeed, .01)
@@ -61,6 +60,7 @@ DEFINE_PARAMETER(decimal, baselineRegenerationRate, .1)
 DEFINE_PARAMETER(decimal, motorEnergyConsumption, .0025)
 DEFINE_PARAMETER(decimal, energyAbsorptionRate, .1)
 
+DEFINE_PARAMETER(bool, b2FixedBodyCOM, true)
 DEFINE_PARAMETER(uint, b2VelocityIter, 8)
 DEFINE_PARAMETER(uint, b2PositionIter, 3)
 DEFINE_PARAMETER(uint, ticksPerSecond, 50)
@@ -68,7 +68,7 @@ DEFINE_PARAMETER(uint, secondsPerDay, 200)
 DEFINE_PARAMETER(uint, daysPerYear, 1000)
 
 DEFINE_PARAMETER(bool, screwTheEntropy, true)
-DEFINE_PARAMETER(uint, ssgaMinPopSize, 1)
+DEFINE_PARAMETER(uint, ssgaMinPopSizeRatio, 1)
 
 #undef CFILE
 } // end of namespace config

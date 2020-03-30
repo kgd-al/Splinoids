@@ -176,6 +176,10 @@ void MainView::buildActions(void) {
   addAction(mVisu, "go-previous", "Select previous", "",
             Qt::Key_Left, [this] { selectPrevious(); });
 
+  addBoolAction(mVisu, "", "BrainDead Selection", "",
+                Qt::Key_B, [this] {
+    if (selection()) selection()->object().brainDead = _brainDeadSelection;
+  }, _brainDeadSelection);
 
   QMenu *mGui = _mbar->addMenu("GUI");
 
@@ -273,6 +277,7 @@ void MainView::buildActions(void) {
 MainView::MainView (visu::GraphicSimulation &simulation,
                     StatsView *stats, QMenuBar *bar)
   : _simu(simulation), _stats(stats), _mbar(bar),
+    _brainDeadSelection(true),
     _running(false), _stepping(false), _zoomout(true) {
 
   setScene(simulation.scene());

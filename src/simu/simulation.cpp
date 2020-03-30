@@ -4,7 +4,10 @@
 
 namespace simu {
 
-Simulation::Simulation(void) : _environment(nullptr) {}
+static constexpr int debugCritterManagement = 0;
+static constexpr int debugFoodletManagement = 0;
+
+Simulation::Simulation(void) : _environment(nullptr), _stepTimeMs(0) {}
 
 Simulation::~Simulation (void) {
   clear();
@@ -19,11 +22,27 @@ void Simulation::init(const Environment::Genome &egenome,
 //  cgenome.vision.angleRelative = -M_PI/4;
 //  cgenome.vision.width = M_PI/4.;
 //  cgenome.vision.precision = 1;
-  std::cerr << "Splinoid min energy: " << Critter::energyForCreation() << "\n"
-            << "   Plant min energy: "
+  std::cerr << "   Plant min energy: "
             << Foodlet::maxStorage(BodyType::PLANT,
                                    config::Simulation::plantMinRadius())
-            << std::endl;
+            << "\n";
+
+  auto le = [&cgenome] (float v) {
+    return Critter::lifeExpectancy(Critter::clockSpeed(cgenome, v));
+  };
+  auto sd = [&cgenome] (float v, bool y) {
+    auto s = y ? Critter::MIN_SIZE : Critter::MAX_SIZE;
+    return Critter::starvationDuration(s,
+      Critter::maximalEnergyStorage(s),
+      Critter::clockSpeed(cgenome, v));
+  };
+  std::cerr << "Splinoid min energy: " << Critter::energyForCreation() << "\n"
+            << "   Old age duration: " << le(0) << ", " << le(.5) << ", "
+              << le(1) << "\n"
+            << "Starvation duration:\n\t"
+              << sd(0, true) << ", " << sd(.5, true) << ", " << sd(1, true)
+              << "\n\t" << sd(0, false) << ", " << sd(.5, false) << ", "
+              << sd(1, false) << std::endl;
 
   _systemExpectedEnergy = data.ienergy;
 
@@ -31,7 +50,6 @@ void Simulation::init(const Environment::Genome &egenome,
 
   _environment = std::make_unique<Environment>(egenome);
   _environment->modifyEnergyReserve(+data.ienergy);
-  detectBudgetFluctuations(0);
 
   _gidManager.setNext(cgenome.id());
   cgenome.gdata.setAsPrimordial(_gidManager);
@@ -59,7 +77,9 @@ void Simulation::init(const Environment::Genome &egenome,
 //    if (i == 0) x = 0, y = 0, a = 0;
 //    if (i == 1) x = 2, y = 0, a = M_PI/2;
 
-    if (i == 0) x = -49, y = 0, a = M_PI;
+//    if (i == 0) x = 49, y = 49, a = M_PI/4;
+//    if (i == 1) x = 47, y = 50-sqrt(2), a = M_PI/2;
+//    if (i == 2) x = 50-sqrt(2), y = 47, a = 0;
 
     addCritter(cg, x, y, a, energyPerCritter);
   }
@@ -69,6 +89,8 @@ void Simulation::init(const Environment::Genome &egenome,
   plantRenewal(W * data.pRange);
 
   _statsLogger.open(config::Simulation::logFile());
+
+  _ssga.init(_critters.size());
 
   postInit();
 
@@ -86,15 +108,6 @@ Critter* Simulation::addCritter (const CGenome &genome,
   bodyDef.linearDamping = .9;
 
   b2Body *body = physics().CreateBody(&bodyDef);
-
-//  b2FrictionJointDef frictionDef;
-//  frictionDef.Initialize(body, _environment->body(), {0,0});
-//  frictionDef.maxForce = 1;
-//  frictionDef.maxTorque = 1;
-//  frictionDef.
-
-  // Seems buggy...
-//  _environment->physics().CreateJoint(&frictionDef);
 
 #ifndef NDEBUG
   decimal prevEE = _environment->energy();
@@ -119,10 +132,15 @@ Critter* Simulation::addCritter (const CGenome &genome,
               << dEE +e_ << std::endl;
 #endif
 
+  if (debugCritterManagement)
+    std::cerr << "Created critter " << c->id() << " at " << c->pos()
+              << std::endl;
+
   return c;
 }
 
 void Simulation::delCritter (Critter *critter) {
+  if (debugCritterManagement) critter->autopsy();
   _critters.erase(critter);
   physics().DestroyBody(&critter->body());
   delete critter;
@@ -136,11 +154,21 @@ Foodlet* Simulation::addFoodlet(BodyType t, float x, float y, float r, decimal e
   b2Body *body = _environment->physics().CreateBody(&bodyDef);
   Foodlet *f = new Foodlet (t, _nextPlantID++, body, r, e);
 
+  if (debugFoodletManagement)
+    std::cerr << "Added foodlet " << f->id() << " of type " << uint(f->type())
+              << " at " << f->body().GetPosition() << " with energy "
+              << e << std::endl;
+
   _foodlets.insert(f);
   return f;
 }
 
 void Simulation::delFoodlet(Foodlet *foodlet) {
+  if (debugFoodletManagement)
+    std::cerr << "Destroyed foodlet " << foodlet->id() << " of type "
+              << uint(foodlet->type()) << " at "
+              << foodlet->body().GetPosition() << std::endl;
+
   _foodlets.erase(foodlet);
   physics().DestroyBody(&foodlet->body());
   delete foodlet;
@@ -152,6 +180,8 @@ void Simulation::clear (void) {
 }
 
 void Simulation::step (void) {
+  auto stepStart = now(), start = stepStart;
+
 //  std::cerr << "\n## Simulation step " << _time.timestamp() << " ("
 //            << _time.pretty() << ") ##" << std::endl;
 
@@ -164,53 +194,73 @@ void Simulation::step (void) {
     _minGen = std::min(_minGen, c->genotype().gdata.generation);
     _maxGen = std::max(_maxGen, c->genotype().gdata.generation);
   }
+  _splnTimeMs = durationFrom(start);  start = now();
 
   if (_ssga.watching()) _ssga.prePhysicsStep(_critters);
 
   _environment->step();
 
   if (_ssga.watching()) _ssga.postPhysicsStep(_critters);
+  _envTimeMs = durationFrom(start);  start = now();
 
   produceCorpses();
   decomposition();
+  _decayTimeMs = durationFrom(start);  start = now();
+
+  steadyStateGA();
+  if (_time.secondFraction() == 0)  plantRenewal();
+  _regenTimeMs = durationFrom(start);  start = now();
+
+  if (false) {
+  /* TODO DEBUG AREA
+  */
+    const auto doTo = [this] (Critter::ID id, auto f) {
+      Critter *c = nullptr;
+      for (Critter *c_: _critters) {
+        if (c_->id() == id) {
+          c = c_;
+          break;
+        }
+      }
+      if (c)  f(c);
+    };
+//    const auto forcedMotion = [this] (float a) {
+//      return [this, a] (Critter *c){
+//        if (_time.second() == 0)
+//          c->body().ApplyForceToCenter(
+//            4*config::Simulation::critterBaseSpeed()*fromPolar(a,1), true);
+//      };
+//    };
+//    doTo(Critter::ID(1), forcedMotion(M_PI/4));
+//    doTo(Critter::ID(2), forcedMotion(M_PI/2));
+//    doTo(Critter::ID(3), forcedMotion(0));
+    doTo(Critter::ID(1), [this] (Critter *c) {
+      if (_time.timestamp() == 50) {
+//        c->applyHealthDamage(
+//            Critter::FixtureData(Critter::FixtureType::BODY, {0,0,0}),
+//            .025,  *_environment);
+        Critter::FixtureData fakeFD (
+          Critter::FixtureType::ARTIFACT, {0,0,0}, 0, Critter::Side::LEFT, 0);
+
+        bool d = c->applyHealthDamage(fakeFD, .5,  *_environment);
+        if (d)  c->destroySpline(Critter::splineIndex(fakeFD));
+      }
+    });
+  }
 
   if (_statsLogger) logStats();
 
   _time.next();
 
-  steadyStateGA();
-  if (_time.secondFraction() == 0)  plantRenewal();
-
-  if (false) {
-  /* TODO DEBUG AREA
-  */
-    Critter *c1 = nullptr;
-    for (Critter *c_: _critters) {
-      if (c_->id() == Critter::ID(1)) {
-        c1 = c_;
-        break;
-      }
-    }
-//    assert(c1);
-    if (c1) {
-//      if (_time.timestamp() == 4) {
-//        c1->applyHealthDamage(
-//            Critter::FixtureData(Critter::FixtureType::BODY, {0,0,0}),
-//            .025,  *_environment);
-//      }
-      if (_time.day() == 0)
-        c1->body().ApplyForceToCenter(
-          4*config::Simulation::critterBaseSpeed()*fromPolar(0*M_PI/12,1), true);
-    }
-  /*
-  */
-  }
-
+#ifndef NDEBUG
   // Fails when system energy diverges too much from initial value
   detectBudgetFluctuations();
+#endif
 
   // If above did not fail, effect small corrections to keep things smooth
   if (config::Simulation::screwTheEntropy())  correctFloatingErrors();
+
+  _stepTimeMs = durationFrom(stepStart);
 }
 
 void Simulation::produceCorpses(void) {
@@ -219,18 +269,13 @@ void Simulation::produceCorpses(void) {
     if (c->isDead())
       corpses.push_back(c);
 
-  detectBudgetFluctuations();
-
   for (Critter *c: corpses) {
-    c->autopsy();
     Foodlet *f = addFoodlet(BodyType::CORPSE, c->x(), c->y(), c->bodyRadius(),
                             c->totalEnergy());
     f->setBaseColor(c->bodyColor());
     f->updateColor();
     delCritter(c);
   }
-
-  detectBudgetFluctuations();
 }
 
 void Simulation::decomposition(void) {
@@ -319,26 +364,18 @@ decimal Simulation::totalEnergy(void) const {
 }
 
 void Simulation::steadyStateGA(void) {
-  static const auto ssgaMPS = config::Simulation::ssgaMinPopSize();
-  bool wasWatching = _ssga.watching();
-  _ssga.setWatching(_critters.size() < 2*ssgaMPS);
+  _ssga.update(_critters.size());
 
-  if (wasWatching && !_ssga.watching())
-    _ssga.clear();
+  static const auto minE = Critter::energyForCreation();
+  if (_ssga.active() && _time.secondFraction() == 0) {
+    float r = _environment->extent() - Critter::MIN_SIZE * Critter::RADIUS;
 
-  else {
-    static const auto minE = Critter::energyForCreation();
-    _ssga.setActive(_critters.size() < ssgaMPS);
-    if (_ssga.active() && _time.secondFraction() == 0) {
-      float r = _environment->extent() - Critter::MIN_SIZE * Critter::RADIUS;
-
-      while (_environment->energy() >= minE && _critters.size() < ssgaMPS) {
-        auto genome = _ssga.getRandomGenome(_dice, 5000);
-        genome.gdata.setAsPrimordial(_gidManager);
-        float a = _dice(0., 2*M_PI);
-        float x = _dice(-r, r), y = _dice(-r, r);
-        addCritter(genome, x, y, a, minE);
-      }
+    while (_environment->energy() >= minE && _ssga.active(_critters.size())) {
+      auto genome = _ssga.getRandomGenome(_dice, 5000);
+      genome.gdata.setAsPrimordial(_gidManager);
+      float a = _dice(0., 2*M_PI);
+      float x = _dice(-r, r), y = _dice(-r, r);
+      addCritter(genome, x, y, a, minE);
     }
   }
 }
@@ -354,6 +391,7 @@ void Simulation::correctFloatingErrors(void) {
   }
 }
 
+#ifndef NDEBUG
 void Simulation::detectBudgetFluctuations(float threshold) {
   decimal E = totalEnergy(), dE = _systemExpectedEnergy-E;
   if (std::fabs(dE) > threshold) {
@@ -364,5 +402,6 @@ void Simulation::detectBudgetFluctuations(float threshold) {
     assert(false);
   }
 }
+#endif
 
 } // end of namespace simu

@@ -12,7 +12,7 @@
 
 //#include "config/dependencies.h"
 
-long isValidSeed(const std::string& s) {
+long maybeSeed(const std::string& s) {
   char* p;
   long l = strtol(s.c_str(), &p, 10);
   return p? l : -1;
@@ -186,13 +186,14 @@ int main(int argc, char *argv[]) {
     if (configFile.empty()) config::Simulation::printConfig("");
     genotype::Critter::printMutationRates(std::cout, 2);
 
-    if (!isValidSeed(eGenomeArg)) {
+    long eGenomeSeed = maybeSeed(eGenomeArg);
+    if (eGenomeSeed < 0) {
       std::cout << "Reading environment genome from input file '"
                 << eGenomeArg << "'" << std::endl;
       eGenome = EGenome::fromFile(eGenomeArg);
 
     } else {
-      rng::FastDice dice (std::stoi(eGenomeArg));
+      rng::FastDice dice (eGenomeSeed);
       std::cout << "Generating environment genome from rng seed "
                 << dice.getSeed() << std::endl;
       eGenome = EGenome::random(dice);
@@ -200,13 +201,14 @@ int main(int argc, char *argv[]) {
     if (taurus != -1) eGenome.taurus = taurus;
     eGenome.toFile("last", 2);
 
-    if (!isValidSeed(cGenomeArg)) {
+    long cGenomeSeed = maybeSeed(cGenomeArg);
+    if (cGenomeSeed < 0) {
       std::cout << "Reading splinoid genome from input file '"
                 << cGenomeArg << "'" << std::endl;
       cGenome = CGenome::fromFile(cGenomeArg);
 
     } else {
-      rng::FastDice dice (std::stoi(cGenomeArg));
+      rng::FastDice dice (cGenomeSeed);
       std::cout << "Generating splinoid genome from rng seed "
                 << dice.getSeed() << std::endl;
       cGenome = CGenome::random(dice);

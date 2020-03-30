@@ -20,8 +20,8 @@ public:
   using Sex = Genome::Sex;
   using ID = phylogeny::GID;
 
-  static constexpr float MIN_SIZE = 1;  // New-born size
-  static constexpr float MAX_SIZE = 1;  // Mature size
+  static constexpr float MIN_SIZE = .2; // New-born size
+  static constexpr float MAX_SIZE = 1;  // Adult size
   static constexpr float RADIUS = .5; // Body size of a mature splinoid
 
   static constexpr float BODY_DENSITY = 1;
@@ -108,7 +108,11 @@ private:
   float _clockSpeed;
   float _age;
 
+  float _efficiency, _ec0Coeff, _ec1Coeff;
+  float _nextGrowthStep;
+
   decimal /*_maxEnergy,*/ _energy; // Only for main body
+  decimal _reproductionReserve;
 
   /* Each portion managed independantly
    * Indices are
@@ -180,6 +184,10 @@ public:
     return _body;
   }
 
+  auto sizeRatio (void) const {
+    return _size / MAX_SIZE;
+  }
+
   auto bodyRadius (void) const {
     return _size * RADIUS;
   }
@@ -200,19 +208,63 @@ public:
     return _body.GetMass();
   }
 
+  auto linearSpeed (void) const {
+    return _body.GetLinearVelocity().Length();
+  }
+
+  auto angularSpeed (void) const {
+    return _body.GetAngularVelocity();
+  }
+
+  auto efficiency (void) const {
+    return _efficiency;
+  }
+
+  auto reproductionReserve (void) const {
+    return _reproductionReserve;
+  }
+
+  auto reproductionReadiness (void) const {
+    return _reproductionReserve / energyForCreation();
+  }
+
   auto clockSpeed (void) const {
     return _clockSpeed;
   }
 
+  static auto clockSpeed (const Genome &g, float v) {
+    assert(0 <= v && v <= 1);
+    return (1-v) * g.minClockSpeed
+                       +    v  * g.maxClockSpeed;
+  }
+
   // v in [0;1]
   auto clockSpeed (float v) {
-    assert(0 <= v && v <= 1);
-    return _clockSpeed = (1-v) * _genotype.minClockSpeed
-                       +    v  * _genotype.maxClockSpeed;
+    return _clockSpeed = clockSpeed(_genotype, v);
   }
 
   auto age (void) const {
     return _age;
+  }
+
+  auto matureAt (void) const {
+    return _genotype.matureAge;
+  }
+
+  auto oldAt (void) const {
+    return _genotype.oldAge;
+  }
+
+  bool isYouth (void) const {
+    return _age < matureAt();
+  }
+
+  bool isAdult (void) const {
+    return matureAt() <= _age && _age < oldAt();
+  }
+
+  bool isElder (void) const {
+    return oldAt() <= _age;
   }
 
   decimal maxUsableEnergy (void) const {
@@ -264,12 +316,8 @@ public:
     return _destroyed.test(splineIndex(i, s));
   }
 
-  // Returns true if a spline was destroyed
   bool applyHealthDamage(const FixtureData &d, float amount, Environment &env);
-
-  // Perform the actual suppression (outside of the world-tick)
-  // splineIndex should be obtained through the dedicated function
-  void destroySpline (uint splineIndex);
+  void destroySpline(uint splineIndex);
 
   void updateShape (void);
 
@@ -355,31 +403,41 @@ public:
   // ===========================================================================
   // == Static computers
 
+  static void setEfficiencyCoeffs(float c0, float &c0Coeff,
+                                  float c1, float &c1Coeff);
+
   // age in [0,1]
-  static float efficiency (float age);
+  static float efficiency (float age,
+                           float c0, float c0Coeff,
+                           float c1, float c1Coeff);
+
+  static float nextGrowthStepAt (uint currentStep);
 
   static decimal energyForCreation (void) {
     return 2*maximalEnergyStorage(MIN_SIZE);
   }
 
   static decimal maximalEnergyStorage (float size) {
+    assert(MIN_SIZE <= size && size <= MAX_SIZE);
+//    return size * BODY_DENSITY;
     return decimal(M_PI * size * size * RADIUS * RADIUS * BODY_DENSITY);
   }
 
   static float computeVisionRange (float visionWidth);
 
+  static float lifeExpectancy (float clockSpeed);
+  static float starvationDuration (float size, float energy, float clockSpeed);
+
 private:
   // ===========================================================================
   // == Iteration substeps
 
+  void drivingCorrections (void);
   void performVision (const Environment &env);
   void neuralStep (void);
   void energyConsumption (Environment &env);
   void regeneration (Environment &env);
-
-  void growthStep (void);
-  void reproduction (void);
-  void senescence (void);
+  void aging (float dt);
 
   // ===========================================================================
   // == Shape-defining internal methods

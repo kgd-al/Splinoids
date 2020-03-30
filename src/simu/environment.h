@@ -38,17 +38,19 @@ public:
 
 //  using PendingDeletions = std::set<std::pair<Critter*, uint>>;
 
-  using TeleportRequests = std::set<Critter*>;
+  using EdgeCritters = std::set<Critter*>;
 
   struct FightingDrawData {
+    P2D pA, pB; // Position of bodies
     P2D vA, vB; // Velocity of bodies
-//    P2D pA, pB; // World position of corresponding fixture's COM
     P2D C, C_;  // Combat axis (raw and normalized)
     float VA, VB; // Combat intensity
   };
 #ifndef NDEBUG
   std::vector<FightingDrawData> fightingDrawData;
 #endif
+
+  static const bool boxEdges;
 
 private:
   Genome _genome;
@@ -65,7 +67,7 @@ private:
   // Destroyed splines that must be deleted after the physical step
 //  PendingDeletions _pendingDeletions;
 
-  TeleportRequests _teleportRequests;
+  EdgeCritters _edgeCritters;
 
   decimal _energyReserve;
 
@@ -124,8 +126,10 @@ public:
 private:
   void createEdges (void);
 
-  void processFight (void);
-  void doTeleport (Critter *c);
+  void processFight (Critter *cA, Critter *cB,
+                     const FightingData &d,
+                     std::set<std::pair<Critter*,uint>> &destroyedSplines);
+  void maybeTeleport (Critter *c);
 };
 
 } // end of namespace simu

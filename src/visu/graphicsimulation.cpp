@@ -21,8 +21,19 @@ GraphicSimulation::GraphicSimulation(QStatusBar *sbar, gui::StatsView *stats)
 
     "-- Energy --",
     "[E] Plants", "[E] Corpses", "[E] Splinoids", "[E] Reserve",
-    "[E] Total"
+    "[E] Total",
+
+    "-- Durations --",
+    "[D] Visu    ",
+     "[D] Simu   ",
+      "[D] Spln  ",
+      "[D] Env   ",
+       "[D] Box2D",
+      "[D] Decay ",
+      "[D] Regen ",
   });
+
+  _gstepTimeMs = 0;
 }
 
 GraphicSimulation::~GraphicSimulation (void) = default;
@@ -46,6 +57,8 @@ void GraphicSimulation::postInit(void) {
 }
 
 void GraphicSimulation::step (void) {
+  auto start = now();
+
   for (uint i=0; i<config::Visualisation::substepsSpeed(); i++)
     Simulation::step();
 
@@ -65,12 +78,8 @@ void GraphicSimulation::step (void) {
                       + QString::fromStdString(_time.pretty()));
   _genLabel->setText("[" + QString::number(_minGen) + ";"
                      + QString::number(_maxGen) + "]");
-}
 
-void GraphicSimulation::prePhysicsStep (void) {
-  if (_selection) {
-
-  }
+  _gstepTimeMs = durationFrom(start);
 }
 
 void GraphicSimulation::processStats(const Stats &s) const {
@@ -89,6 +98,14 @@ void GraphicSimulation::processStats(const Stats &s) const {
   _stats->update("[E] Reserve", float(s.ereserve), 2);
   _stats->update("[E] Total",
                  float(s.eplants+s.ecorpses+s.ecritters+s.ereserve), 2);
+
+  _stats->update("[D] Visu    ", _gstepTimeMs, 0);
+  _stats->update( "[D] Simu   ", _stepTimeMs, 0);
+  _stats->update(  "[D] Spln  ", _splnTimeMs, 0);
+  _stats->update(  "[D] Env   ", _envTimeMs, 0);
+  _stats->update(   "[D] Box2D", _environment->physics().GetProfile().step, 0);
+  _stats->update(  "[D] Decay ", _envTimeMs, 0);
+  _stats->update(  "[D] Regen ", _envTimeMs, 0);
 }
 
 simu::Critter*
