@@ -90,7 +90,8 @@ private:
     P2D cr0;  // First control point
     P2D cr1;  // Second control point
   };
-  std::array<SplineData, SPLINES_COUNT> _splinesData;
+  using SplinesData = std::array<SplineData, SPLINES_COUNT>;
+  SplinesData _splinesData;
 
   b2Fixture *_b2Body;
   std::array<std::vector<b2Fixture*>, 2*SPLINES_COUNT> _b2Artifacts;
@@ -112,7 +113,9 @@ private:
   float _nextGrowthStep;
 
   decimal /*_maxEnergy,*/ _energy; // Only for main body
+
   decimal _reproductionReserve;
+  b2Fixture *_reproductionSensor;
 
   /* Each portion managed independantly
    * Indices are
@@ -154,9 +157,13 @@ public:
     return genotype().sex();
   }
 
+  static auto dimorphism (uint i, const Genome &g) {
+    return g.dimorphism[4*g.sex()+i];
+  }
+
   // Dimorphism coefficient for current sex and specified spline
   auto dimorphism (uint i) const {
-    return _genotype.dimorphism[4*sex()+i];
+    return dimorphism(i, _genotype);
   }
 
   auto pos (void) const {
@@ -292,6 +299,14 @@ public:
     return splineIndex(fd.sindex, fd.sside);
   }
 
+  const auto& masses (void) const {
+    return _masses;
+  }
+
+  const auto& health (void) const {
+    return _currHealth;
+  }
+
   auto bodyMaxHealth (void) const {
     return _masses[0];
   }
@@ -425,6 +440,9 @@ public:
 
   static float computeVisionRange (float visionWidth);
 
+  static float agingSpeed (float clockSpeed);
+  static float baselineEnergyConsumption (float size, float clockSpeed);
+
   static float lifeExpectancy (float clockSpeed);
   static float starvationDuration (float size, float energy, float clockSpeed);
 
@@ -434,7 +452,7 @@ private:
 
   void drivingCorrections (void);
   void performVision (const Environment &env);
-  void neuralStep (void);
+  void neuralStep (Environment &env);
   void energyConsumption (Environment &env);
   void regeneration (Environment &env);
   void aging (float dt);
@@ -442,7 +460,8 @@ private:
   // ===========================================================================
   // == Shape-defining internal methods
 
-  void updateSplines (void);
+  static void generateSplinesData (float r, float e, const Genome &g,
+                                   SplinesData &d);
   void updateObjects (void);
 
   static void testConvex (const Vertices &o, std::vector<Vertices> &v);
@@ -457,6 +476,11 @@ private:
                          const FixtureData &data);
 
   void delFixture (b2Fixture *f);
+
+  // ===========================================================================
+  // == Vision range managing internal methods
+  void generateVisionRays (void);
+  void updateVisionRays (void);
 
   // ===========================================================================
 };

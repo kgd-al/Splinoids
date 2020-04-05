@@ -59,12 +59,9 @@ void GraphicSimulation::postInit(void) {
 void GraphicSimulation::step (void) {
   auto start = now();
 
-  for (uint i=0; i<config::Visualisation::substepsSpeed(); i++)
-    Simulation::step();
+  Simulation::step();
 
-  for (const auto &p: _critters)
-    if (p.first->body().IsAwake())
-      p.second->updatePosition();
+  for (const auto &p: _critters)  p.second->update();
 
   for (const auto &p: _foodlets)
     if (p.first->isCorpse())

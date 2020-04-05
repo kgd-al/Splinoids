@@ -174,6 +174,7 @@ struct EDNA_CONFIG_FILE(Critter) {
 
   using Crossover = genotype::BOCData::config_t;
   DECLARE_SUBCONFIG(Crossover, configCrossover)
+  DECLARE_SUBCONFIG(genotype::Vision::config_t, configVision)
 
   DECLARE_PARAMETER(MutationRates, mutationRates)
   DECLARE_PARAMETER(DistanceWeights, distanceWeights)

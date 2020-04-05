@@ -268,12 +268,14 @@ private:
 // =============================================================================
 
 struct PrettyBar : public QProgressBar {
-  static constexpr float SCALE = 1000;
+  static constexpr int MAX = 1000, SCALE = 1000;
   enum Type {
     BODY_HEALTH, BODY_ENERGY, SPLINE_HEALTH
   };
   Type type;
   QColor chunkColor;
+
+  float max = -1, scale = 0;
 
   PrettyBar (Type t) : QProgressBar() {
     type = t;
@@ -288,38 +290,41 @@ struct PrettyBar : public QProgressBar {
     setStyle(chunkColor);
 
     if (type != SPLINE_HEALTH)
-          setFormat("%v / %m");
+          prettyFormat();
     else  setTextVisible(false);
   }
 
   void noValue (void) {
-    setMaximum(0);
-    setValue(0, false);
+    setMaximum(0, false);
+    setValue(0);
     setFormat("");
   }
 
-  void setMaximum (float m) {
+  void setMaximum (float m, bool destroyed) {
     if (m == 0) {
+      max = -1;
       setStyle(palette().base().color());
       QProgressBar::setRange(-1, -1);
 
     } else {
+      max = m;
       setStyle(chunkColor);
-      QProgressBar::setRange(0, SCALE * m);
+      QProgressBar::setRange(0, MAX);
     }
-  }
 
-  void setValue (float v, bool destroyed) {
     if (type == SPLINE_HEALTH) {
       if (destroyed)
         setFormat("Destroyed");
-      else if (v == 0)
+      else if (m == 0)
         setFormat("Inactive");
       else
         setFormat("");
     } else
-      setFormat("%v / %m");
-    QProgressBar::setValue(SCALE * v);
+      prettyFormat();
+  }
+
+  void setValue (float v) {
+    QProgressBar::setValue(MAX * v / max);
   }
 
   void setStyle (const QColor &cc) {
@@ -360,6 +365,18 @@ struct PrettyBar : public QProgressBar {
         painter.drawLine(br.bottomLeft(), br.topRight());
       }
     }
+  }
+
+private:
+  void prettyFormat (void) {
+    setFormat(QString::number(SCALE * floatValue(), 'f', 0)
+              + " / "
+              + QString::number(SCALE * max, 'f', 0));
+  }
+
+  float floatValue (void) const {
+    if (max == -1)  return NAN;
+    return max * value() / MAX;
   }
 };
 
@@ -449,11 +466,15 @@ GeneticManipulator::GeneticManipulator(QWidget *parent)
   setSubject(nullptr);
 }
 
+QString defaultFilename (QLabel *firstname, QLabel *lastname) {
+  return firstname->text().split(' ').back() + "_" + lastname->text();
+}
+
 void GeneticManipulator::saveSubjectGenotype(void) {
   static const QString defaultExt =
     QString::fromStdString( _subject->object().genotype().extension());
 
-  QString defaultFile = _lFirstname->text() + "_" +_lLastname->text();
+  QString defaultFile = defaultFilename(_lFirstname, _lLastname);
   QString filename = QFileDialog::getSaveFileName(
     this, "Save " + defaultFile + " to...",
     defaultFile + defaultExt,
@@ -470,13 +491,13 @@ void GeneticManipulator::saveSubjectGenotype(const QString &filename) const {
 void GeneticManipulator::printSubjectPhenotype(void) {
   static const QString defaultExt = ".png";
 
-  QString defaultFile = _lFirstname->text() + "_" +_lLastname->text();
+  QString defaultFile = defaultFilename(_lFirstname, _lLastname);
   QString filename = QFileDialog::getSaveFileName(
     this, "Print " + defaultFile + " to...",
     defaultFile + defaultExt,
-    "Image (*" + defaultExt + ")");
+    "Rasterized (*.png)");
 
-  saveSubjectGenotype(filename);
+  printSubjectPhenotype(filename);
 }
 
 void GeneticManipulator::printSubjectPhenotype(const QString &filename) const {
@@ -710,7 +731,6 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
       return QString::number(180. * v / M_PI, 'f', 1);
     };
 
-    set("Mass", &SCritter::mass);
     set("Adult", &SCritter::matureAt);
     set("Old", &SCritter::oldAt);
     set("Angle", &SCritter::visionBodyAngle, degrees);
@@ -736,13 +756,7 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     for (uint j=0; j<2; j++)
       _bPickers[j]->setGeneValue(g.colors[j*(S_v+1)]);
 
-    _sBars[0]->setMaximum(float(c.bodyMaxHealth()));
-    _sBars[1]->setMaximum(float(c.maxUsableEnergy()));
-
-    for (uint i=0; i<S_v; i++)
-      for (SCritter::Side s: {SCritter::Side::LEFT, SCritter::Side::RIGHT})
-        _sBars[2+uint(s)*S_v+i]->setMaximum(float(c.splineMaxHealth(i, s)));
-
+    updateShapeData();
     readCurrentStatus();
 
   } else {
@@ -770,6 +784,23 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
   updateWindowName();
 
   _updating = false;
+}
+
+void GeneticManipulator::updateShapeData(void) {
+  using SCritter = simu::Critter;
+  const SCritter &c = _subject->object();
+
+  set("Mass", &SCritter::mass);
+
+  _sBars[0]->setMaximum(float(c.bodyMaxHealth()), false);
+  _sBars[1]->setMaximum(float(c.maxUsableEnergy()), false);
+
+  for (uint i=0; i<S_v; i++)
+    for (SCritter::Side s: {SCritter::Side::LEFT, SCritter::Side::RIGHT})
+      _sBars[2+uint(s)*S_v+i]->setMaximum(float(c.splineMaxHealth(i, s)),
+                                          c.destroyedSpline(i, s));
+
+  _proxy->objectUpdated();
 }
 
 void GeneticManipulator::readCurrentStatus(void) {
@@ -800,14 +831,12 @@ void GeneticManipulator::readCurrentStatus(void) {
   const auto &r = c.retina();
   for (uint i=0; i<r.size(); i++) _rLabels[i+1]->setValue(r[i]);
 
-  _sBars[0]->setValue(float(c.usableEnergy()), false);
-  _sBars[1]->setValue(float(c.bodyHealth()), false);
+  _sBars[0]->setValue(float(c.usableEnergy()));
+  _sBars[1]->setValue(float(c.bodyHealth()));
 
   for (uint i=0; i<S_v; i++)
     for (SCritter::Side s: {SCritter::Side::LEFT, SCritter::Side::RIGHT})
-      _sBars[2+uint(s)*S_v+i]->setValue(float(c.splineHealth(i, s)),
-                                        c.destroyedSpline(i, s));
-
+      _sBars[2+uint(s)*S_v+i]->setValue(float(c.splineHealth(i, s)));
 }
 
 void GeneticManipulator::updateSubject(void) {

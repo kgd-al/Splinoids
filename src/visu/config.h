@@ -23,6 +23,8 @@ struct CONFIG_FILE(Visualisation) {
 
   DECLARE_PARAMETER(RenderingType, renderType)
 
+  DECLARE_PARAMETER(bool, brainDeadSelection)
+
   DECLARE_PARAMETER(int, showFights)
 
   DECLARE_PARAMETER(bool, showGrid)

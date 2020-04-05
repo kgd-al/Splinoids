@@ -3,10 +3,11 @@
 
 namespace simu {
 
-static constexpr bool debugMotors = 0;
-static constexpr bool debugMetabolism = 0;
-static constexpr bool debugRegen = 0;
-
+static constexpr int debugMotors = 0;
+static constexpr int debugMetabolism = 0;
+static constexpr int debugRegen = 0;
+static constexpr int debugGrowth = 0;
+static constexpr int debugReproduction = 2;
 
 Critter::FixtureData::FixtureData (FixtureType t, const Color &c,
                                    uint si, Side fs, uint ai)
@@ -117,8 +118,9 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e)
   assert(0 <= _clockSpeed && _clockSpeed < 10);
 
   _energy = e / initEnergyRatio;
+
   _reproductionReserve = 0;
-//  _maxEnergy = initialEnergyStorage();
+  _reproductionSensor = nullptr;
 
   // Update current healths
   _currHealth[0] = e * (1 - 1/initEnergyRatio) / config::Simulation::healthToEnergyRatio();
@@ -151,43 +153,7 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e)
 //                << " health: " << splineHealth(i, s) << " / "
 //                << splineMaxHealth(i) << "\n";
 //  std::cerr << std::endl;
-
-  const auto &v = _genotype.vision;
-  uint rs_h = 2 * v.precision + 1;
-  uint rs = 2 * rs_h;
-  _retina.resize(rs, Color());
-  _raysEnd.resize(rs, P2D(0,0));
-  _raysFraction.resize(rs, 1);
-
-  float a0 = v.angleBody;
-  _raysStart = {
-    bodyRadius() * P2D(std::cos(+a0), std::sin(+a0)),
-    bodyRadius() * P2D(std::cos(-a0), std::sin(-a0))
-  };
-
-  float r = _visionRange;
-  for (uint i=0; i<rs_h; i++) {
-    float da = 0;
-    if (v.precision > 0) da = .5 * v.width * (i / float(v.precision) - 1);
-    float a = a0 + v.angleRelative + da;
-//    std::cerr << "[" << i << "] a0 = "
-//              << 180*a0/M_PI << "; da = " << 180*da/M_PI
-//              << "; a = " << 180*a/M_PI << std::endl;
-
-    uint il = rs_h-i-1, ir = rs_h+i;
-    _raysEnd[il] = _raysStart[0] + r * P2D(std::cos(a), std::sin(a));
-    _raysEnd[ir] = _raysEnd[il];
-    _raysEnd[ir].y *= -1;
-
-//    std::cerr << "E[" << il << "] = " << _raysEnd[il]
-//              << " = " << _raysStart[0] << " + "
-//              << r * P2D(std::cos(a), std::sin(a)) << std::endl;
-//    std::cerr << "E[" << ir << "] = " << _raysEnd[ir]
-//                 << " = { " << _raysEnd[il].x << ", " << -_raysEnd[il].y
-//                 << " }" << std::endl;
-//    std::cerr << std::endl;
-  }
-//  std::cerr << std::endl;
+  generateVisionRays();
 
   _objectUserData.type = BodyType::CRITTER;
   _objectUserData.ptr.critter = this;
@@ -205,7 +171,7 @@ void Critter::step(Environment &env) {
   performVision(env);
 
   // Query neural network
-  neuralStep();
+  neuralStep(env);
 
   // Distribute energy
   energyConsumption(env);
@@ -320,16 +286,37 @@ void Critter::performVision(const Environment &env) {
   }
 }
 
-void Critter::neuralStep(void) {  ERR
-
+void Critter::neuralStep(Environment &env) {  ERR
   if (!brainDead) {
     // Set inputs
+    float f = usableEnergy() / maxUsableEnergy();
+
     // Process n propagation steps
     // Collect outputs
 
-    rng::FastDice dice;
-    if (dice(.1)) {
-      if (dice(.6))
+    auto &dice = env.dice();
+
+    if (false) { // random walk
+      if (dice(.1)) {
+        if (dice(.6))
+          _motors[Motor::LEFT] = _motors[Motor::RIGHT] = 1;
+        else if (dice(.2))
+          _motors[Motor::LEFT] = _motors[Motor::RIGHT] = -1;
+        else {
+          int d = dice.toss(-1,1);
+          _motors[Motor::LEFT] = d;
+          _motors[Motor::RIGHT] = -d;
+        }
+      }
+
+    } else {  // Feed. Mate. Repeat
+      if (f < .75) { // Go to food
+        if (_retina[0][0] == 0 && _retina[0][2] == 0 && _retina[0][1] >= .75)
+          _motors[Motor::LEFT] = 1;
+        if (_retina[1][0] == 0 && _retina[1][2] == 0 && _retina[1][1] >= .75)
+          _motors[Motor::RIGHT] = 1;
+
+      } else if (dice(.6))  // Walk around
         _motors[Motor::LEFT] = _motors[Motor::RIGHT] = 1;
       else if (dice(.2))
         _motors[Motor::LEFT] = _motors[Motor::RIGHT] = -1;
@@ -344,17 +331,17 @@ void Critter::neuralStep(void) {  ERR
   // Apply requested motor output
   for (auto &m: _motors) {
     float s = config::Simulation::critterBaseSpeed()
-        * m.second * _clockSpeed * _efficiency;
+        * m.second * _clockSpeed * _efficiency * _size;
     P2D f = _body.GetWorldVector({s,0}),
         p = _body.GetWorldPoint({0, int(m.first)*.5f*bodyRadius()});
     _body.ApplyForce(f, p, true);
 
     if (debugMotors)
-      std::cerr << "C" << id() << "Applied motor force for " << m.first
+      std::cerr << "C" << id() << " Applied motor force for " << m.first
                 << " of " << s << " = "
                 << config::Simulation::critterBaseSpeed() << " * "
                 << m.second << " * " << _clockSpeed << " * "
-                << _efficiency<< std::endl;
+                << _efficiency << " * " << _size << std::endl;
   }
 }
 
@@ -362,17 +349,17 @@ void Critter::energyConsumption (Environment &env) {
   decimal dt = env.dt();
   decimal de = 0;
 
-  de += config::Simulation::baselineEnergyConsumption();
+  de += baselineEnergyConsumption(_size, _clockSpeed);
   de += config::Simulation::motorEnergyConsumption()
-        * (std::fabs(_motors[Motor::LEFT]) + std::fabs(_motors[Motor::RIGHT]));
-  de *= _clockSpeed;
+        * (std::fabs(_motors[Motor::LEFT]) + std::fabs(_motors[Motor::RIGHT]))
+        * _clockSpeed * _size;
   de *= dt;
 
   if (debugMetabolism)
-    std::cerr << "C" << id() << " de = " << de << " = ("
-              << config::Simulation::baselineEnergyConsumption() << " + "
-              << config::Simulation::motorEnergyConsumption() << ") * "
-              << _clockSpeed << " * " << dt << std::endl;
+    std::cerr << "C" << id() << " de = " << de << " = "
+              << baselineEnergyConsumption(_size, _clockSpeed) << " + "
+              << config::Simulation::motorEnergyConsumption() << " * "
+              << _clockSpeed << " * " << _size << " * " << dt << std::endl;
 
   de = std::min(de, _energy);
   _energy -= de;
@@ -399,11 +386,12 @@ void Critter::regeneration (Environment &env) {
   if (debugRegen)
     std::cerr << "C" << id() << " missing health (total): " << mh << "\n";
 
-  dE = config::Simulation::baselineRegenerationRate() * _clockSpeed * dt;
+  dE = _energy * config::Simulation::baselineRegenerationRate()
+      * _clockSpeed * dt;
 
   if (debugRegen)
     std::cerr << "Maximal energy for regeneration: " << std::min(dE, mh)
-              << " = min(" << dE << ", " << mh << ") = min("
+              << " = min(" << dE << ", " << mh << ") = min(" << _energy << " * "
               << config::Simulation::baselineRegenerationRate() << " * "
               << _clockSpeed << " * " << dt << ", ...)\n";
 
@@ -435,33 +423,68 @@ void Critter::regeneration (Environment &env) {
 }
 
 void Critter::aging(float dt) { ERR
-  _age += _clockSpeed * dt * config::Simulation::baselineAgingSpeed();
+  _age += dt * agingSpeed(_clockSpeed);
 
   auto prevEfficiency = _efficiency;
   _efficiency = efficiency(_age, matureAt(), _ec0Coeff, oldAt(), _ec1Coeff);
 
-  if (_age < matureAt()) {
-    // Maybe update body size and splines
-    if (prevEfficiency < _nextGrowthStep && _nextGrowthStep <= _efficiency) {
-      std::cerr << "Critter " << id() << " should grow " << std::endl;
+  // Immature critter. Growth threshold crossed -> update
+  if (_nextGrowthStep <= _efficiency && prevEfficiency < _nextGrowthStep) {
+    uint step = _efficiency * config::Simulation::growthSubsteps();
 
-      float newSize = _efficiency * (MAX_SIZE - MIN_SIZE) + MIN_SIZE;
+    if (debugGrowth)
+      std::cerr << "Critter " << id() << " should grow (step " << step << ")"
+                << std::endl;
+
+    float newSize = _efficiency * (MAX_SIZE - MIN_SIZE) + MIN_SIZE;
+
+    if (debugGrowth > 1) {
       std::cerr << "\tSize: " << _size << " >> " << newSize << std::endl;
 
-      updateShape();
+      std::cerr << "\tMasses:";
+      for (uint i=0; i<_masses.size(); i++) {
+        if (_masses[i] > 0)
+          std::cerr << " " << _currHealth[i] << " / " << _masses[i];
+        else
+          std::cerr << " 0";
+      }
+      std::cerr << "\n";
     }
 
-  } else if (_age < oldAt()) {
-    if (prevEfficiency < 1) {
-      // create and register reproduction sensor
-    }
-    // only register change of state, accumulation is performed by neural step
-    // and actual reproduction by the environment
+    _size = newSize;
+    updateShape();
+    updateVisionRays();
+    _nextGrowthStep = nextGrowthStepAt(step);
 
-  }/* else
-    senescence();
-    Nothing to do here. Efficiency value is straightly used by motion
-   */
+    if (debugGrowth > 1) {
+      std::cerr << "\tSize: " << _size << " >> " << newSize << std::endl;
+
+      std::cerr << "\tMasses:";
+      for (uint i=0; i<_masses.size(); i++) {
+        if (_masses[i] > 0)
+          std::cerr << " " << _currHealth[i] << " / " << _masses[i];
+        else
+          std::cerr << " 0";
+      }
+      std::cerr << "\n\tnext growth step at " << _nextGrowthStep << "\n";
+    }
+  }
+
+  // Mature critter. If first step, create reproduction sensor
+  //  Only register change of state, accumulation is performed by neural step
+  //  and actual reproduction by the environment
+  if (prevEfficiency < 1 && _efficiency == 1) {
+    if (debugGrowth || debugReproduction)
+      std::cerr << "Critter " << id() << " turned adult." << std::endl;
+
+  }
+
+  // Old critter. Destroy reproduction sensor
+  if (oldAt() < _age && prevEfficiency == 1) {
+    if (debugGrowth || debugReproduction)
+      std::cerr << "Critter " << id() << " grew old." << std::endl;
+
+  }
 }
 
 #undef ERR
@@ -470,7 +493,7 @@ void Critter::aging(float dt) { ERR
 // == Internal shape-defining routines
 
 void Critter::updateShape(void) {
-  updateSplines();
+  generateSplinesData(bodyRadius(), _efficiency, _genotype, _splinesData);
   updateObjects();
 }
 
@@ -480,15 +503,15 @@ void Critter::updateShape(void) {
 #define SET(LHS, RHS)
 #endif
 
-void Critter::updateSplines(void) {
+void Critter::generateSplinesData (float r, float e, const Genome &g,
+                                   SplinesData &sda) {
   using S = genotype::Spline::Index;
   static constexpr auto W0_RANGE = M_PI/2;
 
-  const real r = bodyRadius();
   for (uint i=0; i<SPLINES_COUNT; i++) {
-    genotype::Spline::Data &d = _genotype.splines[i].data;
-    SplineData &sd = _splinesData[i];
-    float w = dimorphism(i) * _efficiency;
+    const genotype::Spline::Data &d = g.splines[i].data;
+    SplineData &sd = sda[i];
+    float w = dimorphism(i, g) * e;
 
     P2D p0 = fromPolar(d[S::SA], r); SET(sd.p0, p0)
 
@@ -794,7 +817,7 @@ void Critter::delFixture (b2Fixture *f) {
 }
 
 bool Critter::insideBody(const P2D &p) const {
-  return std::sqrt(p.x*p.x+p.y*p.y) <= bodyRadius();
+  return std::sqrt(p.x*p.x+p.y*p.y) <= bodyRadius() + 1e-3;
 }
 
 bool Critter::internalPolygon(const Vertices &v) const {
@@ -971,6 +994,58 @@ void Critter::destroySpline(uint splineIndex) {
   }
 }
 
+void Critter::generateVisionRays(void) {
+  const auto &v = _genotype.vision;
+  uint rs_h = 2 * v.precision + 1;
+  uint rs = 2 * rs_h;
+  _retina.resize(rs, Color());
+  _raysEnd.resize(rs, P2D(0,0));
+  _raysFraction.resize(rs, 1);
+
+  float a0 = v.angleBody;
+  _raysStart[0] = fromPolar(a0, bodyRadius());
+  _raysStart[1] = ySymmetrical(_raysStart[0]);
+
+  float r = _visionRange;
+  for (uint i=0; i<rs_h; i++) {
+    float da = 0;
+    if (v.precision > 0) da = .5 * v.width * (i / float(v.precision) - 1);
+    float a = a0 + v.angleRelative + da;
+//    std::cerr << "[" << i << "] a0 = "
+//              << 180*a0/M_PI << "; da = " << 180*da/M_PI
+//              << "; a = " << 180*a/M_PI << std::endl;
+
+    uint il = rs_h-i-1, ir = rs_h+i;
+    _raysEnd[il] = _raysStart[0] + fromPolar(a, r);
+    _raysEnd[ir] = ySymmetrical(_raysEnd[il]);
+
+//    std::cerr << "E[" << il << "] = " << _raysEnd[il]
+//              << " = " << _raysStart[0] << " + "
+//              << r * P2D(std::cos(a), std::sin(a)) << std::endl;
+//    std::cerr << "E[" << ir << "] = " << _raysEnd[ir]
+//                 << " = { " << _raysEnd[il].x << ", " << -_raysEnd[il].y
+//                 << " }" << std::endl;
+//    std::cerr << std::endl;
+  }
+//  std::cerr << std::endl;
+}
+
+void Critter::updateVisionRays(void) {
+  float a0 = _genotype.vision.angleBody;
+  P2D rs0 = fromPolar(a0, bodyRadius());
+  P2D d = rs0 - _raysStart[0];
+  _raysStart[0] = rs0;
+  _raysStart[1] = ySymmetrical(rs0);
+
+  uint nh = _raysEnd.size()/2;
+  for (uint i=0; i<2; i++) {
+    for (uint j=0; j<nh; j++) {
+      _raysEnd[j] += d;
+      _raysEnd[j+nh] = ySymmetrical(_raysEnd[j]);
+    }
+  }
+}
+
 void Critter::setEfficiencyCoeffs(float c0, float &c0Coeff,
                                   float c1, float &c1Coeff) {
   static constexpr float e = 1e-3;
@@ -989,7 +1064,7 @@ float Critter::efficiency(float age,
 
 float Critter::nextGrowthStepAt (uint currentStep) {
   static const float N = config::Simulation::growthSubsteps();
-  assert(currentStep < N);
+  assert(currentStep <= N);
   return (currentStep+1) / N;
 }
 
@@ -997,13 +1072,21 @@ float Critter::computeVisionRange(float visionWidth) {
   return std::max(.5f, std::min(10/visionWidth, 20.f));
 }
 
+float Critter::agingSpeed (float clockSpeed) {
+  return config::Simulation::baselineAgingSpeed() * clockSpeed;
+}
+
+float Critter::baselineEnergyConsumption (float size, float clockSpeed) {
+  return config::Simulation::baselineEnergyConsumption()
+      * clockSpeed * size;
+}
+
 float Critter::lifeExpectancy (float clockSpeed) {
-  return 1. / (config::Simulation::baselineAgingSpeed() * clockSpeed);
+  return 1. / agingSpeed(clockSpeed);
 }
 
 float Critter::starvationDuration (float size, float energy, float clockSpeed) {
-  return energy
-      / (config::Simulation::baselineEnergyConsumption() * clockSpeed);
+  return energy / baselineEnergyConsumption(size, clockSpeed);
 }
 
 } // end of namespace simu

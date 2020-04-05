@@ -46,10 +46,8 @@ void Simulation::init(const Environment::Genome &egenome,
 
   _systemExpectedEnergy = data.ienergy;
 
-  if (data.seed >= 0) _dice.reset(data.seed);
-
   _environment = std::make_unique<Environment>(egenome);
-  _environment->modifyEnergyReserve(+data.ienergy);
+  _environment->init(data.ienergy, data.seed);
 
   _gidManager.setNext(cgenome.id());
   cgenome.gdata.setAsPrimordial(_gidManager);
@@ -66,16 +64,17 @@ void Simulation::init(const Environment::Genome &egenome,
   const float W = _environment->extent();
   const float C = W * data.cRange;
 
+  auto &dice = _environment->dice();
   for (uint i=0; i<data.nCritters; i++) {
     auto cg = cgenome.clone(_gidManager);
     cg.cdata.sex = (i%2 ? Critter::Sex::MALE : Critter::Sex::FEMALE);
-    float a = _dice(0., 2*M_PI);
-    float x = _dice(-C, C);
-    float y = _dice(-C, C);
+    float a = dice(0., 2*M_PI);
+    float x = dice(-C, C);
+    float y = dice(-C, C);
 
     // TODO
-//    if (i == 0) x = 0, y = 0, a = 0;
-//    if (i == 1) x = 2, y = 0, a = M_PI/2;
+    if (i == 0) x = 0, y = -1, a = 0;
+    if (i == 1) x = 0, y = 1, a = 0;
 
 //    if (i == 0) x = 49, y = 49, a = M_PI/4;
 //    if (i == 1) x = 47, y = 50-sqrt(2), a = M_PI/2;
@@ -86,6 +85,9 @@ void Simulation::init(const Environment::Genome &egenome,
 
   _nextPlantID = 0;
 
+  addFoodlet(BodyType::PLANT,
+             2, 0,
+             1, 2); // TODO
   plantRenewal(W * data.pRange);
 
   _statsLogger.open(config::Simulation::logFile());
@@ -158,6 +160,9 @@ Foodlet* Simulation::addFoodlet(BodyType t, float x, float y, float r, decimal e
     std::cerr << "Added foodlet " << f->id() << " of type " << uint(f->type())
               << " at " << f->body().GetPosition() << " with energy "
               << e << std::endl;
+
+  if (t == BodyType::PLANT)
+    _environment->modifyEnergyReserve(-e);
 
   _foodlets.insert(f);
   return f;
@@ -234,18 +239,18 @@ void Simulation::step (void) {
 //    doTo(Critter::ID(1), forcedMotion(M_PI/4));
 //    doTo(Critter::ID(2), forcedMotion(M_PI/2));
 //    doTo(Critter::ID(3), forcedMotion(0));
-    doTo(Critter::ID(1), [this] (Critter *c) {
-      if (_time.timestamp() == 50) {
-//        c->applyHealthDamage(
-//            Critter::FixtureData(Critter::FixtureType::BODY, {0,0,0}),
-//            .025,  *_environment);
-        Critter::FixtureData fakeFD (
-          Critter::FixtureType::ARTIFACT, {0,0,0}, 0, Critter::Side::LEFT, 0);
+//    doTo(Critter::ID(1), [this] (Critter *c) {
+//      if (_time.timestamp() == 50) {
+////        c->applyHealthDamage(
+////            Critter::FixtureData(Critter::FixtureType::BODY, {0,0,0}),
+////            .025,  *_environment);
+//        Critter::FixtureData fakeFD (
+//          Critter::FixtureType::ARTIFACT, {0,0,0}, 0, Critter::Side::LEFT, 0);
 
-        bool d = c->applyHealthDamage(fakeFD, .5,  *_environment);
-        if (d)  c->destroySpline(Critter::splineIndex(fakeFD));
-      }
-    });
+//        bool d = c->applyHealthDamage(fakeFD, .5,  *_environment);
+//        if (d)  c->destroySpline(Critter::splineIndex(fakeFD));
+//      }
+//    });
   }
 
   if (_statsLogger) logStats();
@@ -296,13 +301,13 @@ void Simulation::plantRenewal(float bounds) {
   static const auto minE = Foodlet::maxStorage(BodyType::PLANT, mR);
 
   // Maybe pop-up a new plant
+  auto &dice = _environment->dice();
   while (_environment->energy() > minE) {
-    float r = _dice(mR, MR);
+    float r = dice(mR, MR);
     decimal e = std::min(_environment->energy(),
                          Foodlet::maxStorage(BodyType::PLANT, r));
     float E = (bounds > 0 ? bounds : _environment->extent()) - r;
-    addFoodlet(BodyType::PLANT, _dice(-E, E), _dice(-E, E), r, e);    
-    _environment->modifyEnergyReserve(-e);
+    addFoodlet(BodyType::PLANT, dice(-E, E), dice(-E, E), r, e);
 
     assert(_environment->energy() >= 0);
   }
@@ -370,11 +375,12 @@ void Simulation::steadyStateGA(void) {
   if (_ssga.active() && _time.secondFraction() == 0) {
     float r = _environment->extent() - Critter::MIN_SIZE * Critter::RADIUS;
 
+    auto &dice = _environment->dice();
     while (_environment->energy() >= minE && _ssga.active(_critters.size())) {
-      auto genome = _ssga.getRandomGenome(_dice, 5000);
+      auto genome = _ssga.getRandomGenome(dice, 5000);
       genome.gdata.setAsPrimordial(_gidManager);
-      float a = _dice(0., 2*M_PI);
-      float x = _dice(-r, r), y = _dice(-r, r);
+      float a = dice(0., 2*M_PI);
+      float x = dice(-r, r), y = dice(-r, r);
       addCritter(genome, x, y, a, minE);
     }
   }

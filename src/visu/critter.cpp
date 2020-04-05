@@ -9,12 +9,17 @@
 #include <QtMath>
 #include <QFileDialog>
 
+#include <QtPrintSupport/QPrinter>
+
 #include "box2d/b2_fixture.h"
 #include "box2d/b2_polygon_shape.h"
 
 #include <QDebug>
 
 namespace visu {
+
+static constexpr bool drawMotors = false;
+static constexpr bool drawVelocity = false;
 
 using Sex = simu::Critter::Sex;
 static const QColor artifactsFillColor = QColor::fromRgbF(.9, .85, .75);
@@ -26,7 +31,9 @@ static const QMap<Sex, QColor> sexColors {
   { Sex::FEMALE, QColor::fromRgbF(1.,  .6,  .6) },
 };
 
-Critter::Critter(simu::Critter &critter) : _critter(critter) {
+Critter::Critter(simu::Critter &critter)
+  : _critter(critter), _prevState(critter) {
+
   setFlag(ItemIsSelectable, true);
   setAcceptedMouseButtons(Qt::NoButton);
   setZValue(2);
@@ -52,6 +59,24 @@ QRectF squarify (const QRectF &r) {
     std::max(r.top(), -r.bottom())
   );
   return QRectF (-s, -s, 2*s, 2*s);
+}
+
+void Critter::update (void) {
+  CritterState newState (_critter);
+  if (newState.pos != _prevState.pos) updatePosition();
+
+  bool changed = false;
+  for (uint i=0; i<_prevState.masses.size() && !changed; i++)
+    if (_prevState.masses[i] != newState.masses[i])
+      changed = true;
+  for (uint i=0; i<_prevState.health.size() && !changed; i++)
+    if (_prevState.health[i] != newState.health[i])
+      changed = true;
+
+  if (changed) {
+    updateShape();
+    emit shapeChanged();
+  }
 }
 
 void Critter::updateShape (void) {
@@ -231,7 +256,7 @@ void Critter::doPaint (QPainter *painter) const {
     pen.setWidthF(0);
     painter->setPen(pen);
 
-    if (isSelected()) {
+    if (isSelected() && false) {
       pen.setColor(Qt::gray); pen.setStyle(Qt::DotLine); painter->setPen(pen);
       painter->drawRect(boundingRect());
       pen.setColor(Qt::red); pen.setStyle(Qt::DashLine); painter->setPen(pen);
@@ -263,17 +288,18 @@ void Critter::doPaint (QPainter *painter) const {
           painter->fillPath(_body, bodyColor());
 
         if (!config::Visualisation::drawInnerEdges())
-          doSymmetrical(painter, [this] (QPainter *p, Side s) {
-            for (uint i=0; i<SPLINES_COUNT; i++)
+          for (uint i=0; i<SPLINES_COUNT; i++)
+            doSymmetrical(painter, [this, i] (QPainter *p, Side s) {
               if (shouldDrawSpline(i, s))
                 p->drawPath(_artifacts[i]);
-          });
+            });
 
-        doSymmetrical(painter, [this] (QPainter *p, Side s) {
+        if (config::Visualisation::opaqueBodies())
           for (uint i=0; i<SPLINES_COUNT; i++)
-            if (shouldDrawSpline(i, s))
-              p->fillPath(_artifacts[i], splineColor(i, s));
-        });
+            doSymmetrical(painter, [this, i] (QPainter *p, Side s) {
+              if (shouldDrawSpline(i, s))
+                  p->fillPath(_artifacts[i], splineColor(i, s));
+            });
 
         if (config::Visualisation::drawInnerEdges())
           doSymmetrical(painter, [this] (QPainter *p, Side s) {
@@ -281,6 +307,14 @@ void Critter::doPaint (QPainter *painter) const {
               if (shouldDrawSpline(i, s))
                 p->drawPath(_artifacts[i]);
           });
+
+        if (!config::Visualisation::opaqueBodies()) {
+          pen.setWidthF(0);
+          pen.setColor(Qt::black);
+          painter->setPen(pen);
+          painter->drawPath(_body);
+        }
+
       painter->restore();
 
       debugDrawAbove(painter);
@@ -290,16 +324,6 @@ void Critter::doPaint (QPainter *painter) const {
 //      painter->setPen(pen);
 //      painter->drawRect(_artifacts.boundingRect());
     painter->restore();
-
-    if (config::Visualisation::opaqueBodies())
-      painter->fillPath(_body, bodyFillColor2);
-
-    else {
-      pen.setWidthF(0);
-      pen.setColor(Qt::black);
-      painter->setPen(pen);
-      painter->drawPath(_body);
-    }
 
     if (config::Visualisation::drawVision() >= 1 && isSelected()) {
       painter->save();
@@ -426,7 +450,7 @@ void Critter::debugDrawAbove (QPainter *painter) const {
     painter->restore();
   }
 
-  // draw motor outputs
+  if (drawMotors) {
   painter->save();
     float e = _critter.sizeRatio();
     float mo_W = .1*e;
@@ -434,14 +458,20 @@ void Critter::debugDrawAbove (QPainter *painter) const {
     float offset = .5 * R;
     float length = .2 * R;
 
+//    pen.setStyle(Qt::DotLine);
+//    painter->setPen(pen);
+//    painter->setBrush(Qt::red);
+
     for (Motor m: EnumUtils<Motor>::iterator()) {
       float o = object().motorOutput(m);
       QRectF r (0, -int(m) * offset-.5*mo_W, length * o, mo_W);
       painter->fillRect(r, QColor::fromRgbF(1, 0, 0, std::fabs(o)));
+//      painter->drawRect(QRectF(-length, -int(m) * offset-.5*mo_W, 2*length, mo_W));
     }
   painter->restore();
+  }
 
-  // draw Velocity (physics)
+  if (drawVelocity) {
   painter->save();
     pen.setColor(Qt::red);
     painter->setPen(pen);
@@ -450,6 +480,7 @@ void Critter::debugDrawAbove (QPainter *painter) const {
                         object().body().GetLocalVector(
                           object().body().GetLinearVelocity())));
   painter->restore();
+  }
 }
 #endif
 
@@ -460,17 +491,30 @@ void Critter::saveGenotype(const QString &filename) const {
 void Critter::printPhenotype (const QString &filename) const {
   if (filename.isEmpty())
     return;
+  else if (filename.endsWith(".png"))
+    printPhenotypePng(filename);
+  else
+    qDebug() << "Unmanaged extension for filename" << filename;
+}
 
+void Critter::printPhenotypePng (const QString &filename) const {
   static const float Z = config::Visualisation::viewZoom();
-  QPixmap pixmap (boundingRect().size().toSize() * Z);
+  const QRectF &r = _minimalBoundingRect;
+  float W = r.height() * Z, H = r.width() * Z;
+  QPixmap pixmap (W, H);
   pixmap.fill(Qt::transparent);
   QPainter painter (&pixmap);
   painter.setRenderHint(QPainter::Antialiasing, true);
-  painter.translate(Z, Z);
+  painter.translate(.5*r.height()*Z, r.right()*Z);
   painter.rotate(-90);
   painter.scale(Z, Z);
   doPaint(&painter);
-  pixmap.save(filename);
+  qDebug() << "Critter bounding rects are:";
+  qDebug() << "\tminimal: " << _minimalBoundingRect;
+  qDebug() << "Pixmap size is" << pixmap.size();
+  bool ok = pixmap.save(filename);
+  qDebug().nospace() << (ok ? "Saved" : " Failed to save") << " C"
+                     << uint(_critter.id()) << " to " << filename;
 }
 
 } // end of namespace visu

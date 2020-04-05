@@ -78,6 +78,7 @@ public:
   GeneticManipulator(QWidget *parent = nullptr);
 
   void setSubject (visu::Critter *s);
+  void updateShapeData (void);
 
   void keyReleaseEvent(QKeyEvent *e) override;
 

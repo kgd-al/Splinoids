@@ -27,7 +27,6 @@ class MainView : public QGraphicsView {
   PersitentJoystick _joystick;
   using JButton = PersitentJoystick::MyOwnControllerMapping;
 
-  bool _brainDeadSelection;
   bool _running, _stepping;
   bool _zoomout;
 

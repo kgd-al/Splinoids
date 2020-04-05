@@ -6,7 +6,7 @@
 
 namespace simu {
 
-static constexpr int debugFeeding = 0;
+static constexpr int debugFeeding = 1;
 static constexpr int debugFighting = 0;
 
 const bool Environment::boxEdges = true;
@@ -245,6 +245,11 @@ Environment::Environment(const Genome &g)
 Environment::~Environment (void) {
   _physics.DestroyBody(_edges);
   delete _cmonitor;
+}
+
+void Environment::init(decimal energy, int rngSeed) {
+  _energyReserve = energy;
+  if (rngSeed >= 0) _dice.reset(rngSeed);
 }
 
 void Environment::modifyEnergyReserve (decimal e) {

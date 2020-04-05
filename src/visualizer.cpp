@@ -13,9 +13,16 @@
 //#include "config/dependencies.h"
 
 long maybeSeed(const std::string& s) {
+  if (s.empty())  return -2;
+  if (std::find_if(
+        s.begin(),
+        s.end(),
+        [](unsigned char c) { return !std::isdigit(c) && c != '-'; }
+      ) != s.end()) return -2;
+
   char* p;
   long l = strtol(s.c_str(), &p, 10);
-  return p? l : -1;
+  return p? l : -2;
 }
 
 int main(int argc, char *argv[]) {  
@@ -49,6 +56,7 @@ int main(int argc, char *argv[]) {
 
   genotype::Environment eGenome;
   genotype::Critter cGenome;
+  uint cGenomeMutations = 0;
 
   std::string loadSaveFile, loadConstraints, loadFields;
 
@@ -91,6 +99,8 @@ int main(int argc, char *argv[]) {
      cxxopts::value(eGenomeArg))
     ("spln-genome", "Splinoid genome to start from or a random seed",
      cxxopts::value(cGenomeArg))
+    ("spln-mutations", "Additional mutations applied to the original genome",
+     cxxopts::value(cGenomeMutations))
 
     ("taurus", "Whether the environment is a taurus or uses fixed boundaries",
       cxxopts::value(taurus))
@@ -187,13 +197,14 @@ int main(int argc, char *argv[]) {
     genotype::Critter::printMutationRates(std::cout, 2);
 
     long eGenomeSeed = maybeSeed(eGenomeArg);
-    if (eGenomeSeed < 0) {
+    if (eGenomeSeed < -1) {
       std::cout << "Reading environment genome from input file '"
                 << eGenomeArg << "'" << std::endl;
       eGenome = EGenome::fromFile(eGenomeArg);
 
     } else {
-      rng::FastDice dice (eGenomeSeed);
+      rng::FastDice dice;
+      if (eGenomeSeed >= 0) dice.reset(eGenomeSeed);
       std::cout << "Generating environment genome from rng seed "
                 << dice.getSeed() << std::endl;
       eGenome = EGenome::random(dice);
@@ -202,17 +213,18 @@ int main(int argc, char *argv[]) {
     eGenome.toFile("last", 2);
 
     long cGenomeSeed = maybeSeed(cGenomeArg);
-    if (cGenomeSeed < 0) {
+    if (cGenomeSeed < -1) {
       std::cout << "Reading splinoid genome from input file '"
                 << cGenomeArg << "'" << std::endl;
       cGenome = CGenome::fromFile(cGenomeArg);
 
     } else {
-      rng::FastDice dice (cGenomeSeed);
+      rng::FastDice dice;
+      if (cGenomeSeed >= 0) dice.reset(cGenomeSeed);
       std::cout << "Generating splinoid genome from rng seed "
                 << dice.getSeed() << std::endl;
       cGenome = CGenome::random(dice);
-      for (uint i=0; i<5000; i++) cGenome.mutate(dice);
+      for (uint i=0; i<cGenomeMutations; i++) cGenome.mutate(dice);
     }
 
     cGenome.toFile("last", 2);

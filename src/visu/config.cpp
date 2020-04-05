@@ -15,11 +15,13 @@ namespace config {
 
 DEFINE_SUBCONFIG(Simulation, configSimulation)
 
-DEFINE_PARAMETER(float, viewZoom, 100)//100)
+DEFINE_PARAMETER(float, viewZoom, 1000)//100)
 DEFINE_PARAMETER(bool, opaqueBodies, true)
 DEFINE_PARAMETER(bool, drawInnerEdges, false)
-DEFINE_PARAMETER(int, drawVision, 2)
+DEFINE_PARAMETER(int, drawVision, 0)
 DEFINE_PARAMETER(RenderingType, renderType, RenderingType::REGULAR)
+
+DEFINE_PARAMETER(bool, brainDeadSelection, false)
 
 DEFINE_PARAMETER(int, showFights, 2)
 

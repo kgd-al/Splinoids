@@ -22,7 +22,6 @@ protected:
   std::set<Foodlet*> _foodlets;
 
   std::unique_ptr<Environment> _environment;
-  rng::FastDice _dice;
 
   Time _startTime, _time, _endTime;
   uint _minGen, _maxGen;

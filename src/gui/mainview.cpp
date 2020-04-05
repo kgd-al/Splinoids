@@ -176,10 +176,13 @@ void MainView::buildActions(void) {
   addAction(mVisu, "go-previous", "Select previous", "",
             Qt::Key_Left, [this] { selectPrevious(); });
 
+  std::cerr << "brain dead: " << config::Visualisation::brainDeadSelection()
+            << std::endl;
   addBoolAction(mVisu, "", "BrainDead Selection", "",
                 Qt::Key_B, [this] {
-    if (selection()) selection()->object().brainDead = _brainDeadSelection;
-  }, _brainDeadSelection);
+    if (selection()) selection()->object().brainDead =
+        config::Visualisation::brainDeadSelection();
+  }, config::Visualisation::brainDeadSelection.ref());
 
   QMenu *mGui = _mbar->addMenu("GUI");
 
@@ -277,7 +280,6 @@ void MainView::buildActions(void) {
 MainView::MainView (visu::GraphicSimulation &simulation,
                     StatsView *stats, QMenuBar *bar)
   : _simu(simulation), _stats(stats), _mbar(bar),
-    _brainDeadSelection(true),
     _running(false), _stepping(false), _zoomout(true) {
 
   setScene(simulation.scene());
@@ -364,24 +366,31 @@ void MainView::step(void) {
     externalCritterControl();
   }
 
-  QPointF prevSelectionPos;
-  if (selection()) prevSelectionPos = selection()->pos();
+  QRectF prevSelectionRect;
+  if (selection()) prevSelectionRect = selection()->sceneBoundingRect();
 
-  _simu.step();
+  uint n = config::Visualisation::substepsSpeed();
+  if (_stepping)  n = 1;
+  for (uint i=0; i<n; i++) {
+    _simu.step();
+
+    // TODO
+    if (_simu.currTime().timestamp() == 20) {
+      stop();
+      break;
+    }
+  }
 
   if (selection()) {
     // Keep look at the it
-    QPointF newSelectionPos = selection()->pos();
-    if (newSelectionPos != prevSelectionPos)
+    QRectF newSelectionRect = selection()->sceneBoundingRect();
+    if (newSelectionRect != prevSelectionRect)
       focusOnSelection();
 
     _manipulator->readCurrentStatus();
   }
 
   _stepping = false;
-
-  // TODO
-//  if (_simu.currTime().timestamp() == 125)  stop();
 }
 
 void MainView::joystickEvent (JButton b, PersitentJoystick::Value v) {
@@ -501,14 +510,20 @@ void MainView::selectionChanged(visu::Critter *c) {
   if (selection()) {
     selection()->setSelected(false);
     selection()->object().brainDead = false;
+    disconnect(selection(), &visu::Critter::shapeChanged,
+               _manipulator, &GeneticManipulator::updateShapeData);
   }
 
   _simu.setSelection(c);
 
   if (c) {
     selection()->setSelected(true);
-    selection()->object().brainDead = true;
+    selection()->object().brainDead =
+      config::Visualisation::brainDeadSelection();
     focusOnSelection();
+
+    connect(selection(), &visu::Critter::shapeChanged,
+            _manipulator, &GeneticManipulator::updateShapeData);
 
   } else if (_zoomout)
     showAll();

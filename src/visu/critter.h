@@ -7,7 +7,8 @@
 
 namespace visu {
 
-class Critter : public QGraphicsItem {
+class Critter : public QObject, public QGraphicsItem {
+  Q_OBJECT
 public:
   static constexpr auto SPLINES_COUNT = genotype::Critter::SPLINES_COUNT;
   using Side = simu::Critter::Side;
@@ -29,6 +30,17 @@ private:
 
   QRectF _minimalBoundingRect, _critterBoundingRect, _maximalBoundingRect;
 
+  struct CritterState {
+#define DCY(X) std::decay_t<decltype(std::declval<simu::Critter>().X())>
+    DCY(pos) pos;
+    DCY(masses) masses;
+    DCY(health) health;
+#undef DCY
+
+    CritterState (const simu::Critter &c)
+      : pos(c.pos()), masses(c.masses()), health(c.health()) {}
+  } _prevState;
+
 public:
   Critter(simu::Critter &critter);
 
@@ -43,7 +55,12 @@ public:
   void updatePosition (void);
   void updateShape (void);
 
+  void update (void);
+
   QRectF boundingRect (void) const;
+  QRectF sceneBoundingRect(void) const {
+    return boundingRect().translated(pos());
+  }
 
   QRectF minimalBoundingRect (void) const {
     return _minimalBoundingRect;
@@ -68,6 +85,9 @@ public:
   void saveGenotype (const QString &filename) const;
   void printPhenotype (const QString &filename) const;
 
+signals:
+  void shapeChanged (void);
+
 private:
   void updateVision (void);
 
@@ -83,6 +103,9 @@ private:
   void debugDrawBelow (QPainter*) const {}
   void debugDrawAbove (QPainter*) const {}
 #endif
+
+  void printPhenotypePdf (const QString &filename) const;
+  void printPhenotypePng (const QString &filename) const;
 };
 
 } // end of namespace visu

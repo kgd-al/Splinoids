@@ -46,10 +46,11 @@ DEFINE_GENOME_DISTANCE_WEIGHTS({
 #define GENOME Vision
 
 static constexpr float fPI = M_PI;
-DEFINE_GENOME_FIELD_WITH_BOUNDS(float, angleBody, "", 0.f, 0.f, fPI/2.f, fPI/2.f)
-DEFINE_GENOME_FIELD_WITH_BOUNDS(float, angleRelative, "", -fPI/2.f, -fPI/2.f, fPI/2.f, fPI/2.f)
-DEFINE_GENOME_FIELD_WITH_BOUNDS(float, width, "", fPI/60, fPI/60, 2*fPI/3.f, 2*fPI/3.f)
-DEFINE_GENOME_FIELD_WITH_BOUNDS(uint, precision, "", 0u, 0u, 5u, 5u)
+static constexpr float aVI = fPI / 12;
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, angleBody, "", 0.f, aVI, aVI, fPI/2.f)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, angleRelative, "", -fPI/2.f, -aVI, -aVI, fPI/2.f)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, width, "", fPI/60, fPI/6, fPI/6, 2*fPI/3.f)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(uint, precision, "", 0u, 0u, 0u, 5u)
 
 DEFINE_GENOME_MUTATION_RATES({
   EDNA_PAIR(    angleBody, 1),
@@ -375,6 +376,7 @@ struct genotype::Aggregator<Cs, Critter> {
 
 #define CFILE genotype::Critter::config_t
 
+DEFINE_SUBCONFIG(genotype::Vision::config_t, configVision)
 DEFINE_SUBCONFIG(Config::Crossover, configCrossover)
 
 DEFINE_CONTAINER_PARAMETER(CFILE::MutationRates, dimorphism_mutationRates,

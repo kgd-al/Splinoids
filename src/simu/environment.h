@@ -71,9 +71,13 @@ private:
 
   decimal _energyReserve;
 
+  rng::FastDice _dice;
+
 public:
   Environment(const Genome &g);
   ~Environment (void);
+
+  void init (decimal energy, int rngSeed);
 
   const auto& genotype (void) const {
     return _genome;
@@ -119,6 +123,10 @@ public:
 
   decimal energy (void) const {
     return _energyReserve;
+  }
+
+  auto& dice (void) {
+    return _dice;
   }
 
   static decimal dt(void);
