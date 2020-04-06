@@ -1,5 +1,5 @@
 \documentclass[tikz]{standalone}
-\usetikzlibrary{arrows, calc, positioning}
+\usetikzlibrary{arrows, calc, decorations.text, positioning}
 \begin{document}
 \begin{tikzpicture}[>=stealth',
   every node/.style={draw}
@@ -9,12 +9,24 @@
  \node [left=of S] (C) {Corpses};
  \node [below=of S] (P) {Plants};
  
- \draw [->, dotted] (E.east) to [out=0, in=0] (S);
- \draw [->] (E.east) to [out=0, in=0] (P);
- \draw [->] (S) to (C);
- \draw [->] (C.north) to [out=90, in=180] (E);
- \draw [->] (C.south) to [out=270, in=265] (S);
- \draw [->] (P) to [out=90, in=275] (S);
+ \draw [<-, dotted, postaction={decorate,decoration={raise=.5ex,text along path,text align=center,text={|\tiny|Initialisation}}}] 
+  (S) to [out=0, in=0, looseness = 1.5] (E.east);
+  
+ \draw [<-, postaction={decorate,decoration={raise=.5ex,text along path,text align=center,text={|\tiny|Renewal}}}]
+  (P) to [out=0, in=0, looseness = 1.5] (E.east);
+%  \draw [->] (E.east) to [out=0, in=0, looseness = 1] (P);
+ 
+ \draw [<-, postaction={decorate,decoration={raise=.5ex,text along path,text align=center,text={|\tiny|Death}}}]
+  (C) to (S);
+  
+ \draw [->, postaction={decorate,decoration={raise=.5ex,text along path,text align=center,text={|\tiny|Decomposition}}}]
+  (C.north) to [out=90, in=180, looseness = 1] (E);
+  
+ \draw [->, postaction={decorate,decoration={raise=.5ex,text along path,text align=center,text={|\tiny|Feeding}}}]
+  (C.south) to [out=270, in=230, looseness = 1.25] (S);
+ 
+ \draw [->, postaction={decorate,decoration={raise=-1ex,text along path,text align=center,text={|\tiny|Grazing}}}] 
+  (P) to [out=90, in=270] (S);
  
  \foreach \x in {-1,0,1} {
   \def\dx{.1}

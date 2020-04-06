@@ -61,7 +61,8 @@ draft
 \title{Splinoids project outline}
 \author{GODIN-DUBOIS Kevin}
 % \formation{Background}
-\date{March 31st, 2020}
+% \date{March 31st, 2020}
+\titlemisc{foo}
 \duration{8}
 \notessize{30}
 
@@ -69,7 +70,7 @@ draft
 
 \dotitlepage
 
-\newcommand{\splinoid}[2][]{\includegraphics[draft=false,#1]{splinoids_#2.png}}
+\newcommand{\splinoid}[2][]{\includegraphics[draft=false,#1]{annexes/splinoids_#2.png}}
 \section{Splinoids}
 
 \begin{frame}[ok]
@@ -105,23 +106,23 @@ draft
    [right=0 of SL, inner sep=0pt]
    {\splinoid[trim=.5\imagewidth{} 0 0 0, clip, height=.8\textheight]{anatomy_wireframe}};
    
-  \node (s) at (SL.north west)
+  \node (s) at (SL.south west)
    {\setlength{\tabcolsep}{0pt}\begin{tabular}{c}Artifacts\\\small\emph{(Bezier Curves)}\end{tabular}};
-  \draw [dotted] (s) -- ($(SL.north west)+(3,-.5)$);
-  \draw [dotted] (s) -- ($(SL.north west)+(.8,-1.6)$);
+  \draw [dotted] (s) -- ($(SL.south west)+(3,.5)$);
+  \draw [dotted] (s) -- ($(SL.south west)+(.8,2.8)$);
 
-  \node (i) at (SL.south west) [anchor=south west]
+  \node (i) at (SL.north west) [anchor=south west]
    {\setlength{\tabcolsep}{0pt}\begin{tabular}{c}Inactive\\artifacts\end{tabular}};
-  \draw [dotted] (i) -- ($(SL.south west)+(3,4)$);
-  \draw [dotted] (i) -- ($(SL.south west)+(3,3)$);
+  \draw [dotted] (i) -- ($(SL.north east)+(-1,-.5)$);
+  \draw [dotted] (i) to [bend left=21] ($(SL.south east)+(-.5,2.5)$);
   
-  \node (b) at (SR.south east) [anchor=south east] {Fragile body};
-  \draw [dotted] (b) -- ++(-1, 1);
+  \node (b) at (SR.north west) [anchor=south, yshift=.5cm] {Fragile body};
+  \draw [dotted] (b) -- ++(0, -1);
   
-  \node (a) at (SR.north east)
+  \node (a) at (SR.south east)
    {\setlength{\tabcolsep}{0pt}\begin{tabular}{c}Simplified splines\\\small\emph{for physics}\end{tabular}};
-  \draw [dotted] (a) -- ($(SR.north east)-(3,.5)$);
-  \draw [dotted] (a) -- ($(SR.north east)-(.8,1.6)$);
+  \draw [dotted] (a) -- ($(SR.south east)+(-3,.5)$);
+  \draw [dotted] (a) -- ($(SR.south east)+(-.8,3.1)$);
  \end{tikzpicture}
  }
 \end{frame}
@@ -137,14 +138,14 @@ draft
 \end{frame}
 
 \subsection{Motion}
-\begin{frame}[hok]
+\begin{frame}[ok]
  \begin{minipage}{.59\textwidth}
  \centering
  \begin{tikzpicture}
   \node [inner sep=0pt] (S) {\splinoid[height=.5\textheight]{motors}};
   \begin{localto}{S}
    \node (l) at (S.north) [anchor=south] {\setlength{\tabcolsep}{0pt}\begin{tabular}{c}Motors\\$\in [-1,1]$\end{tabular}};
-   \draw [dotted] (l) -| (-.32, 0) (l) -| (.32, 0);
+   \draw [dotted] (l) -| (-.36, 0) (l) -| (.36, 0);
   \end{localto}
  \end{tikzpicture}
  \end{minipage}
@@ -161,47 +162,50 @@ draft
 \end{frame}
 
 \subsection{Vision}
-\begin{frame}[hok]
+\begin{frame}[ok]
  \newcommand{\vision}[5]{
-  \node at (0,2) {};
+  \def\m{2.5}
+  \path ($(C)-(\m,.75*\m)$) rectangle ($(C)+(\m,\m)$);
   \def\a{####2}\def\da{####3}\def\n{####5}\def\w{####4}
-  \begin{localto}[overlay]{####1}
+  \begin{localto}[overlay, red!50!black]{####1}
+%    \draw (C) circle (\R);
    \pgfmathsetmacro{\dn}{(\n-1)/2}
-   \def\style{}
    \foreach \s in {1} {
     \pgfmathsetmacro{\sa}{\s*\a}
     \foreach \r in {1,...,\n} {
      \pgfmathsetmacro{\ea}{\sa + \s* (\da + .5*\w*(\r - 1 - \dn)/\dn)}
-     \draw [\style] (S) ++(90+\sa:1) -- ++(90+\ea:1);
+     \draw (C) ++(90+\sa:\R) -- ++(90+\ea:1);
     }
    }
-   \draw [dotted] (0,0) -- (0,1.2) (0,0) -- (90-\a:1.5);
-   \draw [->] (0,.6) arc (90:90-\a:.6) node [pos=.5, anchor=south] {\tiny \a};
+   \draw [dotted] (C) -- ++(0,1.2*\R) (C) -- ++(90-\a:1.5*\R);
+   \draw [->] (C) ++(0,.6*\R) arc (90:90-\a:.6*\R) node [pos=.5, anchor=south] {\tiny \a};
    
-   \draw [dotted] (90-\a:1) -- ++(90-\a-\da:.5);
-   \draw [->] (90-\a:1.25) arc (90-\a:90-\a-\da:.25) node [pos=.5, anchor=west] {\tiny \da};
+   \draw [dotted] (C) ++(90-\a:\R) -- ++(90-\a-\da:.5);
+   \draw [->] (C) ++(90-\a:1.25*\R) arc (90-\a:90-\a-\da:.25*\R) node [pos=.5, anchor=west] {\tiny \da};
    
-   \draw [dotted] (90-\a:1) -- ++(90-\a-\da+.5*\w:1);
-   \draw [dotted] (90-\a:1) -- ++(90-\a-\da-.5*\w:1);
-   \draw [<->] (90-\a:1) ++(90-\a-\da+.5*\w:.75) arc (90-\a-\da+.5*\w:90-\a-\da-.5*\w:.75) node [pos=.5, anchor=south west] {\tiny \w};
+   \draw [dotted] (C) ++(90-\a:\R) -- ++(90-\a-\da+.5*\w:\R);
+   \draw [dotted] (C) ++(90-\a:\R) -- ++(90-\a-\da-.5*\w:\R);
+   \draw [<->] (C) ++(90-\a:\R) ++(90-\a-\da+.5*\w:.75*\R) arc (90-\a-\da+.5*\w:90-\a-\da-.5*\w:.75*\R)
+    node [pos=.5, anchor=south west] {\tiny \w};
   \end{localto} 
  }
  \begin{minipage}[c]{.49\textwidth}
   \centering 
   \begin{tikzpicture}[>=stealth']
-   \node [inner sep=0pt] (S) {\splinoid[width=.5\textwidth]{vision_prey}};
+   \node [inner sep=0pt] (S) {\splinoid[scale=.1]{vision_prey}};
+   \def\R{.82}\coordinate (C) at (0,.26);
    \vision{S}{60}{30}{120}{5}
   \end{tikzpicture}
  \end{minipage}
  \begin{minipage}[c]{.49\textwidth}
   \centering 
   \begin{tikzpicture}[>=stealth']
-   \node [inner sep=0pt] (S) {\splinoid[width=.5\textwidth]{vision_predator}};
+   \node [inner sep=0pt] (S) {\splinoid[scale=.1]{vision_predator}};
+   \def\R{.74}\coordinate (C) at (0,-.47);
    \vision{S}{15}{-15}{60}{11}
   \end{tikzpicture}
  \end{minipage}
 
- \vspace{\baselineskip}
  \begin{minipage}[c]{.49\textwidth}
   \centering ``Prey''
  \end{minipage}
@@ -215,7 +219,7 @@ draft
 
 \subsection{Audition}
 \sectioncomment{Not implemented}
-\begin{frame}[hok]
+\begin{frame}[ok]
  \begin{itemize}
   \item Similar approach to \cite{Kadish2019}
   \item Multiple emission channels (neural-controlled)
@@ -305,7 +309,7 @@ draft
 \end{frame}
 
 \subsection{Metabolism}
-\begin{frame}
+\begin{frame}[ok]
  \begin{itemize}
   \item Energy extracted from plants or corpses
   \item Baseline life cost
@@ -330,25 +334,81 @@ draft
 
 
 \subsection{Neural controller}
-\begin{frame}
- \begin{tikzpicture}
+\begin{frame}[ok]
+ \begin{minipage}{.49\textwidth}
+ \begin{tikzpicture}[
+  nbase/.style={draw, dotted, fill=white, inner sep=1pt, font=\tiny},
+  nin/.style={nbase, ellipse},
+  nout/.style={nbase}
+ ]
+  \draw (0,0) circle (1);
   
+  \def\p{1}\pgfmathsetmacro{\rs}{2*\p+1}
+  \foreach \s/\sl in {-1/l,1/r} {
+   \foreach \r in {1,...,\rs} {
+    \pgfmathsetmacro{\a}{(\r-1-\p)/\p}
+    \node [nin] at (90+\s*45+15*\a:2) {$R^{\sl}_{\r}$};
+   }
+   \node [nin] at (\s,0) {$A^{\sl}$};
+   
+   \node [nout] at (.5*\s,0) {$M^\sl$};
+  }
+  \node at (0,0) [nout] {C};
+  \node at (0,1) [nout] {S};
+  \node at (0,-1) [nout] {R};
  \end{tikzpicture}
+ \end{minipage}
+ \begin{minipage}{.49\textwidth}
+  \tiny
+  \begin{tabular}{r@{: }p{.7\textwidth}}
+   \toprule
+   \multicolumn{2}{c}{Inputs} \\ \midrule
+   $R^s_i$ & retina cell triplet (r,g,b) $i$ on side $s$ \\
+   $A^s$   & auditive cells (equal to number of channels) \\
+   $-$     & proprioceptors (health, energy, efficiency) \\
+   \toprule
+   \multicolumn{2}{c}{Outputs} \\ \midrule
+     $M^s$ & motor \\
+       $C$ & Clock speed \\
+       $R$ & Reproduction \\
+       $S$ & Multi-channel signal \\
+  \end{tabular}
+ \end{minipage}
+ 
+ \vfill\centering
+ Most nodes are geometrical $\rightarrow$ HyperNeat?
 \end{frame}
 
 
 \section{Environment}
-\begin{frame}
+\begin{frame}[ok]
  \centering
- \includegraphics[scale=1]{energy_flow}
+ \includegraphics[scale=1.25]{energy_flow}
+ 
+ \vfill
+ Closed system with constant total energy level
 \end{frame}
 
-\begin{frame}
+\begin{frame}[ok]
+ Potential genetic variables:
  \begin{itemize}
   \item Size
-  \item Taurus
-  \item Obstacles
-  \item Plants
+  \item Taurus (bool)
+  \item Obstacles (distribution)
+  \item Plants (distribution)
+ \end{itemize}
+
+\end{frame}
+
+
+\section{Extensions}
+\begin{frame}
+ \begin{itemize}
+  \item Asymetrical offspring investment \\
+  $\rightarrow$ Emergence of sexual specialisation?
+  \item Day/night cycle \\
+  $\rightarrow$ Darkening of colors \\
+  $\rightarrow$ Emergence of night-vision? \\
  \end{itemize}
 
 \end{frame}
