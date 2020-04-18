@@ -8,6 +8,7 @@
 #pragma GCC diagnostic ignored "-Wpedantic"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wunused-variable"
+#pragma GCC diagnostic ignored "-Wdeprecated-copy"
 #include "../../MultiNEAT/src/Genome.h" // Bad header
 #pragma GCC diagnostic pop
 
