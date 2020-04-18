@@ -10,3 +10,6 @@
 [submodule "cnl"]
 	path = cnl
 	url = https://github.com/johnmcfarlane/cnl.git
+[submodule "MultiNEAT"]
+	path = MultiNEAT
+	url = https://github.com/peter-ch/MultiNEAT.git

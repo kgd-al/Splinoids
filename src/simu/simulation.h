@@ -11,6 +11,8 @@
 #include "time.h"
 #include "config.h"
 
+DEFINE_PRETTY_ENUMERATION(SimuFields, ENV, CRITTERS, FOODLETS, PTREE)
+
 namespace simu {
 
 class Simulation {
@@ -18,7 +20,7 @@ protected:
   phylogeny::GIDManager _gidManager;
   std::set<Critter*> _critters;
 
-  uint _nextPlantID;
+  uint _nextFoodletID;
   std::set<Foodlet*> _foodlets;
 
   std::unique_ptr<Environment> _environment;
@@ -28,12 +30,19 @@ protected:
 
   SSGA _ssga;
 
+  stdfs::path _dataFolder = "./";
   std::ofstream _statsLogger;
 
   decimal _systemExpectedEnergy;
 
   uint _stepTimeMs,
         _splnTimeMs, _envTimeMs, _decayTimeMs, _regenTimeMs;
+
+  struct ReproductionStats {
+    uint attempts = 0, autonomous = 0, ssga = 0;
+  } _reproductions;
+
+  bool _aborted;
 
 public:
   struct InitData {
@@ -58,7 +67,15 @@ public:
   virtual ~Simulation (void);
 
   bool finished (void) const {
-    return _endTime <= _time;
+    return _aborted || (_startTime < _endTime && _endTime <= _time);
+  }
+
+  bool aborted (void) const {
+    return _aborted;
+  }
+
+  void abort (void) {
+    _aborted = true;
   }
 
   auto& environment (void) {
@@ -71,6 +88,29 @@ public:
 
   const auto& currTime (void) const {
     return _time;
+  }
+
+  auto& dice (void) {
+    return environment().dice();
+  }
+
+  auto minGeneration (void) const {
+    return _minGen;
+  }
+
+  auto maxGeneration (void) const {
+    return _maxGen;
+  }
+
+  enum Overwrite : char {
+    UNSPECIFIED = '\0',
+    ABORT = 'a',
+    PURGE = 'p'
+  };
+  void setDataFolder (const stdfs::path &path, Overwrite o = UNSPECIFIED);
+
+  const stdfs::path& dataFolder (void) const {
+    return _dataFolder;
   }
 
   void init (const Environment::Genome &egenome,
@@ -92,12 +132,42 @@ public:
 
   decimal totalEnergy(void) const;
 
+  stdfs::path periodicSaveName (void) const {
+    return periodicSaveName(_dataFolder, _time, _minGen, _maxGen);
+  }
+
+  static stdfs::path periodicSaveName(const stdfs::path &folder,
+                                      const Time &time,
+                                      uint minGen, uint maxGen) {
+    std::ostringstream oss;
+    oss << time.pretty() << "_g" << minGen << "-" << maxGen;
+    oss << ".save";
+    return folder / oss.str();
+  }
+
+  void serializePopulations (nlohmann::json &jcritters,
+                             nlohmann::json &jfoodlets) const;
+
+  void deserializePopulations (const nlohmann::json &jcritters,
+                               const nlohmann::json &jfoodlets,
+                               bool updateTree);
+
+  void save (stdfs::path file) const;
+  static void load (const stdfs::path &file, Simulation &s,
+                    const std::string &constraints, const std::string &fields);
+
+  friend void assertEqual (const Simulation &lhs, const Simulation &rhs,
+                           bool deepcopy);
+
 protected:
   struct Stats {
-    uint ncritters, ncorpses, nplants;
-    uint nfights, nfeedings;
+    uint ncritters = 0, ncorpses = 0, nplants = 0;
+    uint nyoungs = 0, nadults = 0, nelders = 0;
+    uint nfights = 0, nfeedings = 0;
 
-    decimal ecritters, ecorpses, eplants, ereserve;
+    decimal ecritters = 0, ecorpses = 0, eplants = 0, ereserve = 0;
+
+    float fmin = 0, favg = 0, fmax = 0;
   };
   virtual void processStats (const Stats&) const {}
 
@@ -112,6 +182,10 @@ protected:
   }
 
 private:
+  b2Body* critterBody (float x, float y, float a);
+  b2Body* foodletBody (float x, float y);
+
+  void reproduction (Environment::MatingEvents &matings);
   void produceCorpses (void);
   void steadyStateGA (void);
 

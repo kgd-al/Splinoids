@@ -46,15 +46,20 @@ enum struct CollisionFlag : uint16 {
   OBSTACLE_FLAG = 0x01,
   CRITTER_BODY_FLAG = 0x02,
   CRITTER_SPLN_FLAG = 0x04,
-  PLANT_FLAG = 0x08,
-  CORPSE_FLAG = 0x10,
+  CRITTER_REPRO_FLAG = 0x08,
+  PLANT_FLAG = 0x10,
+  CORPSE_FLAG = 0x20,
 
-  ALL_MASK = 0x1F,
-  OBSTACLE_MASK = ALL_MASK,
-  CRITTER_BODY_MASK = ALL_MASK,
-  CRITTER_SPLN_MASK = ALL_MASK ^ CORPSE_FLAG,
-  PLANT_MASK = ALL_MASK,
-  CORPSE_MASK = ALL_MASK,
+
+  ALL_OBJECTS_MASK = OBSTACLE_FLAG | CRITTER_BODY_FLAG | CRITTER_SPLN_FLAG
+                   | PLANT_FLAG | CORPSE_FLAG,
+
+  OBSTACLE_MASK = ALL_OBJECTS_MASK,
+  CRITTER_BODY_MASK = ALL_OBJECTS_MASK,
+  CRITTER_SPLN_MASK = ALL_OBJECTS_MASK ^ CORPSE_FLAG,
+  CRITTER_REPRO_MASK = CRITTER_REPRO_FLAG,
+  PLANT_MASK = ALL_OBJECTS_MASK,
+  CORPSE_MASK = ALL_OBJECTS_MASK,
 };
 
 }
@@ -87,11 +92,13 @@ struct CONFIG_FILE(Simulation) {
   DECLARE_PARAMETER(decimal, healthToEnergyRatio)
   DECLARE_PARAMETER(float, critterBaseSpeed)
   DECLARE_PARAMETER(float, combatBaselineIntensity)
+  DECLARE_PARAMETER(float, reproductionRange) // With respect to body size
 
   // Splinoid metabolic constants (per second, affected by clock speed)
   DECLARE_PARAMETER(float, baselineAgingSpeed)
   DECLARE_PARAMETER(decimal, baselineEnergyConsumption)
   DECLARE_PARAMETER(decimal, baselineRegenerationRate)  // Portion of energy
+  DECLARE_PARAMETER(decimal, baselineGametesGrowth)  // Portion of energy
   DECLARE_PARAMETER(decimal, motorEnergyConsumption)
   DECLARE_PARAMETER(decimal, energyAbsorptionRate)
 
@@ -106,6 +113,8 @@ struct CONFIG_FILE(Simulation) {
   // Other
   DECLARE_PARAMETER(bool, screwTheEntropy)
   DECLARE_PARAMETER(uint, ssgaMinPopSizeRatio)  // Of the initial population size
+  DECLARE_PARAMETER(uint, ssgaArchiveSizeRatio) //
+  DECLARE_PARAMETER(uint, ssgaMutationRate)
 };
 
 } // end of namespace config

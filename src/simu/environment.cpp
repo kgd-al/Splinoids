@@ -6,8 +6,9 @@
 
 namespace simu {
 
-static constexpr int debugFeeding = 1;
+static constexpr int debugFeeding = 0;
 static constexpr int debugFighting = 0;
+static constexpr int debugMating = 0;
 
 const bool Environment::boxEdges = true;
 
@@ -35,6 +36,11 @@ struct CollisionMonitor : public b2ContactListener {
     return (uint16(lhs) << 8) | uint16(rhs);
   }
 
+  bool isMatingAttempt (const b2Fixture *fA, const b2Fixture *fB) {
+    return Critter::get(fA)->type == Critter::FixtureType::REPRODUCTION
+        && Critter::get(fB)->type == Critter::FixtureType::REPRODUCTION;
+  }
+
   void BeginContact(b2Contact *c) override {
     if (!c->IsTouching()) return;
 
@@ -45,7 +51,11 @@ struct CollisionMonitor : public b2ContactListener {
 
     switch (pair(dA.type, dB.type)) {
     case pair(BodyType::CRITTER, BodyType::CRITTER):
-      registerFightStart(critter(dA), fA, critter(dB), fB); break;
+      if (isMatingAttempt(fA, fB))
+        registerMatingAttempt(critter(dA), critter(dB));
+      else
+        registerFightStart(critter(dA), fA, critter(dB), fB);
+      break;
 
     case pair(BodyType::CRITTER, BodyType::PLANT):
     case pair(BodyType::CRITTER, BodyType::CORPSE):
@@ -76,7 +86,9 @@ struct CollisionMonitor : public b2ContactListener {
 
     switch (pair(dA.type, dB.type)) {
     case pair(BodyType::CRITTER, BodyType::CRITTER):
-      processFightStep(critter(dA), fA, critter(dB), fB); break;
+      if (!isMatingAttempt(fA, fB))
+        processFightStep(critter(dA), fA, critter(dB), fB);
+      break;
 
     case pair(BodyType::CRITTER, BodyType::PLANT):
     case pair(BodyType::CRITTER, BodyType::CORPSE):
@@ -101,7 +113,9 @@ struct CollisionMonitor : public b2ContactListener {
 
     switch (pair(dA.type, dB.type)) {
     case pair(BodyType::CRITTER, BodyType::CRITTER):
-      registerFightEnd(critter(dA), fA, critter(dB), fB); break;
+      if (!isMatingAttempt(fA, fB))
+        registerFightEnd(critter(dA), fA, critter(dB), fB);
+      break;
 
     case pair(BodyType::CRITTER, BodyType::PLANT):
     case pair(BodyType::CRITTER, BodyType::CORPSE):
@@ -129,8 +143,8 @@ struct CollisionMonitor : public b2ContactListener {
     if (debugFighting) {
       const Critter::FixtureData &fdA = *Critter::get(fA);
       const Critter::FixtureData &fdB = *Critter::get(fB);
-      std::cerr << "Fight started between " << cA->id() << " (" << fdA
-                << ") and " << cB->id() << " (" << fdB << ")"
+      std::cerr << "Fight started between " << CID(cA) << " (" << fdA
+                << ") and " << CID(cB) << " (" << fdB << ")"
                 << std::endl;
     }
 
@@ -159,8 +173,8 @@ struct CollisionMonitor : public b2ContactListener {
     if (debugFighting) {
       const Critter::FixtureData &fdA = *Critter::get(fA);
       const Critter::FixtureData &fdB = *Critter::get(fB);
-      std::cerr << "Fight concluded between " << cA->id() << " (" << fdA
-                << ") and " << cB->id() << " (" << fdB << ")"
+      std::cerr << "Fight concluded between " << CID(cA) << " (" << fdA
+                << ") and " << CID(cB) << " (" << fdB << ")"
                 << std::endl;
     }
 
@@ -176,7 +190,7 @@ struct CollisionMonitor : public b2ContactListener {
         e._fightingEvents.erase(it);
     } else
       utils::doThrow<std::logic_error>(
-        "Removal of conflict ", cA->id(), "-", cB->id(),
+        "Removal of conflict ", CID(cA), "-", CID(cB),
         " requested but none were found");
   }
 
@@ -185,48 +199,41 @@ struct CollisionMonitor : public b2ContactListener {
     if (f->GetShape()->GetType() != b2Shape::e_circle)  return;
 
     if (debugFeeding)
-      std::cerr << "Feeding started by C" << c->id() << " on P" << p->id()
+      std::cerr << "Feeding started by " << CID(c) << " on P" << p->id()
                 << std::endl;
 
     e._feedingEvents.insert({c,p});
   }
 
   void processFeedStep (Critter *c, b2Fixture *f, Foodlet *p) {
-    static const decimal &dE = config::Simulation::energyAbsorptionRate();
     if (f->GetShape()->GetType() != b2Shape::e_circle)  return;
+    if (c->storableEnergy() <= 0) return;
     if (p->energy() <= 0) return;
 
-    decimal E = dE * c->clockSpeed() * e.dt();
-    E = std::min(E, p->energy());
-    E = std::min(E, c->storableEnergy());
-
-    if (debugFeeding > 1)
-      std::cerr << "Transfering " << E << " = min(" << p->energy() << ", "
-                << c->storableEnergy() << ", " << dE << " * " << c->clockSpeed()
-                << " * " << e.dt() << ") from " << p->id()
-                << " to " << c->id() << " (" << p->energy()
-                << " remaining)" << std::endl;
-
-    c->feed(E);
-    p->consumed(E);
+    c->feed(p, e.dt());
   }
 
   void registerFeedEnd (Critter *c, Foodlet *p) {
     if (debugFeeding)
-      std::cerr << "Feeding concluded by C" << c->id() << " on P" << p->id()
+      std::cerr << "Feeding concluded by " << CID(c) << " on P" << p->id()
                 << std::endl;
 
     e._feedingEvents.erase({c,p});
   }
 
+  void registerMatingAttempt (Critter *cA, Critter *cB) {
+    if (cA->requestingMating() && cB->requestingMating())
+      e._matingEvents.insert({cA,cB});
+  }
+
   void watchForWarp (Critter *c, const Critter::FixtureData *fd) {
-//    std::cerr << "Maybe teleport C" << c->id() << " (" << *fd << ") which is at "
+//    std::cerr << "Maybe teleport " << CID(c) << " (" << *fd << ") which is at "
 //              << c->pos() << std::endl;
     if (fd->type == Critter::FixtureType::BODY) e._edgeCritters.insert(c);
   }
 
   void unwatchForWarp (Critter *c, const Critter::FixtureData *fd) {
-//    std::cerr << "Maybe no longer teleport C" << c->id() << " (" << *fd
+//    std::cerr << "Maybe no longer teleport " << CID(c) << " (" << *fd
 //              << ") which is at " << c->pos() << std::endl;
     if (fd->type == Critter::FixtureType::BODY) e._edgeCritters.erase(c);
   }
@@ -259,7 +266,7 @@ void Environment::modifyEnergyReserve (decimal e) {
 //  std::cerr << " >> " << _energyReserve << std::endl;
 }
 
-void Environment::step (void) {
+void Environment::step (MatingEvents &events) {
 
   // Box2D parameters
   static const int V_ITER = config::Simulation::b2VelocityIter();
@@ -276,6 +283,10 @@ void Environment::step (void) {
     processFight(f.first.first, f.first.second, f.second, destroyedSplines);
   for (const auto &p: destroyedSplines)
     p.first->destroySpline(p.second);
+
+  assert(events.empty());
+  std::swap(events, _matingEvents);
+  assert(_matingEvents.empty());
 
   for (Critter *c: _edgeCritters) maybeTeleport(c);
 
@@ -355,7 +366,7 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
   fdd.VB = b2Dot(fdd.vB, -fdd.C_) / n;
 
   if (debugFighting > 1)
-    std::cerr << "Fight step of " << cA->id() << " & " << cB->id() << "\n"
+    std::cerr << "Fight step of " << CID(cA) << " & " << CID(cB) << "\n"
               << "\tat " << cA->pos() << " & " << cB->pos() << "\n"
               << "\t C = " << fdd.C << "\n"
               << "\tC' = " << fdd.C_ << "\n"
@@ -382,8 +393,8 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
           deB = (1 - alpha) * .5 * N;
 
     if (debugFighting > 2)
-      std::cerr << "\tFixtures C" << cA->id() << "F" << fdA << " and "
-                << "C" << cB->id() << "F" << fdB << "\n"
+      std::cerr << "\tFixtures " << CID(cA) << "F" << fdA << " and "
+                << CID(cB) << "F" << fdB << "\n"
                 << "\t\trA = " << fA->GetDensity() << "\trB = "
                   << fB->GetDensity() << "\n"
                 << "\t\t N = " << N << "\n"
@@ -407,7 +418,7 @@ void Environment::maybeTeleport(Critter *c) {
   auto a = b.GetAngle();
   P2D p0 = b.GetPosition(), p1 = p0;
 
-//  std::cerr << "Critter " << c->id() << " touching edges at " << p0 << std::endl;
+//  std::cerr << CID(c, "Critter ") << " touching edges at " << p0 << std::endl;
 
   if (p1.x < -extent())      p1.x += size();
   else if (p1.x > extent())  p1.x -= size();
@@ -418,13 +429,38 @@ void Environment::maybeTeleport(Critter *c) {
   if (p0 != p1) b.SetTransform(p1, a);
 
 //  if (p0 != p1)
-//    std::cerr << "Teleporting C" << c->id() << " from " << p0 << " to "
+//    std::cerr << "Teleporting " << CID(c) << " from " << p0 << " to "
 //              << p1 << std::endl;
 }
 
 decimal Environment::dt (void) {
   static const decimal DT = 1.f / config::Simulation::secondsPerDay();
   return DT;
+}
+
+void save (nlohmann::json &j, const rng::FastDice &d) {
+  std::ostringstream oss;
+  serialize(oss, d);
+  j = oss.str();
+}
+
+void load (const nlohmann::json &j, rng::FastDice &d) {
+  std::istringstream iss (j.get<std::string>());
+  deserialize(iss, d);
+}
+
+void Environment::save (nlohmann::json &j, const Environment &e) {
+  nlohmann::json jd;
+  simu::save(jd, e._dice);
+  j = { e._genome, e._energyReserve, jd };
+}
+
+void Environment::load (const nlohmann::json &j,
+                        std::unique_ptr<Environment> &e) {
+
+  e.reset(new Environment(j[0]));
+  e->_energyReserve = j[1];
+  simu::load(j[2], e->_dice);
 }
 
 } // end of namespace simu

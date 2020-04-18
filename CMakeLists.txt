@@ -117,10 +117,43 @@ PREPEND(SIMU_SRC "src/simu" ${SIMU_SRC})
 #)
 #PREPEND(S_MISC_SRC "src" ${S_MISC_SRC})
 
-add_library(SIMU_OBJS OBJECT ${GNTP_SRC} ${SIMU_SRC})# ${CGP_SRC} ${S_MISC_SRC})
+#include_directories(MultiNEAT/src)
+#add_subdirectory(MultiNEAT)
+set(MultiNEAT_LIBS ${Boost_LIBRARIES} ${PYTHON_LIBRARIES})
+set(MultiNEAT_SRC
+    "Genome.h"
+    "Genome.cpp"
+    "Random.h"
+    "Random.cpp"
+    "NeuralNetwork.h"
+    "NeuralNetwork.cpp"
+    "Substrate.h"
+    "Substrate.cpp"
+    "Innovation.h"
+    "Innovation.cpp"
+    "Parameters.h"
+    "Parameters.cpp"
+)
+PREPEND(MultiNEAT_SRC "MultiNEAT/src" ${MultiNEAT_SRC})
+set(MultiNEAT_SRC ${MultiNEAT_SRC}
+    "src/hyperneat/genotype.h" "src/hyperneat/genotype.cpp"
+    "src/hyperneat/phenotype.h" "src/hyperneat/phenotype.cpp")
+
+#set(MultiNEAT_SRC
+#    "genome.h"
+#    "genome.cpp"
+#    "genes.h"
+#    "config.h"
+#    "config.cpp"
+#)
+#PREPEND(MultiNEAT_SRC "src/multineat_copy" ${MultiNEAT_SRC})
+
+add_library(SIMU_OBJS OBJECT ${MultiNEAT_SRC} ${GNTP_SRC} ${SIMU_SRC})
+# ${CGP_SRC} ${S_MISC_SRC})
 
 include_directories(box2d/include)
 add_subdirectory(box2d)
+
 
 set(SIMU_LIBS box2d)
 
@@ -130,11 +163,11 @@ set(SIMU_LIBS box2d)
 ################################################################################
 ## Target (simulation)
 ################################################################################
-#add_executable(
-#  simulator
-#  $<TARGET_OBJECTS:SIMU_OBJS>
-#  "src/simulator.cpp")
-#target_link_libraries(simulator ${APOGeT_LIBRARIES})
+add_executable(
+  simulator
+  $<TARGET_OBJECTS:SIMU_OBJS>
+  "src/simulator.cpp")
+target_link_libraries(simulator ${SIMU_LIBS} ${APOGeT_LIBRARIES})
 
 ################################################################################
 ## Target (timelines explorer)
@@ -270,7 +303,7 @@ if (NOT CLUSTER_BUILD)
     set_property(TARGET visualizer PROPERTY AUTOMOC ON)
     target_link_libraries(visualizer ${SIMU_LIBS}
                                      ${APOGeT_LIBRARIES} ${APOGeT_GUI_LIBRARIES}
-                                     ${QT_LIBS})
+                                     ${QT_LIBS} ${MultiNEAT_LIBS})
 
 
 #################################################################################

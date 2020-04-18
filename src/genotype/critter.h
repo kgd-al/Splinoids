@@ -7,6 +7,8 @@
 
 #include "config.h"
 
+#include "../hyperneat/genotype.h"
+
 namespace genotype {
 
 using Color = config::Color;
@@ -79,6 +81,9 @@ public:
   BOCData cdata;
   phylogeny::Genealogy gdata;
 
+  HyperNEAT connectivity;
+  uint brainSubsteps;
+
   auto id (void) const {
     return gdata.self.gid;
   }
@@ -97,8 +102,25 @@ public:
     return other;
   }
 
-  auto compatibility (float dist) const {
-    return cdata(dist);
+//  auto compatibility (float dist) const {
+//    return cdata(dist);
+//  }
+
+  auto reproductiveInvestment (void) const {
+    return .5;  // Definitely should depend on sex
+  }
+
+  static auto compatibility (const Critter &lhs, const Critter &rhs, double d) {
+    return lhs.reproductiveInvestment() * lhs.cdata(d)
+         + rhs.reproductiveInvestment() * rhs.cdata(d);
+  }
+
+  auto& genealogy (void) {
+    return gdata;
+  }
+
+  const auto& genealogy (void) const {
+    return gdata;
   }
 
   std::string extension (void) const override {
@@ -135,6 +157,8 @@ DECLARE_GENOME_FIELD(Critter, float, minClockSpeed)
 DECLARE_GENOME_FIELD(Critter, float, maxClockSpeed)
 DECLARE_GENOME_FIELD(Critter, float, matureAge)
 DECLARE_GENOME_FIELD(Critter, float, oldAge)
+DECLARE_GENOME_FIELD(Critter, HyperNEAT, connectivity)
+DECLARE_GENOME_FIELD(Critter, uint, brainSubsteps)
 
 } // end of namespace gntp
 
@@ -165,16 +189,21 @@ struct EDNA_CONFIG_FILE(Critter) {
 
   using BC = Bounds<genotype::Color::value_type>;
   DECLARE_PARAMETER(BC, color_bounds)
+  static constexpr float COLOR_MIN = .25f;
+  static constexpr float COLOR_MAX = .75f;
+
   DECLARE_PARAMETER(MutationRates, colors_mutationRates)
 
   DECLARE_PARAMETER(Bounds<float>, minClockSpeedBounds)
   DECLARE_PARAMETER(Bounds<float>, maxClockSpeedBounds)
   DECLARE_PARAMETER(Bounds<float>, matureAgeBounds)
   DECLARE_PARAMETER(Bounds<float>, oldAgeBounds)
+  DECLARE_PARAMETER(Bounds<uint>, brainSubstepsBounds)
 
   using Crossover = genotype::BOCData::config_t;
   DECLARE_SUBCONFIG(Crossover, configCrossover)
   DECLARE_SUBCONFIG(genotype::Vision::config_t, configVision)
+  DECLARE_SUBCONFIG(genotype::HyperNEAT::config_t, configHyperNEAT)
 
   DECLARE_PARAMETER(MutationRates, mutationRates)
   DECLARE_PARAMETER(DistanceWeights, distanceWeights)

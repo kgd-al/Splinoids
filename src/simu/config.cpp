@@ -42,7 +42,7 @@ DEFINE_PARAMETER(std::string, logFile, "stats.dat")
 DEFINE_PARAMETER(Color, emptyColor, utils::uniformStdArray<Color>(1))
 DEFINE_PARAMETER(Color, obstacleColor, utils::uniformStdArray<Color>(0))
 
-DEFINE_PARAMETER(float, plantMinRadius, 1)//.25) TODO Reset after implementing growth
+DEFINE_PARAMETER(float, plantMinRadius, .25)
 // (plants must be smaller than critters for the ssga to have a change to work)
 
 DEFINE_PARAMETER(float, plantMaxRadius, 1)
@@ -53,10 +53,12 @@ DEFINE_PARAMETER(int, growthSubsteps, 4)
 DEFINE_PARAMETER(decimal, healthToEnergyRatio, .05)
 DEFINE_PARAMETER(float, critterBaseSpeed, 4)
 DEFINE_PARAMETER(float, combatBaselineIntensity, .1)
+DEFINE_PARAMETER(float, reproductionRange, 3)
 
-DEFINE_PARAMETER(float, baselineAgingSpeed, 5)//.01)
-DEFINE_PARAMETER(decimal, baselineEnergyConsumption, 0)//.01)
+DEFINE_PARAMETER(float, baselineAgingSpeed, .01)
+DEFINE_PARAMETER(decimal, baselineEnergyConsumption, .01)
 DEFINE_PARAMETER(decimal, baselineRegenerationRate, .1)
+DEFINE_PARAMETER(decimal, baselineGametesGrowth, .1)
 DEFINE_PARAMETER(decimal, motorEnergyConsumption, .0025)
 DEFINE_PARAMETER(decimal, energyAbsorptionRate, .1)
 
@@ -69,6 +71,8 @@ DEFINE_PARAMETER(uint, daysPerYear, 1000)
 
 DEFINE_PARAMETER(bool, screwTheEntropy, true)
 DEFINE_PARAMETER(uint, ssgaMinPopSizeRatio, 1)
+DEFINE_PARAMETER(uint, ssgaArchiveSizeRatio, 2)
+DEFINE_PARAMETER(uint, ssgaMutationRate, .5)
 
 #undef CFILE
 } // end of namespace config

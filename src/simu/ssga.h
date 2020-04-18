@@ -12,12 +12,43 @@ class SSGA {
   uint _minAllowedPopSize;
   bool _enabled, _watching, _active;
 
+  using CGenome = genotype::Critter;
+  struct ArchiveItem {
+    float fitness;
+    const CGenome genome;
+    ArchiveItem (const CGenome &g, float f) : fitness(f), genome(g) {}
+    friend bool operator< (const ArchiveItem &lhs, const ArchiveItem &rhs) {
+      if (lhs.fitness != rhs.fitness) return lhs.fitness < rhs.fitness;
+      return lhs.genome.id() < rhs.genome.id();
+    }
+  };
+  using Archive = std::set<ArchiveItem>;
+  Archive _archive;
+  uint _maxArchiveSize;
+
+  struct CritterData {
+    struct Fields {
+      float energy, gametes;
+      Fields (void) : energy(0), gametes(0) {}
+    };
+    Fields beforeStep;
+    Fields totals;
+
+    uint children;
+
+    CritterData (void) : beforeStep(), totals(), children(0) {}
+  };
+  using CData = std::map<const Critter*, CritterData>;
+  CData _watchData;
+
+  using Critters = std::set<Critter*>;
+
 public:
   SSGA();
 
   void init (uint initPopSize);
 
-  void setEnabled (bool e) {    _enabled = e;     }
+  void setEnabled (bool e);
   bool enabled (void) const {   return _enabled;  }
 
   void update (uint popSize);
@@ -30,8 +61,26 @@ public:
 
   void clear (void);
 
-  void prePhysicsStep(const std::set<Critter*> &pop);
-  void postPhysicsStep(const std::set<Critter*> &pop);
+  CData::iterator registerBirth (const Critter *newborn);
+  void preStep(const Critters &pop);
+  void postStep(const Critters &pop);
+  void recordChildFor(const Critters &critters);
+  void registerDeath (const Critter *deceased);
+
+  float worstFitness (void) const {
+    return _archive.empty() ? NAN : _archive.begin()->fitness;
+  }
+
+  float averageFitness (void) const {
+    if (_archive.empty()) return NAN;
+    float f = 0;
+    for (const auto &i: _archive) f += i.fitness;
+    return f / _archive.size();
+  }
+
+  float bestFitness (void) const {
+    return _archive.empty() ? NAN : _archive.rbegin()->fitness;
+  }
 
   genotype::Critter getRandomGenome (rng::FastDice &dice, uint mutations) const;
   genotype::Critter getGoodGenome (rng::FastDice &dice) const;

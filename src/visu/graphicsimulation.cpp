@@ -17,7 +17,11 @@ GraphicSimulation::GraphicSimulation(QStatusBar *sbar, gui::StatsView *stats)
 
   _stats->setupFields({
     "-- Counts --",
-    "Critters", "Plants", "Corpses", "Feedings", "Fights",
+    "Critters",
+     "Youngs ",
+     "Adults ",
+     "Elders ",
+    "Plants", "Corpses", "Feedings", "Fights",
 
     "-- Energy --",
     "[E] Plants", "[E] Corpses", "[E] Splinoids", "[E] Reserve",
@@ -40,7 +44,10 @@ GraphicSimulation::~GraphicSimulation (void) = default;
 
 void GraphicSimulation::postInit(void) {
   Simulation::postInit();
+  setupVisuEnvironment();
+}
 
+void GraphicSimulation::setupVisuEnvironment(void) {
   _graphicEnvironment =
     new Environment (environment(),
                      [this] (const simu::Critter *c) { return visuCritter(c); },
@@ -84,6 +91,10 @@ void GraphicSimulation::processStats(const Stats &s) const {
   _stats->update("Plants", s.nplants, 0);
   _stats->update("Corpses", s.ncorpses, 0);
 
+  _stats->update("Youngs ", s.nyoungs, 0);
+  _stats->update("Adults ", s.nadults, 0);
+  _stats->update("Elders ", s.nelders, 0);
+
   _stats->update("Feedings", s.nfeedings, 0);
   _stats->update("Fights", s.nfights, 0);
 
@@ -105,11 +116,7 @@ void GraphicSimulation::processStats(const Stats &s) const {
   _stats->update(  "[D] Regen ", _envTimeMs, 0);
 }
 
-simu::Critter*
-GraphicSimulation::addCritter (const CGenome &genome,
-                               float x, float y, float a, simu::decimal e) {
-
-  auto *sc = Simulation::addCritter(genome, x, y, a, e);
+void GraphicSimulation::addVisuCritter(simu::Critter *sc) {
   assert(sc);
 
   auto *vc = new Critter (*sc);
@@ -117,7 +124,14 @@ GraphicSimulation::addCritter (const CGenome &genome,
 
   _scene->addItem(vc);
   _critters.emplace(sc, vc);
+}
 
+simu::Critter*
+GraphicSimulation::addCritter (const CGenome &genome,
+                               float x, float y, float a, simu::decimal e) {
+
+  auto *sc = Simulation::addCritter(genome, x, y, a, e);
+  addVisuCritter(sc);
   return sc;
 }
 
@@ -138,10 +152,7 @@ void GraphicSimulation::delCritter (simu::Critter *critter) {
   Simulation::delCritter(critter);
 }
 
-simu::Foodlet*
-GraphicSimulation::addFoodlet(simu::BodyType t,
-                              float x, float y, float s, simu::decimal e) {
-  auto *sf = Simulation::addFoodlet(t, x, y, s, e);
+void GraphicSimulation::addVisuFoodlet(simu::Foodlet *sf) {
   assert(sf);
 
   auto *vf = new Foodlet (*sf);
@@ -149,7 +160,13 @@ GraphicSimulation::addFoodlet(simu::BodyType t,
 
   _scene->addItem(vf);
   _foodlets.emplace(sf, vf);
+}
 
+simu::Foodlet*
+GraphicSimulation::addFoodlet(simu::BodyType t,
+                              float x, float y, float s, simu::decimal e) {
+  auto *sf = Simulation::addFoodlet(t, x, y, s, e);
+  addVisuFoodlet(sf);
   return sf;
 }
 
@@ -163,6 +180,17 @@ void GraphicSimulation::delFoodlet(simu::Foodlet *foodlet) {
 
   delete vfoodlet;
   Simulation::delFoodlet(foodlet);
+}
+
+void GraphicSimulation::load (const std::string &file, GraphicSimulation &s,
+                              const std::string &constraints,
+                              const std::string &fields) {
+
+  Simulation::load(file, s, constraints, fields);
+
+  for (simu::Critter *c: s.Simulation::_critters) s.addVisuCritter(c);
+  for (simu::Foodlet *f: s.Simulation::_foodlets) s.addVisuFoodlet(f);
+  s.setupVisuEnvironment();
 }
 
 } // end of namespace visu

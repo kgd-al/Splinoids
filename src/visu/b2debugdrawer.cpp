@@ -111,7 +111,7 @@ void DebugDrawer::DrawCircle(const b2Vec2& center, float radius,
 }
 
 void DebugDrawer::DrawSolidCircle(const b2Vec2& center, float radius,
-                                  const b2Vec2& axis, const b2Color& color) {
+                                  const b2Vec2& /*axis*/, const b2Color& color) {
   _draws.push_back(std::make_unique<b2DDCircle>(center, radius,
                                                 makeColor(color), true));
   using simu::operator<<;
@@ -132,7 +132,7 @@ void DebugDrawer::DrawTransform(const b2Transform& xf) {
                                               makeColor({0,0,1})));
 }
 
-void DebugDrawer::DrawPoint(const b2Vec2& p, float size, const b2Color& color) {
+void DebugDrawer::DrawPoint(const b2Vec2& p, float /*size*/, const b2Color& color) {
   _draws.push_back(std::make_unique<b2DDPoint>(p, makeColor(color)));
 //  std::cerr << "[b2DD] Size of point: " << size << std::endl;
 }

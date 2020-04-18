@@ -12,6 +12,7 @@
 #include <QtPrintSupport/QPrinter>
 
 #include "box2d/b2_fixture.h"
+#include "box2d/b2_circle_shape.h"
 #include "box2d/b2_polygon_shape.h"
 
 #include <QDebug>
@@ -40,7 +41,7 @@ Critter::Critter(simu::Critter &critter)
   updatePosition();
   updateShape();
 
-  _bcolor = toQt(critter.bodyColor());
+  _bcolor = toQt(critter.currentBodyColor());
   for (uint i=0; i<SPLINES_COUNT; i++)
     _acolors[i] = toQt(critter.splineColor(i));
 }
@@ -64,6 +65,8 @@ QRectF squarify (const QRectF &r) {
 void Critter::update (void) {
   CritterState newState (_critter);
   if (newState.pos != _prevState.pos) updatePosition();
+
+  _bcolor = toQt(_critter.currentBodyColor());
 
   bool changed = false;
   for (uint i=0; i<_prevState.masses.size() && !changed; i++)
@@ -263,6 +266,17 @@ void Critter::doPaint (QPainter *painter) const {
       painter->drawRect(critterBoundingRect());
     }
 
+    if (config::Visualisation::drawReproduction()) {
+      const b2Fixture *rs = _critter.reproductionSensor();
+      if (rs) {
+        float r = dynamic_cast<const b2CircleShape*>(rs->GetShape())->m_radius;
+        painter->save();
+        painter->setBrush(QColor::fromRgbF(1,0,0,.1));
+        painter->drawEllipse(QPointF(0,0), r, r);
+        painter->restore();
+      }
+    }
+
 //    pen.setColor(Qt::red);
 //    painter->setPen(pen);
 //    painter->drawRect(boundingRect());
@@ -366,8 +380,7 @@ void Critter::doPaint (QPainter *painter) const {
       QPolygonF({ QPointF(0., -.1*e), QPointF(.1*e, 0.), QPointF(0.,  .1*e) }));
   painter->restore();
 
-//  qDebug() << "Painted critter " << uint(_critter.genotype().id())
-//           << "with size " << _critter.size();
+//  qDebug() << "Painted " << CID(this) << "with size " << _critter.size();
 }
 
 #ifndef NDEBUG
@@ -516,5 +529,11 @@ void Critter::printPhenotypePng (const QString &filename) const {
   qDebug().nospace() << (ok ? "Saved" : " Failed to save") << " C"
                      << uint(_critter.id()) << " to " << filename;
 }
+
+QDebug operator<<(QDebug dbg, const CID &cid) {
+  dbg.nospace() << cid.prefix << cid.c.firstname();
+  return dbg.maybeSpace();
+}
+
 
 } // end of namespace visu

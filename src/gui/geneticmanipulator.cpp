@@ -19,8 +19,6 @@
 namespace gui {
 
 using CGenome = genotype::Critter;
-static constexpr auto NO_FIRSTNAME = "Unknown";
-static constexpr auto NO_LASTNAME = "Doe";
 
 class CritterProxy : public QGraphicsItem {
   visu::Critter *object;
@@ -678,8 +676,7 @@ void GeneticManipulator::buildGenesLayout(void) {
 
 void GeneticManipulator::updateWindowName (void) {
   QString name = _readonly ? "Splinoid Sheet" : "Genetic Manipulator";
-  if (_subject)
-    name += ": " + QString::number(uint(genome().id()));
+  if (_subject) name += ": " + _subject->firstname();
   setWindowTitle(name);
 }
 
@@ -717,12 +714,8 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
   if (_subject) {
     const simu::Critter &c = _subject->object();
     const genotype::Critter &g = c.genotype();
-    static constexpr auto NO_SPECIES = phylogeny::SID::INVALID;
 
-    auto species = g.species();
-    _lLastname->setText(
-      species == NO_SPECIES ? NO_LASTNAME
-                            : "0x" + QString::number(long(species), 16));
+    _lLastname->setText(_subject->lastname());
 
     _bSex->setEnabled(true && !_readonly);
     _bSex->setCurrentIndex(int(c.genotype().cdata.sex));
@@ -760,8 +753,8 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     readCurrentStatus();
 
   } else {
-    _lFirstname->setText(NO_FIRSTNAME);
-    _lLastname->setText(NO_LASTNAME);
+    _lFirstname->setText(visu::Critter::NO_FIRSTNAME);
+    _lLastname->setText(visu::Critter::NO_LASTNAME);
 
     _bSex->setEnabled(false);
     for (QLabel *l: _dataWidgets) l->setText("");
@@ -815,7 +808,7 @@ void GeneticManipulator::readCurrentStatus(void) {
   QString firstname;
   if (c.isYouth())      firstname += "Young ";
   else if (c.isElder()) firstname += "Old ";
-  firstname += "0x" + QString::number(long(c.genotype().id()), 16);
+  firstname += _subject->firstname();
   _lFirstname->setText(firstname);
 
   set("Age", &SCritter::age, percent);
@@ -826,7 +819,7 @@ void GeneticManipulator::readCurrentStatus(void) {
   set("LSpeed", &SCritter::linearSpeed,
       [] (float v) { return QString::number(v, 'f', 2) + " m/s"; });
   set("RSpeed", &SCritter::angularSpeed,
-      [] (float v) { return QString::number(v, 'f', 2) + " r/s"; });
+      [] (float v) { return QString::number(v / (2*M_PI), 'f', 2) + " t/s"; });
 
   const auto &r = c.retina();
   for (uint i=0; i<r.size(); i++) _rLabels[i+1]->setValue(r[i]);

@@ -36,6 +36,8 @@ public:
   };
   using FightingEvents = std::map<FightingKey, FightingData>;
 
+  using MatingEvents = std::set<std::pair<Critter*,Critter*>>;
+
 //  using PendingDeletions = std::set<std::pair<Critter*, uint>>;
 
   using EdgeCritters = std::set<Critter*>;
@@ -63,6 +65,8 @@ private:
 
   FeedingEvents _feedingEvents;
   FightingEvents _fightingEvents;
+
+  MatingEvents _matingEvents;
 
   // Destroyed splines that must be deleted after the physical step
 //  PendingDeletions _pendingDeletions;
@@ -117,7 +121,7 @@ public:
 
   void vision (const Critter *c) const;
 
-  virtual void step (void);
+  virtual void step (MatingEvents &events);
 
   void modifyEnergyReserve (decimal e);
 
@@ -130,6 +134,9 @@ public:
   }
 
   static decimal dt(void);
+
+  static void save (nlohmann::json &j, const Environment &e);
+  static void load (const nlohmann::json &j, std::unique_ptr<Environment> &e);
 
 private:
   void createEdges (void);

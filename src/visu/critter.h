@@ -34,11 +34,11 @@ private:
 #define DCY(X) std::decay_t<decltype(std::declval<simu::Critter>().X())>
     DCY(pos) pos;
     DCY(masses) masses;
-    DCY(health) health;
+    DCY(healthArray) health;
 #undef DCY
 
     CritterState (const simu::Critter &c)
-      : pos(c.pos()), masses(c.masses()), health(c.health()) {}
+      : pos(c.pos()), masses(c.masses()), health(c.healthArray()) {}
   } _prevState;
 
 public:
@@ -50,6 +50,22 @@ public:
 
   auto& object (void) {
     return _critter;
+  }
+
+  static constexpr auto NO_FIRSTNAME = "Unknown";
+  QString firstname (void) const {
+    using ut = std::underlying_type<phylogeny::GID>::type;
+    auto gid = _critter.id();
+    if (gid == phylogeny::GID::INVALID) return NO_FIRSTNAME;
+    return "0x" + QString::number(ut(gid), 16);
+  }
+
+  static constexpr auto NO_LASTNAME = "Doe";
+  QString lastname (void) const {
+    using ut = std::underlying_type<phylogeny::SID>::type;
+    auto sid = _critter.genotype().species();
+    if (sid == phylogeny::SID::INVALID) return NO_LASTNAME;
+    return "0x" + QString::number(ut(sid), 16);
   }
 
   void updatePosition (void);
@@ -106,6 +122,14 @@ private:
 
   void printPhenotypePdf (const QString &filename) const;
   void printPhenotypePng (const QString &filename) const;
+};
+
+struct CID {
+  const Critter &c;
+  const QString prefix;
+  CID (const Critter *c, const QString &p = "VC") : CID(*c, p) {}
+  CID (const Critter &c, const QString &p = "VC") : c(c), prefix(p) {}
+  friend QDebug operator<<(QDebug dbg, const CID &cid);
 };
 
 } // end of namespace visu

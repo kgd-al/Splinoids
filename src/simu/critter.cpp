@@ -1,5 +1,8 @@
 #include "critter.h"
+#include "foodlet.h"
 #include "environment.h"
+
+#include "../hyperneat/phenotype.h"
 
 namespace simu {
 
@@ -7,11 +10,17 @@ static constexpr int debugMotors = 0;
 static constexpr int debugMetabolism = 0;
 static constexpr int debugRegen = 0;
 static constexpr int debugGrowth = 0;
-static constexpr int debugReproduction = 2;
+static constexpr int debugReproduction = 0;
 
 Critter::FixtureData::FixtureData (FixtureType t, const Color &c,
                                    uint si, Side fs, uint ai)
   : type(t), color(c), sindex(si), sside(fs), aindex(ai)/*, centerOfMass(P2D())*/ {}
+
+Critter::FixtureData::FixtureData (FixtureType t, const Color &c)
+  : FixtureData(t, c, -1, Side(-1), -1) {}
+
+Critter::FixtureData::FixtureData (FixtureType t)
+  : FixtureData(t, config::Simulation::obstacleColor(), -1, Side(-1), -1) {}
 
 std::ostream& operator<< (std::ostream &os, const Critter::Side &s) {
   return os << (s == Critter::Side::LEFT ? "L" : "R");
@@ -28,7 +37,15 @@ Critter::FixtureData* Critter::get (b2Fixture *f) {
   return static_cast<FixtureData*>(f->GetUserData());
 }
 
+const Critter::FixtureData* Critter::get (const b2Fixture *f) {
+  return static_cast<FixtureData*>(f->GetUserData());
+}
+
 b2BodyUserData* Critter::get (b2Body *b) {
+  return static_cast<b2BodyUserData*>(b->GetUserData());
+}
+
+const b2BodyUserData* Critter::get (const b2Body *b) {
   return static_cast<b2BodyUserData*>(b->GetUserData());
 }
 
@@ -93,7 +110,7 @@ P2D pointAt (int t, const P2D &p0, const P2D &c0, const P2D &c1, const P2D &p1){
   }
 }
 
-Critter::Critter(const Genome &g, b2Body *body, decimal e)
+Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
   : _genotype(g), _size(MIN_SIZE), _body(*body) {
 
   static const decimal initEnergyRatio =
@@ -103,19 +120,36 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e)
 
   _b2Body = nullptr;
 
-  _age = 0;
-  _efficiency = 0;
+  _age = age;
   setEfficiencyCoeffs(matureAt(), _ec0Coeff, oldAt(), _ec1Coeff);
-  _nextGrowthStep = nextGrowthStepAt(0);
+
+  if (age == 0) {
+    _efficiency = 0;
+    _nextGrowthStep = nextGrowthStepAt(0);
+
+  } else {
+    _efficiency = efficiency(_age, matureAt(), _ec0Coeff, oldAt(), _ec1Coeff);
+
+    uint step = config::Simulation::growthSubsteps();
+    if (isYouth()) {
+      step *= _efficiency;
+      _size = _efficiency * (MAX_SIZE - MIN_SIZE) + MIN_SIZE;
+
+    } else
+      _size = MAX_SIZE;
+
+    _nextGrowthStep = nextGrowthStepAt(step);
+  }
 
   _masses.fill(0);
   _currHealth.fill(0);
+  _currentBodyColor = computeCurrentColor();
 
   updateShape();  
 
   _motors = { { Motor::LEFT, 0 }, { Motor::RIGHT, 0 } };
-  clockSpeed(.5);
-  assert(0 <= _clockSpeed && _clockSpeed < 10);
+  clockSpeed(.5); assert(0 <= _clockSpeed && _clockSpeed < 10);
+  _reproduction = 0;
 
   _energy = e / initEnergyRatio;
 
@@ -133,7 +167,7 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e)
 //  std::cerr << "Received " << e << " energy\n"
 //            << bodyHealth() << " = " << bodyMaxHealth() << " * (1 - " << e
 //              << " / " << initEnergyRatio << ")\n"
-//            << "C" << id() << " energy breakdown:\n"
+//            << CID(this) << " energy breakdown:\n"
 //            << "\tReserve " << _energy << " / " << maxUsableEnergy() << "\n"
 //            << "\t Health " << bodyHealth()
 //              << " / " << bodyMaxHealth() << "\n"
@@ -143,7 +177,7 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e)
   assert(_energy <= _masses[0]);
   assert(bodyHealth() <= bodyMaxHealth());
 
-//  std::cerr << "Splinoid " << id() << "\n";
+//  std::cerr << CID(this, "Splinoid ") << "\n";
 //  std::cerr << "     Body health: " << bodyHealth() << " / " << bodyMaxHealth()
 //            << "\n";
 
@@ -160,6 +194,9 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e)
   _body.SetUserData(&_objectUserData);
 
   brainDead = false;
+
+  auto substrate = substrateFor(_raysEnd);
+  _genotype.connectivity.BuildHyperNEATPhenotype(_brain, substrate);
 }
 
 
@@ -180,7 +217,10 @@ void Critter::step(Environment &env) {
   regeneration(env);
 
   // Age-specific tasks
-  aging(env.dt());
+  aging(env);
+
+  // Udate appearance
+  _currentBodyColor = computeCurrentColor();
 
   // TODO Smell?
 }
@@ -188,7 +228,7 @@ void Critter::step(Environment &env) {
 void Critter::autopsy (void) const {
   if (!isDead())  std::cerr << "Please don't\n";
   else {
-    std::cerr << "Critter " << id() << " died of";
+    std::cerr << CID(this, "Splinoid ") << " died of";
     if (tooOld())   std::cerr << " old age";
     if (starved())  std::cerr << " starvation";
     if (fatallyInjured()) std::cerr << " injuries";
@@ -288,43 +328,85 @@ void Critter::performVision(const Environment &env) {
 
 void Critter::neuralStep(Environment &env) {  ERR
   if (!brainDead) {
-    // Set inputs
-    float f = usableEnergy() / maxUsableEnergy();
-
-    // Process n propagation steps
-    // Collect outputs
-
     auto &dice = env.dice();
 
-    if (false) { // random walk
-      if (dice(.1)) {
-        if (dice(.6))
-          _motors[Motor::LEFT] = _motors[Motor::RIGHT] = 1;
-        else if (dice(.2))
-          _motors[Motor::LEFT] = _motors[Motor::RIGHT] = -1;
-        else {
-          int d = dice.toss(-1,1);
-          _motors[Motor::LEFT] = d;
-          _motors[Motor::RIGHT] = -d;
-        }
-      }
+    // Set inputs
+    std::vector<double> inputs;
+    inputs.reserve(_retina.size() * std::tuple_size_v<Color> + 3);
+    inputs.push_back(usableEnergy() / maxUsableEnergy());
+    inputs.push_back(bodyHealthness());
+    inputs.push_back(reproductionReadiness());
+//    inputs.push_back(dice(-1,1));
+    for (const Color &c: _retina) for (float v: c)  inputs.push_back(v);
 
-    } else {  // Feed. Mate. Repeat
-      if (f < .75) { // Go to food
-        if (_retina[0][0] == 0 && _retina[0][2] == 0 && _retina[0][1] >= .75)
-          _motors[Motor::LEFT] = 1;
-        if (_retina[1][0] == 0 && _retina[1][2] == 0 && _retina[1][1] >= .75)
-          _motors[Motor::RIGHT] = 1;
+    // Process n propagation steps
+    _brain.Input(inputs);
+    for (uint i=0; i<_genotype.brainSubsteps; i++)  _brain.Activate();
+    std::vector<double> outputs = _brain.Output();
 
-      } else if (dice(.6))  // Walk around
-        _motors[Motor::LEFT] = _motors[Motor::RIGHT] = 1;
-      else if (dice(.2))
-        _motors[Motor::LEFT] = _motors[Motor::RIGHT] = -1;
-      else {
-        int d = dice.toss(-1,1);
-        _motors[Motor::LEFT] = d;
-        _motors[Motor::RIGHT] = -d;
-      }
+    // Collect outputs
+    for (double &v: outputs)  assert(0 <= v && v <= 1);
+    _motors[Motor::LEFT] = outputs[0];
+    _motors[Motor::RIGHT] = outputs[1];
+    _clockSpeed = clockSpeed(outputs[2]);
+    _reproduction = outputs[3];
+
+    if (false) {
+      auto motorsIn = _motors;
+      _motors[Motor::LEFT] = _motors[Motor::RIGHT] = 0;
+
+//#define DEBUG(X) if (false && id() == ID(X))  std::cerr << "[" << CID(this) << "] "
+
+//    // Feed. Mate. Repeat
+//    const auto &r = _retina;
+//    bool foodLeft = (r[0][0] == 0 && r[0][2] == 0 && r[0][1] >= .75);
+//    bool foodRight = (r[1][0] == 0 && r[1][2] == 0 && r[1][1] >= .75);
+
+//    bool mateLeft = (r[0][0] >= .75 && r[0][2] <= .75 && r[0][1] <= .75);
+//    bool mateRight = (r[1][0] >= .75 && r[1][2] <= .75 && r[1][1] <= .75);
+
+//    bool obstacleLeft = (r[0][0] < 1 || r[0][1] < 1 || r[0][2] < 1);
+//    bool obstacleRight = (r[1][0] < 1 || r[1][1] < 1 || r[1][2] < 1);
+
+//    if (f < .75 && (foodLeft || foodRight)) { // Go to food
+//      DEBUG(1) << "Going to food" << std::endl;
+//      if (foodLeft)   _motors[Motor::LEFT] = 1;
+//      if (foodRight)  _motors[Motor::RIGHT] = 1;
+
+//    } else if (s == 1 && (mateLeft || mateRight)) { // Go to mate
+//      DEBUG(1) << "Going to mate" << std::endl;
+//      if (mateLeft)   _motors[Motor::LEFT] = 1;
+//      if (mateRight)  _motors[Motor::RIGHT] = 1;
+
+//    } else if (obstacleLeft) {  // Evade right
+//      DEBUG(1) << "Evading something on the left" << std::endl;
+//      _motors[Motor::LEFT] = -.1;
+//      _motors[Motor::RIGHT] = .1;
+
+//    } else if (obstacleRight) { // Evade left
+//      DEBUG(1) << "Evading something on the right" << std::endl;
+//      _motors[Motor::LEFT] = .1;
+//      _motors[Motor::RIGHT] = -.1;
+
+//    } else if (dice(.1)){  // Walk around
+//      DEBUG(1) << "Walking around" << std::endl;
+//      if (dice(.6))
+//        _motors[Motor::LEFT] = _motors[Motor::RIGHT] = 1;
+//      else if (dice(.2))
+//        _motors[Motor::LEFT] = _motors[Motor::RIGHT] = -1;
+//      else {
+//        int d = dice.toss(-1,1);
+//        _motors[Motor::LEFT] = d;
+//        _motors[Motor::RIGHT] = -d;
+//      }
+
+//    } else {
+//      DEBUG(1) << "Idling" << std::endl;
+//      _motors[Motor::LEFT] = motorsIn[Motor::LEFT];
+//      _motors[Motor::RIGHT] = motorsIn[Motor::RIGHT];
+//    }
+
+//    _reproduction = 1;
     }
   }
 
@@ -337,12 +419,14 @@ void Critter::neuralStep(Environment &env) {  ERR
     _body.ApplyForce(f, p, true);
 
     if (debugMotors)
-      std::cerr << "C" << id() << " Applied motor force for " << m.first
+      std::cerr << CID(this) << " Applied motor force for " << m.first
                 << " of " << s << " = "
                 << config::Simulation::critterBaseSpeed() << " * "
                 << m.second << " * " << _clockSpeed << " * "
                 << _efficiency << " * " << _size << std::endl;
   }
+
+#undef DEBUG
 }
 
 void Critter::energyConsumption (Environment &env) {
@@ -356,7 +440,7 @@ void Critter::energyConsumption (Environment &env) {
   de *= dt;
 
   if (debugMetabolism)
-    std::cerr << "C" << id() << " de = " << de << " = "
+    std::cerr << CID(this) << " de = " << de << " = "
               << baselineEnergyConsumption(_size, _clockSpeed) << " + "
               << config::Simulation::motorEnergyConsumption() << " * "
               << _clockSpeed << " * " << _size << " * " << dt << std::endl;
@@ -384,7 +468,7 @@ void Critter::regeneration (Environment &env) {
   static const decimal h2ER = config::Simulation::healthToEnergyRatio();
 
   if (debugRegen)
-    std::cerr << "C" << id() << " missing health (total): " << mh << "\n";
+    std::cerr << CID(this) << " missing health (total): " << mh << "\n";
 
   dE = _energy * config::Simulation::baselineRegenerationRate()
       * _clockSpeed * dt;
@@ -422,7 +506,9 @@ void Critter::regeneration (Environment &env) {
   env.modifyEnergyReserve(dE - dE * h2ER * mhA[0] / mh);
 }
 
-void Critter::aging(float dt) { ERR
+void Critter::aging(Environment &env) {
+  float dt = env.dt();
+
   _age += dt * agingSpeed(_clockSpeed);
 
   auto prevEfficiency = _efficiency;
@@ -433,7 +519,7 @@ void Critter::aging(float dt) { ERR
     uint step = _efficiency * config::Simulation::growthSubsteps();
 
     if (debugGrowth)
-      std::cerr << "Critter " << id() << " should grow (step " << step << ")"
+      std::cerr << CID(this) << " should grow (step " << step << ")"
                 << std::endl;
 
     float newSize = _efficiency * (MAX_SIZE - MIN_SIZE) + MIN_SIZE;
@@ -473,24 +559,56 @@ void Critter::aging(float dt) { ERR
   // Mature critter. If first step, create reproduction sensor
   //  Only register change of state, accumulation is performed by neural step
   //  and actual reproduction by the environment
-  if (prevEfficiency < 1 && _efficiency == 1) {
-    if (debugGrowth || debugReproduction)
-      std::cerr << "Critter " << id() << " turned adult." << std::endl;
+  if (_efficiency == 1) {
+    if (prevEfficiency < 1 && (debugGrowth || debugReproduction))
+      std::cerr << CID(this) << " turned adult." << std::endl;
 
+    decimal dE = _energy * config::Simulation::baselineGametesGrowth()
+               * _clockSpeed * dt;
+    dE = std::min(dE, _energy);
+    dE = std::min(dE, energyForChild() - _reproductionReserve);
+    _energy -= dE;
+    _reproductionReserve += dE;
+    env.modifyEnergyReserve(+dE);
+
+    // Just turned active -> create sensor
+    if (reproductionReadiness() == 1 && _reproductionSensor == nullptr)
+      _reproductionSensor = addReproFixture();
   }
 
   // Old critter. Destroy reproduction sensor
   if (oldAt() < _age && prevEfficiency == 1) {
     if (debugGrowth || debugReproduction)
-      std::cerr << "Critter " << id() << " grew old." << std::endl;
-
+      std::cerr << CID(this) << " grew old." << std::endl;
+    resetMating();
   }
+}
+
+void Critter::feed (Foodlet *f, float dt) {
+  static const decimal &dE = config::Simulation::energyAbsorptionRate();
+
+  decimal E = dE * _clockSpeed * _efficiency * dt;
+  E = std::min(E, f->energy());
+  E = std::min(E, storableEnergy());
+
+  if (debugMetabolism > 1)
+    std::cerr << "Transfering " << E << " = min(" << f->energy() << ", "
+              << storableEnergy() << ", " << dE << " * " << _clockSpeed
+              << " * " << _efficiency << " * " << dt << ") from " << f->id()
+              << " to " << CID(this) << " (" << f->energy()
+              << " remaining)" << std::endl;
+
+  f->consumed(E);
+
+  assert(0 <= E && E <= storableEnergy());
+  _energy += E;
 }
 
 #undef ERR
 
 // =============================================================================
 // == Internal shape-defining routines
+
 
 void Critter::updateShape(void) {
   generateSplinesData(bodyRadius(), _efficiency, _genotype, _splinesData);
@@ -740,7 +858,7 @@ b2Fixture* Critter::addBodyFixture (void) {
   fd.filter.categoryBits = uint16(CollisionFlag::CRITTER_BODY_FLAG);
   fd.filter.maskBits = uint16(CollisionFlag::CRITTER_BODY_MASK);
 
-  FixtureData cfd (FixtureType::BODY, bodyColor());
+  FixtureData cfd (FixtureType::BODY, _currentBodyColor);
 
   return addFixture(fd, cfd);
 }
@@ -794,6 +912,23 @@ b2Fixture* Critter::addPolygonFixture (uint splineIndex, Side side,
   FixtureData cfd (FixtureType::ARTIFACT, splineColor(splineIndex),
                    splineIndex, side, artifactIndex);
 
+  return addFixture(fd, cfd);
+}
+
+b2Fixture* Critter::addReproFixture(void) {
+  assert(_reproductionSensor == nullptr);
+  b2CircleShape s;
+  s.m_p.Set(0, 0);
+  s.m_radius = config::Simulation::reproductionRange() * bodyRadius();
+
+  b2FixtureDef fd;
+  fd.shape = &s;
+  fd.density = 0;
+  fd.isSensor = true;
+  fd.filter.categoryBits = uint16(CollisionFlag::CRITTER_REPRO_FLAG);
+  fd.filter.maskBits = uint16(CollisionFlag::CRITTER_REPRO_MASK);
+
+  FixtureData cfd (FixtureType::REPRODUCTION);
   return addFixture(fd, cfd);
 }
 
@@ -906,11 +1041,11 @@ void Critter::updateObjects(void) {
       _masses[1+k] += massData.mass;
 //      get(f)->centerOfMass = massData.center;
 
-//      std::cerr << "C" << id() << "F" << *get(f)
+//      std::cerr << CID(this) << "F" << *get(f)
 //                << " COM: " << massData.center << " ("
 //                << body().GetWorldPoint(massData.center) << ")" << std::endl;
 
-//      std::cerr << "C" << id() << ": Spline " << side << i << " += "
+//      std::cerr << CID(this) << ": Spline " << side << i << " += "
 //                << massData.mass << "; masses[1+" << k << "] = " << _masses[1+k]
 //                << std::endl;
     }
@@ -940,6 +1075,22 @@ void Critter::updateObjects(void) {
   }
 }
 
+// =============================================================================
+// == Unsorted stuff
+
+Color Critter::computeCurrentColor(void) const {
+  Color color = initialBodyColor();
+  static constexpr auto CM = Genome::config_t::COLOR_MIN;
+  float h = bodyHealthness();
+  if (h < 1)  for (float &v: color) v = CM + h * (v-CM);
+  if (requestingMating()) color[0] = 1;
+
+//  using utils::operator <<;
+//  std::cerr << CID(this) << " body color: " << color << std::endl;
+
+  return color;
+}
+
 void Critter::setMotorOutput(float i, Motor m) {
   assert(-1 <= i && i <= 1);
   assert(EnumUtils<Motor>::isValid(m));
@@ -954,7 +1105,7 @@ bool Critter::applyHealthDamage (const FixtureData &d, float amount,
   if (d.type != FixtureType::BODY) i += 1 + splineIndex(d.sindex, d.sside);
   decimal &v = _currHealth[i];
 
-//  std::cerr << "Applying " << damount << " of damage to C" << id() << d
+//  std::cerr << "Applying " << damount << " of damage to " << CID(this) << d
 //            << ", resulting health is " << v << " >> ";
 
   damount = std::min(damount, v);
@@ -975,7 +1126,7 @@ bool Critter::applyHealthDamage (const FixtureData &d, float amount,
 void Critter::destroySpline(uint splineIndex) {
   uint k = splineIndex;
 
-//  std::cerr << "Spline C" << id() << "S" << fd.sside << fd.sindex
+//  std::cerr << "Spline " << CID(this) << "S" << fd.sside << fd.sindex
 //            << " was destroyed" << std::endl;
 
   _destroyed.set(k);
@@ -1069,7 +1220,7 @@ float Critter::nextGrowthStepAt (uint currentStep) {
 }
 
 float Critter::computeVisionRange(float visionWidth) {
-  return std::max(.5f, std::min(10/visionWidth, 20.f));
+  return std::max(.5f, std::min(5/visionWidth, 20.f));
 }
 
 float Critter::agingSpeed (float clockSpeed) {
@@ -1087,6 +1238,65 @@ float Critter::lifeExpectancy (float clockSpeed) {
 
 float Critter::starvationDuration (float size, float energy, float clockSpeed) {
   return energy / baselineEnergyConsumption(size, clockSpeed);
+}
+
+void save (nlohmann::json &j, const NEAT::NeuralNetwork &ann) {
+  nlohmann::json jn, jc;
+  for (const NEAT::Neuron &n: ann.m_neurons)
+    jn.push_back({ n.m_type, n.m_a, n.m_b, n.m_timeconst, n.m_bias,
+                   n.m_activation_function_type, n.m_split_y });
+  for (const NEAT::Connection &c: ann.m_connections)
+    jc.push_back({ c.m_source_neuron_idx, c.m_target_neuron_idx,
+                   c.m_weight, c.m_recur_flag,
+                   c.m_hebb_rate, c.m_hebb_pre_rate });
+  j = { jn, jc };
+}
+
+void load (const nlohmann::json &j, NEAT::NeuralNetwork &ann) {
+  for (const auto &jn: j[0]) {
+    NEAT::Neuron n;
+    uint i=0;
+    n.m_type = jn[i++];
+    n.m_a = jn[i++];
+    n.m_b = jn[i++];
+    n.m_timeconst = jn[i++];
+    n.m_bias = jn[i++];
+    n.m_activation_function_type = jn[i++];
+    n.m_split_y = jn[i++];
+    ann.m_neurons.push_back(n);
+  }
+
+  for (const auto &jc: j[1]) {
+    NEAT::Connection c;
+    uint i=0;
+    c.m_source_neuron_idx = jc[i++];
+    c.m_target_neuron_idx = jc[i++];
+    c.m_weight = jc[i++];
+    c.m_recur_flag = jc[i++];
+    c.m_hebb_rate = jc[i++];
+    c.m_hebb_pre_rate = jc[i++];
+    ann.m_connections.push_back(c);
+  }
+}
+
+nlohmann::json Critter::save (const Critter &c) {
+  nlohmann::json jb;
+  simu::save(jb, c._brain);
+  return nlohmann::json {
+    c._genotype, jb, c._energy, c._age, c._reproductionReserve,
+    c._currHealth, c._destroyed.to_string()
+  };
+}
+
+Critter* Critter::load (const nlohmann::json &j, b2Body *body) {
+  Critter *c = new Critter (j[0], body, j[2], j[3]);
+  simu::load(j[1], c->_brain);
+  c->_energy = j[2];
+  c->_reproductionReserve = j[4];
+  c->_currHealth = j[5];
+  c->_destroyed = decltype(c->_destroyed)(j[6].get<std::string>());
+
+  return c;
 }
 
 } // end of namespace simu

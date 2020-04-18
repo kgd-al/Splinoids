@@ -78,4 +78,16 @@ void Foodlet::update(Environment &env) {
   updateColor();
 }
 
+nlohmann::json Foodlet::save (const Foodlet &f) {
+  return nlohmann::json {
+    f._userData.type, f._id, f._radius, f._energy, f._baseColor
+  };
+}
+
+Foodlet* Foodlet::load (const nlohmann::json &j, b2Body *body) {
+  Foodlet *f = new Foodlet(j[0], j[1], body, j[2], j[3]);
+  f->setBaseColor(j[4]);
+  return f;
+}
+
 } // end of namespace simu

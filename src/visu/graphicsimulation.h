@@ -103,11 +103,19 @@ public:
     _selection = c;
   }
 
+  static void load (const std::string &file, GraphicSimulation &s,
+                    const std::string &constraints,
+                    const std::string &fields);
+
 signals:
   void selectionDeleted (void);
 
 private:
   void processStats(const Stats &s) const override;
+
+  void setupVisuEnvironment (void);
+  void addVisuCritter (simu::Critter *c);
+  void addVisuFoodlet (simu::Foodlet *f);
 };
 
 } // end of namespace visu

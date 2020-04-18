@@ -72,11 +72,13 @@ DEFINE_GENOME_DISTANCE_WEIGHTS({
 
 DEFINE_GENOME_FIELD_AS_SUBGENOME(BOCData, cdata, "")
 DEFINE_GENOME_FIELD_AS_SUBGENOME(Vision, vision, "")
+DEFINE_GENOME_FIELD_AS_SUBGENOME(HyperNEAT, connectivity, "hNeat")
 
-DEFINE_GENOME_FIELD_WITH_BOUNDS(float, minClockSpeed, "minCS", 0, 1)
-DEFINE_GENOME_FIELD_WITH_BOUNDS(float, maxClockSpeed, "maxCS", 1, 2)
-DEFINE_GENOME_FIELD_WITH_BOUNDS(float, matureAge, "mature", .25, .5)
-DEFINE_GENOME_FIELD_WITH_BOUNDS(float, oldAge, "old", .5, .75)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, minClockSpeed, "minCS", .1, 1, 1, 1)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, maxClockSpeed, "maxCS", 1, 1, 1, 2)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, matureAge, "mature", .25, .33, .33, .5)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, oldAge, "old", .5, .66, .66, .75)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(uint, brainSubsteps, "bdepth", 2u, 2u, 2u, 2u)
 
 using Config = genotype::Critter::config_t;
 
@@ -242,7 +244,10 @@ DEFINE_GENOME_MUTATION_RATES({
   EDNA_PAIR(    matureAge, 1),
   EDNA_PAIR(       oldAge, 1),
 
-  EDNA_PAIR(     cdata, 3.f),
+  EDNA_PAIR( connectivity, 10),
+  EDNA_PAIR(brainSubsteps, .1),
+
+  EDNA_PAIR(        cdata, 3.f),
 })
 DEFINE_GENOME_DISTANCE_WEIGHTS({
   EDNA_PAIR(      splines, std::tuple_size_v<Ss> * std::tuple_size_v<D>),
@@ -254,7 +259,9 @@ DEFINE_GENOME_DISTANCE_WEIGHTS({
   EDNA_PAIR(    matureAge, 1),
   EDNA_PAIR(       oldAge, 1),
 
-  EDNA_PAIR(     cdata, 0.f),
+  EDNA_PAIR( connectivity, 0),
+  EDNA_PAIR(brainSubsteps, .1),
+  EDNA_PAIR(        cdata, 0.f),
 })
 
 template <>
@@ -394,7 +401,9 @@ DEFINE_CONTAINER_PARAMETER(CFILE::MutationRates, colors_mutationRates,
   {       "mutate", 490.f  },
 }))
 
-DEFINE_PARAMETER(CFILE::BC, color_bounds, .25f, .25f, .75f, .75f)
+DEFINE_PARAMETER(CFILE::BC, color_bounds,
+                 CFILE::COLOR_MIN, CFILE::COLOR_MIN,
+                 CFILE::COLOR_MAX, CFILE::COLOR_MAX)
 
 #undef CFILE
 

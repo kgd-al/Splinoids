@@ -4,28 +4,174 @@
 
 namespace simu {
 
+static constexpr bool debugShowStaticStats = true;
+static constexpr int debugEntropy = 0;
 static constexpr int debugCritterManagement = 0;
 static constexpr int debugFoodletManagement = 0;
+static constexpr int debugReproduction = 0;
 
-Simulation::Simulation(void) : _environment(nullptr), _stepTimeMs(0) {}
+namespace statis_stats_details {
+
+using SConfig = config::Simulation;
+
+struct FormatClockSpeed {
+  float c;
+  friend std::ostream& operator<< (std::ostream &os, const FormatClockSpeed &f) {
+    return os << "(" << f.c << "): "
+              << 1. / (f.c * SConfig::baselineAgingSpeed())
+              << "s\n";
+  }
+};
+
+struct FormatStarvation {
+  float s;
+  friend std::ostream& operator<< (std::ostream &os, const FormatStarvation &f) {
+    return os << Critter::starvationDuration(f.s,
+                                             Critter::maximalEnergyStorage(f.s),
+                                             1) << "s\n";
+  }
+};
+
+struct FormatAbsorption {
+  float e, s;
+  friend std::ostream& operator<< (std::ostream &os, const FormatAbsorption &f) {
+    return os << "(" << f.e << "," << f.s << "): "
+              << Critter::maximalEnergyStorage(f.s)
+                 / (f.e * SConfig::energyAbsorptionRate()) << "s\n";
+  }
+};
+
+}
+void staticStats (void) {
+  std::cerr << "==================\n"
+               "== Static stats ==\n";
+
+  using namespace statis_stats_details;
+  using CConfig = genotype::Critter::config_t;
+
+  std::cerr << "\n= Plant energy =\n"
+            << "min: " << Foodlet::maxStorage(BodyType::PLANT,
+                                              SConfig::plantMinRadius()) << "\n"
+            << "max: " << Foodlet::maxStorage(BodyType::PLANT,
+                                              SConfig::plantMaxRadius()) << "\n";
+
+  std::cerr << "\n= Splinoid energy =\n"
+            << "     min: " << Critter::maximalEnergyStorage(Critter::MIN_SIZE)
+              << "\n"
+            << "     max: " << Critter::maximalEnergyStorage(Critter::MAX_SIZE)
+              << "\n"
+            << "creation: " << Critter::energyForCreation() << "\n";
+
+  std::cerr << "\n= Aging speed =\n"
+            << "clock speed\n"
+            << " min: " << FormatClockSpeed{CConfig::minClockSpeedBounds().min}
+            << " avg: " << FormatClockSpeed{.25f * (
+                               CConfig::minClockSpeedBounds().min
+                             + CConfig::minClockSpeedBounds().max
+                             + CConfig::maxClockSpeedBounds().min
+                             + CConfig::maxClockSpeedBounds().max)}
+            << "      " << FormatClockSpeed{1}
+            << " max: " << FormatClockSpeed{CConfig::maxClockSpeedBounds().max};
+
+  std::cerr << "\n= Starvation =\n"
+            << "newborn: " << FormatStarvation{Critter::MIN_SIZE}
+            << "  adult: " << FormatStarvation{Critter::MAX_SIZE};
+
+  std::cerr << "\n= Regeneration =\n"
+            << "adult: " << 1. / SConfig::baselineRegenerationRate() << "s\n";
+
+  std::cerr << "\n= Reproduction =\n"
+            << "adult: " << .5 * Critter::energyForCreation()
+               / (Critter::maximalEnergyStorage(Critter::MAX_SIZE)
+                  * SConfig::baselineGametesGrowth()) << "s\n";
+
+  std::cerr << "\n= Absorption =\n"
+            << "newborn " << FormatAbsorption{.25,   .75 * Critter::MIN_SIZE
+                                                   + .25 * Critter::MAX_SIZE}
+            << "  adult " << FormatAbsorption{1, 1}
+            << "    old " << FormatAbsorption{.25, 1};
+
+  std::cerr << std::endl;
+}
+
+Simulation::Simulation(void)
+  : _environment(nullptr), _stepTimeMs(0) {}
 
 Simulation::~Simulation (void) {
   clear();
+}
+
+void Simulation::setDataFolder (const stdfs::path &path, Overwrite o) {
+  _dataFolder = path;
+
+  if (stdfs::exists(_dataFolder) && !stdfs::is_empty(_dataFolder)) {
+    if (o == UNSPECIFIED) {
+      std::cerr << "WARNING: data folder '" << _dataFolder << "' is not empty."
+                   " What do you want to do ([a]bort, [p]urge)?"
+                << std::flush;
+      o = Overwrite(std::cin.get());
+    }
+
+    switch (o) {
+    case PURGE: std::cerr << "Purging contents from " << _dataFolder
+                          << std::endl;
+                stdfs::remove_all(_dataFolder);
+                break;
+
+    case ABORT: _aborted = true;  break;
+
+    default:  std::cerr << "Invalid overwrite option '" << o
+                        << "' defaulting to abort." << std::endl;
+              _aborted = true;
+    }
+  }
+  if (_aborted) return;
+
+  if (!stdfs::exists(_dataFolder)) {
+    std::cout << "Creating data folder " << _dataFolder << std::endl;
+    stdfs::create_directories(_dataFolder);
+  }
+
+  stdfs::path statsPath = path / "global.dat";
+  if (_statsLogger.is_open()) _statsLogger.close();
+  _statsLogger.open(statsPath, std::ofstream::out | std::ofstream::trunc);
+  if (!_statsLogger.is_open())
+    utils::doThrow<std::invalid_argument>(
+      "Unable to open stats file ", statsPath);
+
+//  using O = genotype::cgp::Outputs;
+//  using U = EnumUtils<O>;
+//  for (O o: U::iterator()) {
+//    auto o_t = U::toUnderlying(o);
+//    stdfs::path envPath = path / envPaths.at(o);
+//    std::ofstream &ofs = _envFiles[o_t];
+
+//    if (ofs.is_open()) ofs.close();
+//    if (!config::CGP::isActiveOutput(o_t))  continue;
+
+//    ofs.open(envPath, openMode);
+
+//    if (!ofs.is_open())
+//      utils::doThrow<std::invalid_argument>(
+//        "Unable to open voxel file ", envPath, " for ", U::getName(o));
+//  }
 }
 
 void Simulation::init(const Environment::Genome &egenome,
                       Critter::Genome cgenome,
                       const InitData &data) {
 
+  _aborted = false;
+  _minGen = 0;
+  _maxGen = 0;
+  if (debugShowStaticStats) staticStats();
+
   // TODO Remove (debug)
 //  cgenome.vision.angleBody = M_PI/4.;
 //  cgenome.vision.angleRelative = -M_PI/4;
 //  cgenome.vision.width = M_PI/4.;
 //  cgenome.vision.precision = 1;
-  std::cerr << "   Plant min energy: "
-            << Foodlet::maxStorage(BodyType::PLANT,
-                                   config::Simulation::plantMinRadius())
-            << "\n";
+//  cgenome.matureAge = .05;
 
   auto le = [&cgenome] (float v) {
     return Critter::lifeExpectancy(Critter::clockSpeed(cgenome, v));
@@ -36,7 +182,7 @@ void Simulation::init(const Environment::Genome &egenome,
       Critter::maximalEnergyStorage(s),
       Critter::clockSpeed(cgenome, v));
   };
-  std::cerr << "Splinoid min energy: " << Critter::energyForCreation() << "\n"
+  std::cerr << "Stats for provided genome\n"
             << "   Old age duration: " << le(0) << ", " << le(.5) << ", "
               << le(1) << "\n"
             << "Starvation duration:\n\t"
@@ -73,8 +219,8 @@ void Simulation::init(const Environment::Genome &egenome,
     float y = dice(-C, C);
 
     // TODO
-    if (i == 0) x = 0, y = -1, a = 0;
-    if (i == 1) x = 0, y = 1, a = 0;
+//    if (i == 0) x = -.75, y = .25, a = 0;
+//    if (i == 1) x = -.75, y = -.25, a = 0;
 
 //    if (i == 0) x = 49, y = 49, a = M_PI/4;
 //    if (i == 1) x = 47, y = 50-sqrt(2), a = M_PI/2;
@@ -83,11 +229,11 @@ void Simulation::init(const Environment::Genome &egenome,
     addCritter(cg, x, y, a, energyPerCritter);
   }
 
-  _nextPlantID = 0;
+  _nextFoodletID = 0;
 
-  addFoodlet(BodyType::PLANT,
-             2, 0,
-             1, 2); // TODO
+//  addFoodlet(BodyType::PLANT,
+//             0, 0,
+//             1, 2); // TODO
   plantRenewal(W * data.pRange);
 
   _statsLogger.open(config::Simulation::logFile());
@@ -97,11 +243,22 @@ void Simulation::init(const Environment::Genome &egenome,
   postInit();
 
   logStats();
+
+  if (true) {
+    const Critter *c = *_critters.begin();
+    const CGenome &g = c->genotype();
+
+    std::ofstream gos ("tmp/cppn.dot");
+    g.connectivity.toDot(gos);
+    std::cerr << "debug saved first critter's connectivity: " << bool(gos) << "\n";
+
+    std::ofstream pos ("tmp/ann.dat");
+    g.connectivity.phenotypeToDat(pos, c->brain());
+    std::cerr << "debug saved first critter's brain: " << bool(pos) << "\n";
+  }
 }
 
-Critter* Simulation::addCritter (const CGenome &genome,
-                                 float x, float y, float a, decimal e) {
-
+b2Body* Simulation::critterBody (float x, float y, float a) {
   b2BodyDef bodyDef;
   bodyDef.type = b2_dynamicBody;
   bodyDef.position.Set(x, y);
@@ -109,7 +266,13 @@ Critter* Simulation::addCritter (const CGenome &genome,
   bodyDef.angularDamping = .95;
   bodyDef.linearDamping = .9;
 
-  b2Body *body = physics().CreateBody(&bodyDef);
+  return physics().CreateBody(&bodyDef);
+}
+
+Critter* Simulation::addCritter (const CGenome &genome,
+                                 float x, float y, float a, decimal e) {
+
+  b2Body *body = critterBody(x, y, a);
 
 #ifndef NDEBUG
   decimal prevEE = _environment->energy();
@@ -125,36 +288,43 @@ Critter* Simulation::addCritter (const CGenome &genome,
 
 #ifndef NDEBUG
   decimal e__ = c->totalEnergy();
-  if (e_ != e__)
-    std::cerr << "Delta energy on C" << c->id() << " creation: " << e__-e_
+  if (debugEntropy && e_ != e__)
+    std::cerr << "Delta energy on " << CID(c) << " creation: " << e__-e_
               << std::endl;
   decimal currEE = _environment->energy(), dEE = currEE - prevEE;
-  if (dEE != e_)
-    std::cerr << "Delta energy reserve on C" << c->id() << " creation: "
+  if (debugEntropy && dEE != e_)
+    std::cerr << "Delta energy reserve on " << CID(c) << " creation: "
               << dEE +e_ << std::endl;
 #endif
 
   if (debugCritterManagement)
-    std::cerr << "Created critter " << c->id() << " at " << c->pos()
+    std::cerr << "Created " << CID(c, "splinoid ") << " at " << c->pos()
               << std::endl;
+
+  if (_ssga.watching()) _ssga.registerBirth(c);
 
   return c;
 }
 
 void Simulation::delCritter (Critter *critter) {
   if (debugCritterManagement) critter->autopsy();
+  if (_ssga.watching()) _ssga.registerDeath(critter);
   _critters.erase(critter);
   physics().DestroyBody(&critter->body());
   delete critter;
 }
 
-Foodlet* Simulation::addFoodlet(BodyType t, float x, float y, float r, decimal e) {
+b2Body* Simulation::foodletBody(float x, float y) {
   b2BodyDef bodyDef;
   bodyDef.type = b2_staticBody;
   bodyDef.position.Set(x, y);
 
-  b2Body *body = _environment->physics().CreateBody(&bodyDef);
-  Foodlet *f = new Foodlet (t, _nextPlantID++, body, r, e);
+  return _environment->physics().CreateBody(&bodyDef);
+}
+
+Foodlet* Simulation::addFoodlet(BodyType t, float x, float y, float r, decimal e) {
+  b2Body *body = foodletBody(x, y);
+  Foodlet *f = new Foodlet (t, _nextFoodletID++, body, r, e);
 
   if (debugFoodletManagement)
     std::cerr << "Added foodlet " << f->id() << " of type " << uint(f->type())
@@ -190,8 +360,12 @@ void Simulation::step (void) {
 //  std::cerr << "\n## Simulation step " << _time.timestamp() << " ("
 //            << _time.pretty() << ") ##" << std::endl;
 
+  auto prevMinGen = _minGen, prevMaxGen = _maxGen;
   _minGen = std::numeric_limits<uint>::max();
   _maxGen = 0;
+  _reproductions = ReproductionStats{};
+
+  if (_ssga.watching()) _ssga.preStep(_critters);
 
   for (Critter *c: _critters) {
     c->step(*_environment);
@@ -201,13 +375,13 @@ void Simulation::step (void) {
   }
   _splnTimeMs = durationFrom(start);  start = now();
 
-  if (_ssga.watching()) _ssga.prePhysicsStep(_critters);
+  Environment::MatingEvents matings;
+  _environment->step(matings);
 
-  _environment->step();
-
-  if (_ssga.watching()) _ssga.postPhysicsStep(_critters);
+  if (_ssga.watching()) _ssga.postStep(_critters);
   _envTimeMs = durationFrom(start);  start = now();
 
+  reproduction(matings);
   produceCorpses();
   decomposition();
   _decayTimeMs = durationFrom(start);  start = now();
@@ -266,6 +440,52 @@ void Simulation::step (void) {
   if (config::Simulation::screwTheEntropy())  correctFloatingErrors();
 
   _stepTimeMs = durationFrom(stepStart);
+
+  if (prevMinGen != _minGen || prevMaxGen != _maxGen) {
+    std::cerr << "## Simulation step " << _time.pretty() << " gens: ["
+              << _minGen << "; " << _maxGen << "] at " << utils::CurrentTime{}
+              << "\n";
+  }
+}
+
+void Simulation::reproduction(Environment::MatingEvents &matings) {
+  static const genotype::_details::FCOMPAT<CGenome> fcompat =
+      &CGenome::compatibility;
+
+  for (auto p: matings) {
+    std::vector<CGenome> children (1);
+    if (p.first->sex() != Critter::Sex::FEMALE) std::swap(p.first, p.second);
+
+    if (debugReproduction)
+      std::cerr << "Mating attempt between " << CID(p.first) << " & "
+                << CID(p.second) << std::endl;
+
+    const CGenome &lhs = p.first->genotype(), &rhs = p.second->genotype();
+
+    if (genotype::bailOutCrossver(lhs, rhs, children, dice(), fcompat)) {
+      assert(children.size() == 1);
+      children.front().genealogy().updateAfterCrossing(
+            lhs.genealogy(), rhs.genealogy(), _gidManager);
+
+      Critter *c = addCritter(children.front(),
+                              .5 * (p.first->x() + p.second->x()),
+                              .5 * (p.first->y() + p.second->y()),
+                              dice()(0., 2.*M_PI),
+                              p.first->reproductionReserve()
+                              + p.second->reproductionReserve());
+
+      if (debugReproduction)  std::cerr << "\tSpawned " << CID(c) << std::endl;
+
+      _reproductions.autonomous++;
+
+      if (_ssga.watching()) _ssga.recordChildFor({p.first,p.second});
+    }
+
+    _reproductions.attempts++;
+
+    p.first->resetMating();
+    p.second->resetMating();
+  }
 }
 
 void Simulation::produceCorpses(void) {
@@ -277,7 +497,7 @@ void Simulation::produceCorpses(void) {
   for (Critter *c: corpses) {
     Foodlet *f = addFoodlet(BodyType::CORPSE, c->x(), c->y(), c->bodyRadius(),
                             c->totalEnergy());
-    f->setBaseColor(c->bodyColor());
+    f->setBaseColor(c->initialBodyColor());
     f->updateColor();
     delCritter(c);
   }
@@ -314,11 +534,8 @@ void Simulation::plantRenewal(float bounds) {
 }
 
 void Simulation::logStats (void) {
-  Stats s;
-  s.nplants = 0;
-  s.ncorpses = 0;
-  s.eplants = 0;
-  s.ecorpses = 0;
+  Stats s {};
+  assert(s.ncritters == 0);
 
   for (const auto &f: _foodlets) {
     if (f->type() == simu::BodyType::PLANT)
@@ -331,29 +548,49 @@ void Simulation::logStats (void) {
   s.nfeedings = _environment->feedingEvents().size();
   s.nfights = _environment->fightingEvents().size();
 
-  s.ecritters = 0;
-  for (const auto &c: _critters) s.ecritters += c->totalEnergy();
+  for (const auto &c: _critters) {
+    s.ecritters += c->totalEnergy();
+    if (c->isYouth()) s.nyoungs++;
+    else if (c->isAdult())  s.nadults++;
+    else s.nelders++, assert(c->isElder());
+  }
 
   s.ereserve = _environment->energy();
 
   decimal eE = totalEnergy() - _systemExpectedEnergy;
 
+  s.fmin = _ssga.worstFitness();
+  s.favg = _ssga.averageFitness();
+  s.fmax = _ssga.bestFitness();
+
   if (_startTime == _time)
     _statsLogger << "Step Date"
-                    " NCritters NCorpses NPlants"
+                    " NCritters NYoungs NAdults NElders"
+                    " NCorpses NPlants"
                     " NFeeding NFights"
                     " ECritters ECorpses EPlants EReserve"
                     " eE"
+                    " AReproduction SReproduction EReproduction"
+                    " GMin GMax FMin FAvg FMax"
                     "\n";
 
   _statsLogger << _time.timestamp() << " " << _time.pretty() << " "
 
-               << s.ncritters << " " << s.ncorpses << " " << s.nplants << " "
+               << s.ncritters << " "
+               << s.nyoungs << " " << s.nadults << " " << s.nelders << " "
+
+               << s.ncorpses << " " << s.nplants << " "
                << s.nfeedings << " " << s.nfights << " "
 
                << s.ecritters << " " << s.ecorpses << " " << s.eplants << " "
                << s.ereserve << " "
-               << eE
+               << eE << " "
+
+               << _reproductions.attempts << " " << _reproductions.autonomous
+               << " " << _reproductions.ssga << " "
+
+               << _minGen << " " << _maxGen << " "
+               << s.fmin << " " << s.favg << " " << s.fmax
 
                << std::endl;
 
@@ -377,11 +614,13 @@ void Simulation::steadyStateGA(void) {
 
     auto &dice = _environment->dice();
     while (_environment->energy() >= minE && _ssga.active(_critters.size())) {
-      auto genome = _ssga.getRandomGenome(dice, 5000);
-      genome.gdata.setAsPrimordial(_gidManager);
+//      auto genome = _ssga.getRandomGenome(dice, /*500*/0);
+      auto genome = _ssga.getGoodGenome(dice);
+      genome.gdata.updateAfterCloning(_gidManager);
       float a = dice(0., 2*M_PI);
       float x = dice(-r, r), y = dice(-r, r);
       addCritter(genome, x, y, a, minE);
+      _reproductions.ssga++;
     }
   }
 }
@@ -405,9 +644,242 @@ void Simulation::detectBudgetFluctuations(float threshold) {
               << "Excessive budget variation of "
               << E-_systemExpectedEnergy << " = " << E << " - "
               << _systemExpectedEnergy << std::endl;
+
+    decimal e = 0;
+    std::cerr << "\tCritters: ";
+    for (const auto &c: _critters)  e += c->totalEnergy();
+    std::cerr << e << "\n";
+    e = 0;
+    std::cerr << "\tFoodlets: ";
+    for (const auto &f: _foodlets)  e += f->energy();
+    std::cerr << e << "\n";
+    std::cerr << "\t Reserve: " << _environment->energy() << "\n";
+
     assert(false);
   }
 }
 #endif
+
+// =============================================================================
+// == Saving and loading
+
+// Low level writing of a bytes array
+bool save (const std::string &file, const std::vector<uint8_t> &bytes) {
+  std::fstream ofs (file, std::ios::out | std::ios::binary);
+  if (!ofs)
+    utils::doThrow<std::invalid_argument>(
+          "Unable to open '", file, "' for writing");
+
+  ofs.write((char*)bytes.data(), bytes.size());
+  ofs.close();
+
+  return true;
+}
+
+// Low level loading of a bytes array
+bool load (const std::string &file, std::vector<uint8_t> &bytes) {
+  std::ifstream ifs(file, std::ios::binary | std::ios::ate);
+  if (!ifs)
+    utils::doThrow<std::invalid_argument>(
+          "Unable to open '", file, "' for reading");
+
+  std::ifstream::pos_type pos = ifs.tellg();
+
+  bytes.resize(pos);
+  ifs.seekg(0, std::ios::beg);
+  ifs.read((char*)bytes.data(), pos);
+
+  return true;
+}
+
+using json = nlohmann::json;
+void Simulation::serializePopulations (json &jcritters, json &jfoodlets) const {
+  for (const auto &f: _foodlets)
+    jfoodlets.push_back({
+      { f->x(), f->y() },
+      Foodlet::save(*f)
+    });
+
+  for (const auto &p: _critters)
+    jcritters.push_back({
+      { p->x(), p->y(), p->rotation() },
+      Critter::save(*p)
+    });
+}
+
+void Simulation::deserializePopulations (const json &jcritters,
+                                         const json &jfoodlets,
+                                         bool /*updatePTree*/) {
+  for (const auto &j: jfoodlets) {
+    b2Body *b = foodletBody(j[0][0], j[0][1]);
+    Foodlet *f = Foodlet::load(j[1], b);
+    _foodlets.insert(f);
+  }
+
+  for (const auto &j: jcritters) {
+    b2Body *b = critterBody(j[0][0], j[0][1], j[0][2]);
+    Critter *c = Critter::load(j[1], b);
+
+    _critters.insert(c);
+
+//    _plants.insert({p->pos().x, Plant_ptr(p)});
+
+//    if (updatePTree) {
+//      PStats *pstats = _ptree.getUserData(p->genealogy().self);
+//      p->setPStatsPointer(pstats);
+//    }
+  }
+
+//  _env.postLoad();
+//  updateGenStats();
+}
+
+
+std::string field (SimuFields f) {
+  auto name = EnumUtils<SimuFields>::getName(f);
+  transform(name.begin(), name.end(), name.begin(), ::tolower);
+  return name;
+}
+
+void Simulation::save (stdfs::path file) const {
+  auto startTime = clock::now();
+
+  nlohmann::json jconf, jenv, jcrit, jfood;//, jt;
+  config::Simulation::serialize(jconf);
+  Environment::save(jenv, *_environment);
+  serializePopulations(jcrit, jfood);
+
+//  if (_ptreeActive)
+//    PTree::toJson(jt, _ptree);
+
+  nlohmann::json j;
+  j["config"] = jconf;
+  j[field(SimuFields::ENV)] = jenv;
+  j[field(SimuFields::CRITTERS)] = jcrit;
+  j[field(SimuFields::FOODLETS)] = jfood;
+//  j[field(SimuFields::PTREE)] = jt;
+  j["nextCID"] = Critter::ID(_gidManager);
+  j["nextFID"] = _nextFoodletID;
+  j["energy"] = _systemExpectedEnergy;
+  j["time"] = _time;
+
+  startTime = clock::now();
+
+  std::vector<std::uint8_t> v;
+
+  const auto ext = file.extension();
+  if (ext == ".cbor")         v = json::to_cbor(j);
+  else if (ext == ".msgpack") v = json::to_msgpack(j);
+  else {
+    if (ext != ".ubjson") file += ".ubjson";
+    v = json::to_ubjson(j);
+  }
+
+  simu::save(file, v);
+
+#if !defined(NDEBUG) && 0
+  std::cerr << "Reloading for round-trip test" << std::endl;
+  Simulation that;
+  load(file, that, "");
+  assertEqual(*this, that);
+#endif
+}
+
+void Simulation::load (const stdfs::path &file, Simulation &s,
+                       const std::string &constraints,
+                       const std::string &fields) {
+
+  std::set<std::string> requestedFields;  // Default to all
+  for (auto f: EnumUtils<SimuFields>::iterator())
+    requestedFields.insert(field(f));
+
+  for (std::string strf: utils::split(fields, ',')) {
+    strf = utils::trim(strf);
+    if (strf == "none") requestedFields.clear();
+    else if (strf.empty() || strf == "all")
+      continue;
+
+    else if (strf.at(0) != '!')
+      continue; // Ignore non removal requests
+
+    else {
+      strf = strf.substr(1);
+      SimuFields f;
+      std::istringstream (strf) >> f;
+
+      if (!EnumUtils<SimuFields>::isValid(f)) {
+        std::cerr << "'" << strf << "' is not a valid simulation field. "
+                     "Ignoring." << std::endl;
+        continue;
+      }
+
+      requestedFields.erase(field(f));
+    }
+  }
+
+  std::cout << "Loading " << file << "...\r" << std::flush;
+
+//  if (!fields.empty())
+//    std::cout << "Requested fields: "
+//              << utils::join(requestedFields.begin(), requestedFields.end(),
+//                             ",")
+//              << std::endl;
+
+  std::vector<uint8_t> v;
+  simu::load(file, v);
+
+  std::cout << "Expanding " << file << "...\r" << std::flush;
+
+  json j;
+  const auto ext = file.extension();
+  if (ext == ".cbor")         j = json::from_cbor(v);
+  else if (ext == ".msgpack") j = json::from_msgpack(v);
+  else if (ext == ".ubjson")  j = json::from_ubjson(v);
+  else
+    utils::doThrow<std::invalid_argument>(
+      "Unkown save file type '", file, "' of extension '", ext, "'");
+
+//  auto dependencies = config::Dependencies::saveState();
+//  config::Simulation::deserialize(j["config"]);
+//  if (!config::Dependencies::compareStates(dependencies, constraints))
+//    utils::doThrow<std::invalid_argument>(
+//      "Provided save has different build parameters than this one.\n"
+//      "See above for more details... (aborting)");
+
+  auto loadf = [&requestedFields] (SimuFields f) {
+    return requestedFields.find(field(f)) != requestedFields.end();
+  };
+
+  bool loadEnv = loadf(SimuFields::ENV);
+  if (loadEnv)  Environment::load(j[field(SimuFields::ENV)], s._environment);
+
+  bool loadTree = loadf(SimuFields::PTREE);
+//  if (loadTree) PTree::fromJson(j[field(SimuFields::PTREE)], s._ptree);
+
+  bool loadCrits = loadf(SimuFields::CRITTERS);
+  bool loadFood = loadf(SimuFields::FOODLETS);
+  if (loadCrits || loadFood) {
+    json jc = j[field(SimuFields::CRITTERS)];
+    if (!loadCrits) jc.clear();
+
+    json jf = j[field(SimuFields::FOODLETS)];
+    if (!loadFood) jf.clear();
+
+    s.deserializePopulations(jc, jf, loadTree);
+  }
+
+  s._minGen = 0;
+  s._maxGen = 0;
+  s._gidManager.setNext(j["nextCID"]);
+  s._nextFoodletID = j["nextFID"];
+  s._systemExpectedEnergy = j["energy"];
+  s._time = j["time"];
+
+//  s._ptreeActive = loadTree;
+
+//  s.logToFiles();
+
+  std::cout << "Loaded " << file << std::endl;
+}
 
 } // end of namespace simu

@@ -19,6 +19,7 @@ DEFINE_PARAMETER(float, viewZoom, 1000)//100)
 DEFINE_PARAMETER(bool, opaqueBodies, true)
 DEFINE_PARAMETER(bool, drawInnerEdges, false)
 DEFINE_PARAMETER(int, drawVision, 0)
+DEFINE_PARAMETER(int, drawReproduction, 1)
 DEFINE_PARAMETER(RenderingType, renderType, RenderingType::REGULAR)
 
 DEFINE_PARAMETER(bool, brainDeadSelection, false)

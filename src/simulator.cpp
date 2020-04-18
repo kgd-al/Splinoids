@@ -1,16 +1,17 @@
-#include <QApplication>
-#include <QMainWindow>
-#include <QSettings>
-#include <QTimer>
-#include <QSplitter>
+#include <csignal>
+
+#include "simu/simulation.h"
 
 #include "kgd/external/cxxopts.hpp"
 
-#include "gui/mainview.h"
-
-#include <QDebug>
-
 //#include "config/dependencies.h"
+
+std::atomic<bool> aborted = false;
+void sigint_manager (int) {
+  std::cerr << "Gracefully exiting simulation "
+               "(please wait for end of current step)" << std::endl;
+  aborted = true;
+}
 
 long maybeSeed(const std::string& s) {
   if (s.empty())  return -2;
@@ -25,11 +26,7 @@ long maybeSeed(const std::string& s) {
   return p? l : -2;
 }
 
-int main(int argc, char *argv[]) {  
-  // To prevent missing linkages
-  std::cerr << config::PTree::rsetSize() << std::endl;
-//  std::cerr << phylogeny::SID::INVALID << std::endl;
-
+int main(int argc, char *argv[]) {
   using CGenome = genotype::Critter;
   using EGenome = genotype::Environment;
 
@@ -39,7 +36,7 @@ int main(int argc, char *argv[]) {
   using Verbosity = config::Verbosity;
 
   std::string configFile = "auto";  // Default to auto-config
-  Verbosity verbosity = Verbosity::QUIET;
+  Verbosity verbosity = Verbosity::SHOW;
 
   simu::Simulation::InitData idata {};
   idata.ienergy = 1000;
@@ -48,8 +45,6 @@ int main(int argc, char *argv[]) {
   idata.cRange = .25;
   idata.pRange = 1;
   idata.seed = -1;
-
-  int startspeed = 1;
 
   int taurus = -1;
   std::string eGenomeArg = "-1", cGenomeArg = "-1";
@@ -60,16 +55,11 @@ int main(int argc, char *argv[]) {
 
   std::string loadSaveFile, loadConstraints, loadFields;
 
-//  std::string morphologiesSaveFolder, screenshotSaveFile;
-
-//  int speed = 0;
-//  bool autoQuit = false;
-
 //  std::string duration = "=100";
-  std::string outputFolder = "tmp_visu_run/";
+  std::string outputFolder = "tmp_simu_run";
   char overwrite = simu::Simulation::UNSPECIFIED;
 
-  cxxopts::Options options("Splinoids (visualisation)",
+  cxxopts::Options options("Splinoids (headless)",
                            "2D simulation of critters in a changing environment");
   options.add_options()
     ("h,help", "Display help")
@@ -78,6 +68,14 @@ int main(int argc, char *argv[]) {
      cxxopts::value(configFile))
     ("v,verbosity", "Verbosity level. " + config::verbosityValues(),
      cxxopts::value(verbosity))
+
+//    ("d,duration", "Simulation duration. ",
+//     cxxopts::value(duration))
+    ("f,data-folder", "Folder under which to store the computational outputs",
+     cxxopts::value(outputFolder))
+    ("overwrite", "Action to take if the data folder is not empty: either "
+                  "[a]bort or [p]urge",
+     cxxopts::value(overwrite))
 
     ("e,energy", "Total energy of the system", cxxopts::value(idata.ienergy))
     ("s,seed", "Seed value for simulation's RNG", cxxopts::value(idata.seed))
@@ -90,10 +88,6 @@ int main(int argc, char *argv[]) {
     ("sratio", "Initial fraction of energy devoted to the splinoids",
      cxxopts::value(idata.cRatio))
 
-    ("start", "Whether to start running immendiatly after initialisation"
-              " (and optionally at which speed > 1)",
-     cxxopts::value(startspeed)->implicit_value("1"))
-
     ("env-genome", "Environment's genome or a random seed",
      cxxopts::value(eGenomeArg))
     ("spln-genome", "Splinoid genome to start from or a random seed",
@@ -104,26 +98,12 @@ int main(int argc, char *argv[]) {
     ("taurus", "Whether the environment is a taurus or uses fixed boundaries",
       cxxopts::value(taurus))
 
-//    ("d,duration", "Simulation duration. ",
-//     cxxopts::value(duration))
-    ("f,data-folder", "Folder under which to store the computational outputs",
-     cxxopts::value(outputFolder))
-    ("overwrite", "Action to take if the data folder is not empty: either "
-                  "[a]bort or [p]urge",
-     cxxopts::value(overwrite))
-    ("l,load", "Load a previously saved simulation",
-     cxxopts::value(loadSaveFile))
+//    ("l,load", "Load a previously saved simulation",
+//     cxxopts::value(loadSaveFile))
 //    ("load-constraints", "Constraints to apply on dependencies check",
 //     cxxopts::value(loadConstraints))
 //    ("load-fields", "Individual fields to load",
 //     cxxopts::value(loadFields))
-//    ("q,auto-quit", "Quit as soon as the simulation ends",
-//     cxxopts::value(autoQuit))
-//    ("collect-morphologies", "Save morphologies in the provided folder",
-//     cxxopts::value(morphologiesSaveFolder))
-//    ("screenshot", "Save simulation state after initialisation/loading in"
-//                   "specified file",
-//     cxxopts::value(screenshotSaveFile))
     ;
 
   auto result = options.parse(argc, argv);
@@ -157,41 +137,13 @@ int main(int argc, char *argv[]) {
 //        " or load a previous simulation");
 //  }
 
-////  if (!morphologiesSaveFolder.empty() && loadSaveFile.empty())
-////    utils::doThrow<std::invalid_argument>(
-////        "Generating morphologies is only meaningful when loading a simulation");
-
   if (result.count("auto-config") && result["auto-config"].as<bool>())
     configFile = "auto";
-
-  // ===========================================================================
-  // == Qt setup
-
-  QApplication a(argc, argv);
-  setlocale(LC_NUMERIC,"C");
-
-  QSettings settings ("kgd", "Splinoids");
-
-  QMainWindow w;
-  gui::StatsView *stats = new gui::StatsView;
-  visu::GraphicSimulation s (w.statusBar(), stats);
-
-  gui::MainView *v = new gui::MainView (s, stats, w.menuBar());
-
-  QSplitter splitter;
-  splitter.addWidget(v);
-  splitter.addWidget(stats);
-  w.setCentralWidget(&splitter);
-  w.setWindowTitle("Splinoids main window");
-
-  // ===========================================================================
-  // == Simulation setup
 
   if (loadSaveFile.empty()) {
 //    config::Simulation::setupConfig(configFile, verbosity);
     if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
     if (configFile.empty()) config::Simulation::printConfig("");
-    genotype::Critter::printMutationRates(std::cout, 2);
 
     long eGenomeSeed = maybeSeed(eGenomeArg);
     if (eGenomeSeed < -1) {
@@ -229,17 +181,50 @@ int main(int argc, char *argv[]) {
     std::cout << "Environment:\n" << eGenome
               << "\nSplinoid:\n" << cGenome
               << std::endl;
+  }
 
+  // ===========================================================================
+  // == SIGINT management
+
+  struct sigaction act = {};
+  act.sa_handler = &sigint_manager;
+  if (0 != sigaction(SIGINT, &act, nullptr))
+    utils::doThrow<std::logic_error>("Failed to trap SIGINT");
+  if (0 != sigaction(SIGTERM, &act, nullptr))
+    utils::doThrow<std::logic_error>("Failed to trap SIGTERM");
+
+  // ===========================================================================
+  // == Core setup
+
+  simu::Simulation s;
+
+  if (!loadSaveFile.empty()) {  // Full load init
+//    simu::Simulation::load(loadSaveFile, s, loadConstraints, loadFields);
+//    if (verbosity != Verbosity::QUIET)  config::Simulation::printConfig();
+
+  } else {  // Regular init
     s.init(eGenome, cGenome, idata);
-
-  } else {
-    visu::GraphicSimulation::load(loadSaveFile, s, loadConstraints, loadFields);
-    if (verbosity != Verbosity::QUIET)
-      config::Simulation::printConfig();
+//    s.periodicSave(); /// FIXME Carefull with this things might, surprisingly,
+    /// not be all that initialized
   }
 
   if (!outputFolder.empty())
     s.setDataFolder(outputFolder, simu::Simulation::Overwrite(overwrite));
+
+  genotype::Critter::printMutationRates(std::cout, 2);
+
+//  {
+//    std::ofstream ofs (s.dataFolder() / "controller.last.tex");
+//    ofs << "\\documentclass[preview]{standalone}\n"
+//           "\\usepackage{amsmath}\n"
+//           "\\begin{document}\n"
+//        << envGenome.controller.toTex()
+//        << "\\end{document}\n";
+//    ofs.close();
+
+//    envGenome.controller.toDot(s.dataFolder() / "controller.last.dot",
+//                               genotype::Environment::CGP::DotOptions::SHOW_DATA);
+//  }
 
 //  if (!duration.empty()) {
 //    if (duration.size() < 2)
@@ -254,67 +239,26 @@ int main(int argc, char *argv[]) {
 //    s.setDuration(simu::Environment::DurationSetType(duration[0]), dvalue);
 //  }
 
-//  int ret = 0;
-//  if (!morphologiesSaveFolder.empty()) {
-//    if (!stdfs::exists(morphologiesSaveFolder)) {
-//      stdfs::create_directories(morphologiesSaveFolder);
-//      std::cout << "Created folder(s) " << morphologiesSaveFolder
-//                << " for morphologies storage" << std::endl;
-//    }
+  uint stopAfterGeneration = 1000;
+  uint saveEveryGen = 1, saveNextGen = 1;
+  uint saveEveryDay = 1, saveNextDay = 0;
+  while (!s.finished()
+         && s.minGeneration() <= stopAfterGeneration
+         && s.currTime().year() < 1) {
+    if (aborted)  s.abort();
+    s.step();
 
-//    // If just initialised, let it have one step to show its morphology
-//    if (loadSaveFile.empty())
-//      c.step();
+    if (s.minGeneration() == saveNextGen) {
+      s.save(s.periodicSaveName());
+      saveNextGen += saveEveryGen;
 
-//    v->saveMorphologies(QString::fromStdString(morphologiesSaveFolder));
+    } else if (s.currTime().day() == saveNextDay) {
+      s.save(s.periodicSaveName());
+      saveNextDay += saveEveryDay;
+    }
+  }
+//  s.atEnd();
 
-//  } else if (!screenshotSaveFile.empty()) {
-//    auto img = v->fullScreenShot();
-//    img.save(QString::fromStdString(screenshotSaveFile));
-//    std::cout << "Saved img of size " << img.width() << "x" << img.height()
-//              << " into " << screenshotSaveFile << std::endl;
-
-//  } else {  // Regular simulation
-//    w->setAttribute(Qt::WA_QuitOnClose);
-//    w->show();
-
-//    c.nextPlant();
-//    c.setAutoQuit(autoQuit);
-
-//    // Setup debug config
-//    if (config::Simulation::DEBUG_NO_METABOLISM())
-//      c.step();
-
-//    ret = a.exec();
-
-//    s.abort();
-//    s.step();
-//  }
-
-  // ===========================================================================
-  // Final preparations
-  w.show();
-
-  // Load settings
-//  qDebug() << "Loaded MainWindow::Geometry:" << settings.value("geometry").toRect();
-  w.setGeometry(settings.value("geometry").toRect());
-//  qDebug() << "MainWindow::Geometry:" << w.geometry();
-
-
-  v->fitInView(s.bounds(), Qt::KeepAspectRatio);
-  v->selectNext();
-
-  QTimer::singleShot(100, [&v, startspeed] {
-    if (startspeed) v->start(startspeed);
-    else            v->stop();
-  });
-
-  auto ret = a.exec();
-
-  // Save settings
-//  qDebug() << "MainWindow::Geometry:" << w.geometry();
-  if (w.geometry().isValid())  settings.setValue("geometry", w.geometry());
-//  qDebug() << "Saved MainWindow::Geometry:" << settings.value("geometry").toRect();
-
-  return ret;
+//  s.destroy();
+  return 0;
 }

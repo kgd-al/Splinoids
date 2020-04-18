@@ -8,6 +8,8 @@
 
 #include "box2d/b2_body.h"
 
+#include "../../MultiNEAT/src/NeuralNetwork.h"
+
 DEFINE_PRETTY_ENUMERATION(Motor, LEFT = -1, RIGHT = 1)
 
 namespace simu {
@@ -30,7 +32,7 @@ public:
   static constexpr auto SPLINES_COUNT = Genome::SPLINES_COUNT;
   static constexpr uint SPLINES_PRECISION = 4;
 
-  enum class FixtureType { BODY, ARTIFACT };
+  enum class FixtureType { BODY, ARTIFACT, REPRODUCTION };
   enum class Side : uint { LEFT = 0, RIGHT = 1 };
   struct FixtureData {
     FixtureType type;
@@ -45,8 +47,8 @@ public:
 
     FixtureData (FixtureType t, const Color &c,
                  uint si, Side fs, uint ai);
-    FixtureData (FixtureType t, const Color &c)
-      : FixtureData(t, c, -1, Side(-1), -1) {}
+    FixtureData (FixtureType t, const Color &c);
+    FixtureData (FixtureType t);
 
     friend std::ostream& operator<< (std::ostream &os, const FixtureData &fd);
     friend std::ostream& operator<< (std::ostream &os, const Side &s);
@@ -60,6 +62,7 @@ private:
 
   b2Body &_body;
   b2BodyUserData _objectUserData;
+  Color _currentBodyColor;
 
   struct SplineData {
     // Central spline
@@ -98,15 +101,27 @@ private:
   std::map<b2Fixture*, FixtureData> _b2FixturesUserData;
   std::array<decimal, 1+2*SPLINES_COUNT> _masses;
 
-  std::map<Motor, float> _motors;
+  // ===========================================================================
+  // == Vision cache data ==
+  // (each vector of size 2*(2*genotype.vision.precision+1))
 
-  // Vision cache data (each vector of size 2*(2*genotype.vision.precision+1))
   std::vector<Color> _retina;
   std::array<P2D, 2> _raysStart;
   std::vector<P2D> _raysEnd;
   std::vector<float> _raysFraction; // TODO Remove (debug visu only)
 
+  // ===========================================================================
+  // == Neural outputs ==
+  std::map<Motor, float> _motors;
   float _clockSpeed;
+  float _reproduction;
+
+  // ===========================================================================
+  // == Other ==
+
+  using NeuralNetwork = NEAT::NeuralNetwork;
+  NeuralNetwork _brain;
+
   float _age;
 
   float _efficiency, _ec0Coeff, _ec1Coeff;
@@ -137,7 +152,7 @@ public:
 
   bool brainDead; // TODO for external control
 
-  Critter(const Genome &g, b2Body *body, decimal e);
+  Critter(const Genome &g, b2Body *body, decimal e, float age = 0);
 
   void step (Environment &env);
 
@@ -147,6 +162,10 @@ public:
 
   auto& genotype (void) {
     return _genotype;
+  }
+
+  auto& genealogy (void) {
+    return _genotype.genealogy();
   }
 
   auto id (void) const {
@@ -231,8 +250,31 @@ public:
     return _reproductionReserve;
   }
 
+  auto reproductiveInvestment (void) const {
+    return _genotype.reproductiveInvestment();
+  }
+
+  auto energyForChild (void) const {
+    return reproductiveInvestment() * energyForCreation();
+  }
+
+  // For now both contribute the same
   auto reproductionReadiness (void) const {
-    return _reproductionReserve / energyForCreation();
+    return _reproductionReserve / energyForChild();
+  }
+
+  bool requestingMating (void) const {
+    return reproductionReadiness() == 1 && _reproduction > .9;
+  }
+
+  const auto reproductionSensor (void) const {
+    return _reproductionSensor;
+  }
+
+  void resetMating (void) {
+    _reproductionReserve = 0;
+    delFixture(_reproductionSensor);
+    _reproductionSensor = nullptr;
   }
 
   auto clockSpeed (void) const {
@@ -241,8 +283,7 @@ public:
 
   static auto clockSpeed (const Genome &g, float v) {
     assert(0 <= v && v <= 1);
-    return (1-v) * g.minClockSpeed
-                       +    v  * g.maxClockSpeed;
+    return (1-v) * g.minClockSpeed + v * g.maxClockSpeed;
   }
 
   // v in [0;1]
@@ -303,10 +344,6 @@ public:
     return _masses;
   }
 
-  const auto& health (void) const {
-    return _currHealth;
-  }
-
   auto bodyMaxHealth (void) const {
     return _masses[0];
   }
@@ -323,12 +360,24 @@ public:
     return _currHealth[1 + splineIndex(i, side)];
   }
 
+  auto bodyHealthness (void) const {
+    return bodyHealth() / bodyMaxHealth();
+  }
+
+  const auto& healthArray (void) const {
+    return _currHealth;
+  }
+
   auto activeSpline (uint i, Side s) const {
     return splineMaxHealth(i, s) > 0;
   }
 
   auto destroyedSpline (uint i, Side s) const {
     return _destroyed.test(splineIndex(i, s));
+  }
+
+  const auto& brain (void) const {
+    return _brain;
   }
 
   bool applyHealthDamage(const FixtureData &d, float amount, Environment &env);
@@ -342,12 +391,13 @@ public:
     return _motors.at(m);
   }
 
-  void feed (decimal de) {
-    assert(0 <= de && de <= maxUsableEnergy() - _energy);
-    _energy += de;
+  void feed (Foodlet *f, float dt);
+
+  const Color& currentBodyColor (void) const {
+    return _currentBodyColor;
   }
 
-  const Color& bodyColor (void) const {
+  const Color& initialBodyColor (void) const {
     return _genotype.colors[(SPLINES_COUNT+1)*sex()];
   }
 
@@ -413,7 +463,10 @@ public:
   }
 
   static b2BodyUserData* get (b2Body *b);
+  static const b2BodyUserData* get (const b2Body *b);
+
   static FixtureData* get (b2Fixture *f);
+  static const FixtureData* get (const b2Fixture *f);
 
   // ===========================================================================
   // == Static computers
@@ -446,7 +499,12 @@ public:
   static float lifeExpectancy (float clockSpeed);
   static float starvationDuration (float size, float energy, float clockSpeed);
 
+  static nlohmann::json save (const Critter &c);
+  static Critter* load (const nlohmann::json &j, b2Body *body);
+
 private:
+  Color computeCurrentColor(void) const;
+
   // ===========================================================================
   // == Iteration substeps
 
@@ -455,7 +513,7 @@ private:
   void neuralStep (Environment &env);
   void energyConsumption (Environment &env);
   void regeneration (Environment &env);
-  void aging (float dt);
+  void aging (Environment &env);
 
   // ===========================================================================
   // == Shape-defining internal methods
@@ -472,6 +530,7 @@ private:
   b2Fixture* addBodyFixture (void);
   b2Fixture* addPolygonFixture(uint splineIndex, Side side, uint artifactIndex,
                                const Vertices &v);
+  b2Fixture* addReproFixture (void);
   b2Fixture* addFixture (const b2FixtureDef &def,
                          const FixtureData &data);
 
@@ -483,6 +542,20 @@ private:
   void updateVisionRays (void);
 
   // ===========================================================================
+};
+
+struct CID {
+  const Critter &c;
+  const std::string prefix;
+  CID (const Critter *c, const std::string &p = "C") : CID(*c, p) {}
+  CID (const Critter &c, const std::string &p = "C") : c(c), prefix(p) {}
+  friend std::ostream& operator<< (std::ostream &os, const CID &cid) {
+    std::ios::fmtflags os_flags (os.flags());
+    os.setf(std::ios_base::hex, std::ios_base::basefield);
+    os << cid.prefix << "0x" << cid.c.id();
+    os.flags(os_flags);
+    return os;
+  }
 };
 
 } // end of namespace simu

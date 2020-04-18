@@ -375,10 +375,10 @@ void MainView::step(void) {
     _simu.step();
 
     // TODO
-    if (_simu.currTime().timestamp() == 20) {
-      stop();
-      break;
-    }
+//    if (_simu.currTime().timestamp() == 15) {
+//      stop();
+//      break;
+//    }
   }
 
   if (selection()) {
@@ -438,7 +438,7 @@ void MainView::mouseReleaseEvent(QMouseEvent *e) {
     c = dynamic_cast<visu::Critter*>(i);
 
     if (c) {
-//      std::cerr << "Clicked critter " << c->object().id() << " at "
+//      std::cerr << "Clicked on " << simu::CID(c->object()) << " at "
 //                << c->x() << "," << c->y() << ": " << c->object().genotype()
 //                << std::endl;
       break;
@@ -505,7 +505,7 @@ void MainView::selectPrevious(void) {
 void MainView::selectionChanged(visu::Critter *c) {
 //  auto q = qDebug();
 //  q << "SelectionChanged from "
-//    << (_selection? int(_selection->object().id()) : -1);
+//    << (selection()? selection()->firstname() : "-1");
 
   if (selection()) {
     selection()->setSelected(false);
@@ -531,7 +531,7 @@ void MainView::selectionChanged(visu::Critter *c) {
   _manipulator->setSubject(c);
 
 //  q << "to"
-//    << (_selection? int(_selection->object().id()) : -1);
+//    << (selection()? selection()->firstname() : "-1");
 }
 
 void MainView::focusOnSelection (void) {

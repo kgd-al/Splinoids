@@ -40,6 +40,18 @@ public:
     return _body;
   }
 
+  const auto& pos (void) const {
+    return _body.GetPosition();
+  }
+
+  auto x (void) const {
+    return pos().x;
+  }
+
+  auto y (void) const {
+    return pos().y;
+  }
+
   float radius (void) const {
     return _radius;
   }
@@ -66,6 +78,9 @@ public:
 
   void update (Environment &env);
   void updateColor (void);
+
+  static nlohmann::json save (const Foodlet &f);
+  static Foodlet* load (const nlohmann::json &j, b2Body *body);
 };
 
 } // end of namespace simu
