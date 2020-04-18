@@ -74,10 +74,10 @@ DEFINE_GENOME_FIELD_AS_SUBGENOME(BOCData, cdata, "")
 DEFINE_GENOME_FIELD_AS_SUBGENOME(Vision, vision, "")
 DEFINE_GENOME_FIELD_AS_SUBGENOME(HyperNEAT, connectivity, "hNeat")
 
-DEFINE_GENOME_FIELD_WITH_BOUNDS(float, minClockSpeed, "minCS", .1, 1., 1., 1.)
-DEFINE_GENOME_FIELD_WITH_BOUNDS(float, maxClockSpeed, "maxCS", 1., 1., 1., 2.)
-DEFINE_GENOME_FIELD_WITH_BOUNDS(float, matureAge, "mature", .25, .33, .33, .5)
-DEFINE_GENOME_FIELD_WITH_BOUNDS(float, oldAge, "old", .5, .66, .66, .75)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, minClockSpeed, "minCS", .1f, 1.f, 1.f, 1.f)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, maxClockSpeed, "maxCS", 1.f, 1.f, 1.f, 2.f)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, matureAge, "mature", .25f, .33f, .33f, .5f)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, oldAge, "old", .5f, .66f, .66f, .75f)
 DEFINE_GENOME_FIELD_WITH_BOUNDS(uint, brainSubsteps, "bdepth", 2u, 2u, 2u, 2u)
 
 using Config = genotype::Critter::config_t;
