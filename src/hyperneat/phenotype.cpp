@@ -12,9 +12,11 @@ NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays) {
   };
 
   // Inputs
-  add(inputs, -.25, -.25, -.5); // energy
+  add(inputs,  .0,   .0,  -.5); // sex
+  add(inputs,  .25,  .0,  -.5); // age
   add(inputs, -.25,  .0,  -.5); // reproduction
-  add(inputs, -.25,  .25, -.5); // health
+  add(inputs,  .0,  -.25, -.5); // energy
+  add(inputs,  .0,   .25, -.5); // health
   for (const simu::P2D &r: rays) {
     simu::P2D r_ = r;
     r_.Normalize();

@@ -12,6 +12,9 @@ static constexpr int debugRegen = 0;
 static constexpr int debugGrowth = 0;
 static constexpr int debugReproduction = 0;
 
+const Critter::FixtureData Critter::_reproUserData
+  (Critter::FixtureType::REPRODUCTION);
+
 Critter::FixtureData::FixtureData (FixtureType t, const Color &c,
                                    uint si, Side fs, uint ai)
   : type(t), color(c), sindex(si), sside(fs), aindex(ai)/*, centerOfMass(P2D())*/ {}
@@ -228,7 +231,8 @@ void Critter::step(Environment &env) {
 void Critter::autopsy (void) const {
   if (!isDead())  std::cerr << "Please don't\n";
   else {
-    std::cerr << CID(this, "Splinoid ") << " died of";
+    std::cerr << CID(this, "Splinoid ") << " (SID: " << species() << ", gen "
+              << _genotype.gdata.generation << ") died of";
     if (tooOld())   std::cerr << " old age";
     if (starved())  std::cerr << " starvation";
     if (fatallyInjured()) std::cerr << " injuries";
@@ -272,13 +276,17 @@ void Critter::performVision(const Environment &env) {
   //    std::cerr << "Found fixture " << fixture << " at " << fraction
   //              << " of type " << fixture->GetBody()->GetType()
   //              << std::endl;
-      if (self != fixture->GetBody()) {
-        closestContact = fixture;
-        closestFraction = fraction;
-        return fraction;
 
-      } else
+      if (self == fixture->GetBody())
         return -1;
+
+      if (fixture->GetUserData()
+          && get(fixture)->type == FixtureType::REPRODUCTION)
+        return -1;
+
+      closestContact = fixture;
+      closestFraction = fraction;
+      return fraction;
     }
   } cvc (&_body);
 
@@ -333,9 +341,11 @@ void Critter::neuralStep(Environment &env) {  ERR
     // Set inputs
     std::vector<double> inputs;
     inputs.reserve(_retina.size() * std::tuple_size_v<Color> + 3);
+    inputs.push_back(sex() == Sex::FEMALE ? -1 : 1);
+    inputs.push_back(_age);
+    inputs.push_back(reproductionReadiness());
     inputs.push_back(usableEnergy() / maxUsableEnergy());
     inputs.push_back(bodyHealthness());
-    inputs.push_back(reproductionReadiness());
 //    inputs.push_back(dice(-1,1));
     for (const Color &c: _retina) for (float v: c)  inputs.push_back(v);
 
@@ -346,8 +356,8 @@ void Critter::neuralStep(Environment &env) {  ERR
 
     // Collect outputs
     for (double &v: outputs)  assert(0 <= v && v <= 1);
-    _motors[Motor::LEFT] = outputs[0];
-    _motors[Motor::RIGHT] = outputs[1];
+    _motors[Motor::LEFT] = 2*outputs[0]-1;
+    _motors[Motor::RIGHT] = 2*outputs[1]-1;
     _clockSpeed = clockSpeed(outputs[2]);
     _reproduction = outputs[3];
 
@@ -852,7 +862,7 @@ b2Fixture* Critter::addBodyFixture (void) {
 
   b2FixtureDef fd;
   fd.shape = &s;
-  fd.density = BODY_DENSITY;
+  fd.density = MIN_DENSITY;
   fd.restitution = .1;
   fd.friction = .3;
   fd.filter.categoryBits = uint16(CollisionFlag::CRITTER_BODY_FLAG);
@@ -903,7 +913,7 @@ b2Fixture* Critter::addPolygonFixture (uint splineIndex, Side side,
 
   b2FixtureDef fd;
   fd.shape = &s;
-  fd.density = ARTIFACTS_DENSITY;
+  fd.density = MAX_DENSITY;
   fd.restitution = .05;
   fd.friction = 0.;
   fd.filter.categoryBits = uint16(CollisionFlag::CRITTER_SPLN_FLAG);
@@ -928,8 +938,7 @@ b2Fixture* Critter::addReproFixture(void) {
   fd.filter.categoryBits = uint16(CollisionFlag::CRITTER_REPRO_FLAG);
   fd.filter.maskBits = uint16(CollisionFlag::CRITTER_REPRO_MASK);
 
-  FixtureData cfd (FixtureType::REPRODUCTION);
-  return addFixture(fd, cfd);
+  return addFixture(fd, _reproUserData);
 }
 
 b2Fixture* Critter::addFixture (const b2FixtureDef &def,
@@ -1290,7 +1299,7 @@ nlohmann::json Critter::save (const Critter &c) {
 
 Critter* Critter::load (const nlohmann::json &j, b2Body *body) {
   Critter *c = new Critter (j[0], body, j[2], j[3]);
-  simu::load(j[1], c->_brain);
+//  simu::load(j[1], c->_brain);  // Already recreated above
   c->_energy = j[2];
   c->_reproductionReserve = j[4];
   c->_currHealth = j[5];

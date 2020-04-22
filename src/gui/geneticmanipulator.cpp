@@ -417,24 +417,26 @@ GeneticManipulator::GeneticManipulator(QWidget *parent)
   buildStatsLayout();
   buildGenesLayout();
 
+  _brainButton = new QPushButton;
+  _brainButton->setIcon(QIcon::fromTheme("help-about"));
+  connect(_brainButton, &QPushButton::clicked,
+          this, qOverload<>(&GeneticManipulator::saveSubjectBrain));
+
   _saveButton = new QPushButton;
-  _saveButton->setIcon(QIcon::fromTheme("document-save"));
-
-  _printButton = new QPushButton;
-  _printButton->setIcon(QIcon::fromTheme("document-print"));
-
-  _editButton = new QPushButton;
-  _hideButton = new QPushButton ("Close");
-
+  _saveButton->setIcon(QIcon::fromTheme("document-save"));  
   connect(_saveButton, &QPushButton::clicked,
           this, qOverload<>(&GeneticManipulator::saveSubjectGenotype));
 
+  _printButton = new QPushButton;
+  _printButton->setIcon(QIcon::fromTheme("document-print"));
   connect(_printButton, &QPushButton::clicked,
           this, qOverload<>(&GeneticManipulator::printSubjectPhenotype));
 
+  _editButton = new QPushButton;
   connect(_editButton, &QPushButton::clicked,
           this, &GeneticManipulator::toggleReadOnly);
 
+  _hideButton = new QPushButton ("Close");
   connect(_hideButton, &QPushButton::clicked,
           this, &GeneticManipulator::hide);
 
@@ -449,6 +451,7 @@ GeneticManipulator::GeneticManipulator(QWidget *parent)
 
     QHBoxLayout *buttonsLayout = new QHBoxLayout;
     buttonsLayout->addWidget(filler(false));
+    buttonsLayout->addWidget(_brainButton, 0, Qt::AlignCenter);
     buttonsLayout->addWidget(_saveButton, 0, Qt::AlignCenter);
     buttonsLayout->addWidget(_printButton, 0, Qt::AlignCenter);
     buttonsLayout->addWidget(_editButton, 0, Qt::AlignCenter);
@@ -466,6 +469,41 @@ GeneticManipulator::GeneticManipulator(QWidget *parent)
 
 QString defaultFilename (QLabel *firstname, QLabel *lastname) {
   return firstname->text().split(' ').back() + "_" + lastname->text();
+}
+
+void GeneticManipulator::saveSubjectBrain(void) {
+  QString defaultFile = defaultFilename(_lFirstname, _lLastname);
+  QString prefix = QFileDialog::getSaveFileName(
+    this, "Base filename for " + defaultFile + " is...", defaultFile);
+
+  saveSubjectBrain(prefix);
+}
+
+void GeneticManipulator::saveSubjectBrain(const QString &prefix) const {
+  std::string cppn_f = (prefix + "_cppn.dot").toStdString();
+  std::ofstream cppn_ofs (cppn_f);
+  _subject->object().genotype().connectivity.toDot(cppn_ofs);
+
+  std::string ann_f = (prefix + "_ann.dat").toStdString();
+  std::ofstream ann_ofs (ann_f);
+  genotype::HyperNEAT::phenotypeToDat(ann_ofs, _subject->object().brain());
+
+//#if defined(unix) || defined(__unix__) || defined(__unix)
+//  std::ostringstream cmd;
+////  std::string cppn_pdf = (prefix + "_cppn.pdf").toStdString();
+////  cmd << "dot " << cppn_f << " -Tpdf -o " << cppn_pdf << " >log 2>&1";
+////  std::cerr << "Executing \"" << cmd.str() << "\"\n";
+////  int res = system(cmd.str().c_str());
+////  if (res == 0) std::cerr << "\tSuccess\n";
+////  else          std::cerr << "\tFailed\n";
+
+//  cmd.str("");
+//  cmd << "./scripts/plot_brain.sh " << prefix.toStdString();
+//  std::cerr << "Executing \"" << cmd.str() << "\"\n";
+//  int res = system(cmd.str().c_str());
+//  if (res == 0) std::cerr << "\tSuccess\n";
+//  else          std::cerr << "\tFailed\n";
+//#endif
 }
 
 void GeneticManipulator::saveSubjectGenotype(void) {
@@ -819,7 +857,9 @@ void GeneticManipulator::readCurrentStatus(void) {
   set("LSpeed", &SCritter::linearSpeed,
       [] (float v) { return QString::number(v, 'f', 2) + " m/s"; });
   set("RSpeed", &SCritter::angularSpeed,
-      [] (float v) { return QString::number(v / (2*M_PI), 'f', 2) + " t/s"; });
+      [] (float v) {
+    return (v >= 0 ? "+" : "") + QString::number(v / (2*M_PI), 'f', 2) + " t/s";
+  });
 
   const auto &r = c.retina();
   for (uint i=0; i<r.size(); i++) _rLabels[i+1]->setValue(r[i]);

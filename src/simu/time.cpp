@@ -34,6 +34,18 @@ float Time::secondFraction (void) const {  return float(_msecond) / TPS(); }
 float Time::dayFraction (void) const {  return float(_second) / SPD(); }
 float Time::yearFraction (void) const {  return float(_day) / DPY(); }
 
+bool Time::isStartOfSecond (void) const {
+  return _msecond == 0;
+}
+
+bool Time::isStartOfDay (void) const {
+  return isStartOfSecond() && _second == 0;
+}
+
+bool Time::isStartOfYear (void) const {
+  return isStartOfDay() && _day == 0;
+}
+
 Time& Time::next (void) {
   _timestamp++;
   _msecond++;

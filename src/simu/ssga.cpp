@@ -21,6 +21,11 @@ void SSGA::init(uint initPopSize) {
   if (_maxArchiveSize == 0) setEnabled(false);
 
   update(initPopSize);
+
+  _champStats["Distance"] = NAN;
+  _champStats["Energy"] = NAN;
+  _champStats["Gametes"] = NAN;
+  _champStats["Children"] = NAN;
 }
 
 void SSGA::setEnabled (bool e) {
@@ -68,16 +73,26 @@ void SSGA::registerDeath(const Critter *c) {
   CritterData cd = it->second;
   _watchData.erase(it);
 
-  float fitness = (1+cd.totals.energy) * (1+cd.totals.gametes) * (1+cd.children);
+//  float fitness =
+//        (1+cd.distance)
+//      * (1+cd.totals.energy) * (1+cd.totals.gametes)
+//      * (1+cd.children);
 
-  assert(fitness > 0);
+  float fitness = std::min(cd.distance, 10.f)
+                * 10 * std::min(cd.totals.energy, 1.f);
+  if (fitness > 0) {
+    fitness += (cd.children > 0) * 1000;
+    fitness += 100 * std::min(cd.totals.gametes, 10.f);
+  }
+
+  assert(fitness >= 0);
 
   bool full = (_maxArchiveSize <= _archive.size());
   auto worstItem = _archive.begin();
   float lowestFitness = 0;
   if (!_archive.empty())  lowestFitness = worstItem->fitness;
 
-  if (debugSSGA) {
+  if (debugSSGA > 1) {
     std::cerr << "Registered death of " << CID(c) << " with fitness "
               << "(1+" << cd.totals.energy << ")*(1+" << cd.totals.gametes
               << ")*(1+" << cd.children << ") = " << fitness << " ";
@@ -93,13 +108,27 @@ void SSGA::registerDeath(const Critter *c) {
     std::cerr << std::endl;
   }
 
-  if (!full || fitness >= lowestFitness)
-    _archive.emplace(c->genotype(), fitness);
+  bool champ = (fitness >= bestFitness());
+  bool insert = (!full || fitness >= lowestFitness);
+  if (insert) _archive.emplace(c->genotype(), fitness);
 
   if (debugManagement && full && fitness >= lowestFitness)
     std::cerr << "\t\tErasing 0x" << std::hex << worstItem->genome.id()
               << std::dec << " (" << worstItem->fitness << ")" << std::endl;
   if (full && fitness >= lowestFitness) _archive.erase(worstItem);
+
+  if (insert) maybePurgeObsoletes(c->genotype().gdata.generation);
+
+  if (champ) {
+    _champStats["Distance"] = cd.distance;
+    _champStats["Energy"] = cd.totals.energy;
+    _champStats["Gametes"] = cd.totals.gametes;
+    _champStats["Children"] = cd.children;
+//    std::cerr << "New champ:\n";
+//    for (const auto &p: _champStats)
+//      std::cerr << "\t" << p.first << ": " << p.second << "\n";
+//    std::cerr << "\n";
+  }
 }
 
 void SSGA::preStep(const std::set<Critter*> &pop) {
@@ -107,6 +136,7 @@ void SSGA::preStep(const std::set<Critter*> &pop) {
     auto it = _watchData.find(c);
     if (it == _watchData.end()) it = registerBirth(c);
     CritterData &cd = it->second;
+    cd.pos = c->pos();
     cd.beforeStep.energy = c->usableEnergy();
     cd.beforeStep.gametes = c->reproductionReserve();
 
@@ -121,6 +151,7 @@ void SSGA::postStep(const std::set<Critter*> &pop) {
     auto it = _watchData.find(c);
     if (it == _watchData.end()) it = registerBirth(c);
     CritterData &cd = it->second;
+    cd.distance = (c->pos() - cd.pos).Length();
     cd.totals.energy += std::max(c->usableEnergy() - cd.beforeStep.energy, 0.);
     cd.totals.gametes += std::max(c->reproductionReserve() - cd.beforeStep.gametes, 0.);
 
@@ -141,6 +172,28 @@ void SSGA::recordChildFor(const std::set<Critter *> &critters) {
   }
 }
 
+void SSGA::maybePurgeObsoletes(uint gen) {
+  static const auto gspan = config::Simulation::ssgaMaxGenerationalSpan();
+
+  if (gen < _maxGen)  return;
+  _maxGen = gen;
+
+  if (_maxGen <= gspan) return;
+
+  uint minGen = gen - gspan;
+  if (debugSSGA)
+    std::cerr << "[SSGA] Purging archive of all genomes older than gen "
+              << minGen << std::endl;
+
+  auto it = _archive.begin();
+  while (it != _archive.end()) {
+    if (it->genome.gdata.generation < minGen)
+      it = _archive.erase(it);
+    else
+      ++it;
+  }
+}
+
 genotype::Critter SSGA::getRandomGenome (rng::FastDice &dice, uint m) const {
   auto g = genotype::Critter::random(dice);
   for (uint i=0; i<m; i++)  g.mutate(dice);
@@ -157,8 +210,13 @@ genotype::Critter SSGA::getGoodGenome(rng::FastDice &dice) const {
   auto it = _archive.begin();
   std::advance(it, i);
   CGenome g = it->genome;
-  if (dice(config::Simulation::ssgaMutationRate())) g.mutate(dice);
-//  return dice.pickOne(_archive);
+  while (dice(config::Simulation::ssgaMutationProbability())) g.mutate(dice);
+  g.cdata.sex = dice(.5) ? Critter::Sex::FEMALE : Critter::Sex::MALE;
+
+  if (debugSSGA)
+    std::cerr << "Returning genome of generation " << g.gdata.generation
+              << " and fitness " << it->fitness << std::endl;
+
   return g;
 }
 

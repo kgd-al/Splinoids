@@ -2,6 +2,7 @@
 #define SSGA_H
 
 #include "../genotype/critter.h"
+#include "config.h"
 
 namespace simu {
 
@@ -25,12 +26,16 @@ class SSGA {
   using Archive = std::set<ArchiveItem>;
   Archive _archive;
   uint _maxArchiveSize;
+  uint _maxGen = 0;
 
   struct CritterData {
     struct Fields {
       float energy, gametes;
       Fields (void) : energy(0), gametes(0) {}
     };
+    P2D pos;
+    float distance;
+
     Fields beforeStep;
     Fields totals;
 
@@ -40,6 +45,7 @@ class SSGA {
   };
   using CData = std::map<const Critter*, CritterData>;
   CData _watchData;
+  std::map<std::string, float> _champStats;
 
   using Critters = std::set<Critter*>;
 
@@ -82,9 +88,15 @@ public:
     return _archive.empty() ? NAN : _archive.rbegin()->fitness;
   }
 
+  const auto& champStats (void) const {
+    return _champStats;
+  }
+
   genotype::Critter getRandomGenome (rng::FastDice &dice, uint mutations) const;
   genotype::Critter getGoodGenome (rng::FastDice &dice) const;
 
+private:
+  void maybePurgeObsoletes(uint gen);
 //  void step (const std::set<Critter*> &pop);
 };
 

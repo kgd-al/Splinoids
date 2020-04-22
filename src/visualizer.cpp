@@ -238,8 +238,10 @@ int main(int argc, char *argv[]) {
       config::Simulation::printConfig();
   }
 
-  if (!outputFolder.empty())
-    s.setDataFolder(outputFolder, simu::Simulation::Overwrite(overwrite));
+  if (!outputFolder.empty()) {
+    bool ok = s.setDataFolder(outputFolder, simu::Simulation::Overwrite(overwrite));
+    if (!ok)  exit(2);
+  }
 
 //  if (!duration.empty()) {
 //    if (duration.size() < 2)

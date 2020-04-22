@@ -1,3 +1,4 @@
+#include <QApplication>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QDebug>
@@ -303,6 +304,8 @@ MainView::MainView (visu::GraphicSimulation &simulation,
 
   connect(&_simu, &visu::GraphicSimulation::selectionDeleted,
           this, &MainView::selectNext);
+  connect(&_simu, &visu::GraphicSimulation::aborted,
+          [] { QApplication::exit(); });
 
   using J = PersitentJoystick;
   _joystick.setSignalManagedButtons({

@@ -30,7 +30,6 @@ protected:
 
   SSGA _ssga;
 
-  stdfs::path _dataFolder = "./";
   std::ofstream _statsLogger;
 
   decimal _systemExpectedEnergy;
@@ -41,6 +40,18 @@ protected:
   struct ReproductionStats {
     uint attempts = 0, autonomous = 0, ssga = 0;
   } _reproductions;
+
+  struct Autopsies {
+    enum Age { YOUNG, ADULT, OLD };
+    enum Death { INJURY, STARVATION };
+    std::array<std::array<uint, 3>, 2> counts {{0}};
+    uint oldage = 0;
+    uint total (void) const {
+      uint t = 0;
+      for (const auto &a: counts) for (const auto &c: a)  t += c;
+      return t + oldage;
+    }
+  } _autopsies;
 
   bool _aborted;
 
@@ -74,7 +85,7 @@ public:
     return _aborted;
   }
 
-  void abort (void) {
+  virtual void abort (void) {
     _aborted = true;
   }
 
@@ -107,11 +118,7 @@ public:
     ABORT = 'a',
     PURGE = 'p'
   };
-  void setDataFolder (const stdfs::path &path, Overwrite o = UNSPECIFIED);
-
-  const stdfs::path& dataFolder (void) const {
-    return _dataFolder;
-  }
+  bool setDataFolder (const stdfs::path &path, Overwrite o = UNSPECIFIED);
 
   void init (const Environment::Genome &egenome,
              Critter::Genome cgenome, const InitData &data = InitData{});
@@ -130,10 +137,12 @@ public:
 
   virtual void step (void);
 
+  void atEnd (void);
+
   decimal totalEnergy(void) const;
 
   stdfs::path periodicSaveName (void) const {
-    return periodicSaveName(_dataFolder, _time, _minGen, _maxGen);
+    return periodicSaveName("./", _time, _minGen, _maxGen);
   }
 
   static stdfs::path periodicSaveName(const stdfs::path &folder,
@@ -185,7 +194,7 @@ private:
   b2Body* critterBody (float x, float y, float a);
   b2Body* foodletBody (float x, float y);
 
-  void reproduction (Environment::MatingEvents &matings);
+  void reproduction (void);
   void produceCorpses (void);
   void steadyStateGA (void);
 

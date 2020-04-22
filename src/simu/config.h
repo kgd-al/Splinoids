@@ -92,7 +92,9 @@ struct CONFIG_FILE(Simulation) {
   DECLARE_PARAMETER(decimal, healthToEnergyRatio)
   DECLARE_PARAMETER(float, critterBaseSpeed)
   DECLARE_PARAMETER(float, combatBaselineIntensity)
+  DECLARE_PARAMETER(float, combatMinVelocity)
   DECLARE_PARAMETER(float, reproductionRange) // With respect to body size
+  DECLARE_PARAMETER(float, reproductionRequestThreshold)
 
   // Splinoid metabolic constants (per second, affected by clock speed)
   DECLARE_PARAMETER(float, baselineAgingSpeed)
@@ -114,7 +116,8 @@ struct CONFIG_FILE(Simulation) {
   DECLARE_PARAMETER(bool, screwTheEntropy)
   DECLARE_PARAMETER(uint, ssgaMinPopSizeRatio)  // Of the initial population size
   DECLARE_PARAMETER(uint, ssgaArchiveSizeRatio) //
-  DECLARE_PARAMETER(uint, ssgaMutationRate)
+  DECLARE_PARAMETER(uint, ssgaMutationProbability)
+  DECLARE_PARAMETER(uint, ssgaMaxGenerationalSpan)
 };
 
 } // end of namespace config

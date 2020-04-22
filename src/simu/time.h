@@ -18,6 +18,10 @@ struct Time {
   float dayFraction (void) const;
   float yearFraction (void) const;
 
+  bool isStartOfSecond (void) const;
+  bool isStartOfDay (void) const;
+  bool isStartOfYear (void) const;
+
   void set (uint y, uint d, uint s, uint ms);
   void set (uint t);
 

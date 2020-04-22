@@ -70,7 +70,8 @@ private:
 
   QBoxLayout *_contentsLayout, *_innerLayout, *_retinaLayout;
   QLayout *_genesLayout, *_statsLayout;
-  QPushButton *_saveButton, *_printButton, *_editButton, *_hideButton;
+  QPushButton *_brainButton, *_saveButton, *_printButton,
+              *_editButton, *_hideButton;
 
   bool _updating, _readonly;
 
@@ -88,6 +89,9 @@ public:
   }
 
   void readCurrentStatus (void);
+
+  void saveSubjectBrain (void);
+  void saveSubjectBrain (const QString &prefix) const;
 
   void saveSubjectGenotype (void);
   void saveSubjectGenotype (const QString &filename) const;

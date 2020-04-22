@@ -1,12 +1,20 @@
 #!/bin/bash
 
+tmpfile=.gnuplot.tmp.$BASHPID.dat
+clean(){
+  rm -vf $tmpfile
+}
+trap clean EXIT
+
 show_help(){
-  echo "Usage: $0 -f <file> -c <columns> [-p] [-l] [-o <file>] [-q] [-g]"
+  echo "Usage: $0 -f <file> -c <columns> [-p] [-l] [-o <file>] [-q] [-s r|-t r] [-g]"
   echo "       -f <file> the datafile to use"
   echo "       -c <columns> columns specifiation (see below)"
   echo "       -p persist"
   echo "       -l <n> redraw graph every n seconds"
   echo "       -o <file> output file (implies no loop and no persist)"
+  echo "       -s Use r samples row taken at regular intervals"
+  echo "       -t Only show last r rows"
   echo "       -q Print a minimum of information"
   echo "       -g Additional gnuplot commands"
   echo 
@@ -28,7 +36,7 @@ loop=""
 outfile=""
 verbose=""
 gnuplotplus=""
-while getopts "h?c:f:pl:o:qg:" opt; do
+while getopts "h?c:f:pl:o:s:t:qg:" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -61,6 +69,10 @@ while getopts "h?c:f:pl:o:qg:" opt; do
         output="$output
   set output '$outfile';
 "
+        ;;
+    s)  samples=$OPTARG
+        ;;
+    t)  tails=$OPTARG
         ;;
     q)  verbose=no
         ;;
@@ -122,8 +134,10 @@ tics=6
 cmd="  set datafile separator ' ';
   set ytics nomirror;
   set y2tics nomirror;
-  set key autotitle columnhead;
-  set style fill solid .25;" 
+  set key above autotitle columnhead;
+  set style fill solid .25;
+  
+  min(a,b) = a<b ? a : b;" 
 
 if [ "$gnuplotplus" ]
 then
@@ -139,7 +153,7 @@ then
 $output"
 else
   cmd="$cmd
-  loop(x) = 'while (1) { eval(setupXTics(0)); replot; pause '.x.'; };';"
+  loop(x) = 'while (1) { r=_rows(0); decoy=maketmp(r); eval(setupXTics(r)); replot; pause '.x.'; };';"
 fi
 
 # rows=$(wc -l $file | cut -d ' ' -f 1)
@@ -147,21 +161,46 @@ fi
 # tics=$(cut -d ' ' -f 1 $file | awk -v s=$stride 'NR % s == 1 { printf "\"%s\" %d\n", $0, NR }' | paste -sd "," -)
 # tics="$tics, \"y1000d00h0\" $(cat $file | wc -l)-1" # That's ugly but what the hell...
 
-lasttick=""
-if [ ! -z ${LAST_TICK+x} ]
+cmd="$cmd
+  _rows(x) = int(system('cat $file | wc -l'));"
+
+if [ ! -z "$samples" ]
 then
-  last_tick_expr='\"$LAST_TICK\"'
-  [ -z $LAST_TICK ] && last_tick_expr='\$0'
-  lasttick="END { print $last_tick_expr, NR-2 }"
+  datafile=$tmpfile
+  readfile="awk -v s='.int(r / $samples).' \"NR==1{print} NR % s == 2 {print}\""
+  cmd="$cmd
+  rows(r) = min($samples, r);
+  maketmp(r) = system('$readfile $file > $tmpfile');"
+  
+elif [ ! -z "$tails" ]
+then
+  datafile=$tmpfile
+  readfile="awk -v r='.int(r-rows(r)).' \"NR==1{print} NR >=r {print}\""
+  cmd="$cmd
+  rows(x) = min($tails, r);
+  maketmp(r) = system('$readfile $file > $tmpfile');"
+  
+else
+  datafile=$file
+  readfile="cat"
+  cmd="$cmd
+  rows(r) = r;
+  maketmp(r) = system(':');"
 fi
 
 cmd="$cmd
-  rows(x) = system('cat $file | wc -l');
-  stride(x) = rows(x) / ($tics - 1);
-  computeXTics(x) = system('cut -d \" \" -f 2 $file | awk -v s='.stride(0).' \"NR % s == 2 { print \\\$0, NR } $lasttick\"');
-  setupXTics(x) = 'tics=computeXTics('.x.'); set for [i=1:words(tics):2] xtics (word(tics, i) word(tics, i+1));';
-  eval(setupXTics(0));
-  plot '$file' using (0/0):(0/0) notitle"
+  stride(r) = rows(r) / ($tics - 1);
+  computeXTics(r) = system('cut -d \" \" -f 2 $datafile | awk -v s='.stride(r).' \"(NR % s == 2) || (NR == '.rows(r).'+1) { print \\\$0, NR-2 }\"');
+  setupXTics(r) = 'tics=computeXTics('.r.'); set for [i=1:words(tics):2] xtics (word(tics, i) word(tics, i+1));';
+  r = _rows(0);
+  r_ = rows(r);
+  decoy = maketmp(r);
+  eval(setupXTics(r));
+  print 'Displaying ', r_, ' / ', r, ' lines of data';
+  print 'Displaying ', system('$readfile $file | wc -l'), ' lines of data';
+  print 'Displaying ', system('wc -l $datafile'), ' lines of data';
+  plot '$datafile' using (0/0):(0/0) notitle"
+
 
 # cmd="$cmd
 #   xticsCount=$tics;
@@ -178,7 +217,7 @@ do
     [ "$y" == "" ] && y="y1"
     colname=$(cut -d: -f 1 <<< $elt)
     gp_elt=$(sed "s/\([^$W]*\)\([$W]\+\)\([^$W]*\)/\1column(\"\2\")\3/g" <<< $colname)
-    [ -z "$verbose" ] && printf "$elt >> $gp_elt : $y\n"
+    [ -z "$verbose" ] && printf -- "$elt >> $gp_elt : $y\n"
     
     if [ "$file" != "$files" ]
     then

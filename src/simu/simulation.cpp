@@ -4,6 +4,7 @@
 
 namespace simu {
 
+static constexpr bool debugShowStepHeader = false;
 static constexpr bool debugShowStaticStats = true;
 static constexpr int debugEntropy = 0;
 static constexpr int debugCritterManagement = 0;
@@ -101,38 +102,40 @@ Simulation::~Simulation (void) {
   clear();
 }
 
-void Simulation::setDataFolder (const stdfs::path &path, Overwrite o) {
-  _dataFolder = path;
-
-  if (stdfs::exists(_dataFolder) && !stdfs::is_empty(_dataFolder)) {
+bool Simulation::setDataFolder (const stdfs::path &path, Overwrite o) {
+  if (stdfs::exists(path) && !stdfs::is_empty(path)) {
     if (o == UNSPECIFIED) {
-      std::cerr << "WARNING: data folder '" << _dataFolder << "' is not empty."
-                   " What do you want to do ([a]bort, [p]urge)?"
+      std::cerr << "WARNING: data folder '" << path << "' is not empty."
+                   " What do you want to do ([a]bort, [p]urge)? "
                 << std::flush;
       o = Overwrite(std::cin.get());
     }
 
     switch (o) {
-    case PURGE: std::cerr << "Purging contents from " << _dataFolder
-                          << std::endl;
-                stdfs::remove_all(_dataFolder);
+    case PURGE: std::cerr << "Purging contents from " << path << std::endl;
+                stdfs::remove_all(path);
                 break;
 
-    case ABORT: _aborted = true;  break;
+    case ABORT: std::cerr << "Aborting simulation as requested." << std::endl;
+                abort();  break;
 
     default:  std::cerr << "Invalid overwrite option '" << o
                         << "' defaulting to abort." << std::endl;
-              _aborted = true;
+              abort();
     }
   }
-  if (_aborted) return;
+  if (_aborted) return false;
 
-  if (!stdfs::exists(_dataFolder)) {
-    std::cout << "Creating data folder " << _dataFolder << std::endl;
-    stdfs::create_directories(_dataFolder);
+  if (!stdfs::exists(path)) {
+    std::cout << "Creating data folder " << path << std::endl;
+    stdfs::create_directories(path);
   }
 
-  stdfs::path statsPath = path / "global.dat";
+  std::cout << "Changed working directory from " << stdfs::current_path();
+  stdfs::current_path(path);
+  std::cout << " to " << stdfs::current_path() << std::endl;
+
+  stdfs::path statsPath = "global.dat";
   if (_statsLogger.is_open()) _statsLogger.close();
   _statsLogger.open(statsPath, std::ofstream::out | std::ofstream::trunc);
   if (!_statsLogger.is_open())
@@ -155,6 +158,8 @@ void Simulation::setDataFolder (const stdfs::path &path, Overwrite o) {
 //      utils::doThrow<std::invalid_argument>(
 //        "Unable to open voxel file ", envPath, " for ", U::getName(o));
 //  }
+
+  return true;
 }
 
 void Simulation::init(const Environment::Genome &egenome,
@@ -298,8 +303,9 @@ Critter* Simulation::addCritter (const CGenome &genome,
 #endif
 
   if (debugCritterManagement)
-    std::cerr << "Created " << CID(c, "splinoid ") << " at " << c->pos()
-              << std::endl;
+    std::cerr << "Created " << CID(c, "splinoid ") << " (SID: " << c->species()
+              << ", gen " << c->genotype().gdata.generation << ") at "
+              << c->pos() << std::endl;
 
   if (_ssga.watching()) _ssga.registerBirth(c);
 
@@ -307,6 +313,19 @@ Critter* Simulation::addCritter (const CGenome &genome,
 }
 
 void Simulation::delCritter (Critter *critter) {
+  {
+    if (critter->tooOld())
+      _autopsies.oldage++;
+
+    else {
+      uint age = critter->isYouth() ? 0 : critter->isAdult() ? 1 : 2;
+      if (critter->starved())
+        _autopsies.counts[Autopsies::STARVATION][age]++;
+      else if (critter->fatallyInjured())
+        _autopsies.counts[Autopsies::INJURY][age]++;
+    }
+  }
+
   if (debugCritterManagement) critter->autopsy();
   if (_ssga.watching()) _ssga.registerDeath(critter);
   _critters.erase(critter);
@@ -357,13 +376,15 @@ void Simulation::clear (void) {
 void Simulation::step (void) {
   auto stepStart = now(), start = stepStart;
 
-//  std::cerr << "\n## Simulation step " << _time.timestamp() << " ("
-//            << _time.pretty() << ") ##" << std::endl;
+  if (debugShowStepHeader)
+    std::cerr << "\n## Simulation step " << _time.timestamp() << " ("
+              << _time.pretty() << ") ##" << std::endl;
 
   auto prevMinGen = _minGen, prevMaxGen = _maxGen;
   _minGen = std::numeric_limits<uint>::max();
   _maxGen = 0;
   _reproductions = ReproductionStats{};
+  _autopsies = Autopsies{};
 
   if (_ssga.watching()) _ssga.preStep(_critters);
 
@@ -375,13 +396,12 @@ void Simulation::step (void) {
   }
   _splnTimeMs = durationFrom(start);  start = now();
 
-  Environment::MatingEvents matings;
-  _environment->step(matings);
+  _environment->step();
 
   if (_ssga.watching()) _ssga.postStep(_critters);
   _envTimeMs = durationFrom(start);  start = now();
 
-  reproduction(matings);
+  reproduction();
   produceCorpses();
   decomposition();
   _decayTimeMs = durationFrom(start);  start = now();
@@ -441,50 +461,77 @@ void Simulation::step (void) {
 
   _stepTimeMs = durationFrom(stepStart);
 
-  if (prevMinGen != _minGen || prevMaxGen != _maxGen) {
+  if (prevMinGen < _minGen || prevMaxGen < _maxGen) {
     std::cerr << "## Simulation step " << _time.pretty() << " gens: ["
               << _minGen << "; " << _maxGen << "] at " << utils::CurrentTime{}
               << "\n";
   }
 }
 
-void Simulation::reproduction(Environment::MatingEvents &matings) {
+void Simulation::atEnd (void) {
+  logStats();
+}
+
+void Simulation::reproduction(void) {
   static const genotype::_details::FCOMPAT<CGenome> fcompat =
       &CGenome::compatibility;
 
+  const auto W = _environment->extent();
+  auto &dice = this->dice();
+  auto matings = _environment->matingEvents();
   for (auto p: matings) {
-    std::vector<CGenome> children (1);
-    if (p.first->sex() != Critter::Sex::FEMALE) std::swap(p.first, p.second);
+    Critter *f = p.first, *m = p.second;
+    if (!f->requestingMating()) continue; // Already reproduced this timestep
+    if (!m->requestingMating()) continue;
+
+    if (f->sex() != Critter::Sex::FEMALE) std::swap(f, m);
+    assert(f->sex() == Critter::Sex::FEMALE);
+    assert(m->sex() == Critter::Sex::MALE);
 
     if (debugReproduction)
-      std::cerr << "Mating attempt between " << CID(p.first) << " & "
-                << CID(p.second) << std::endl;
+      std::cerr << "Start of mating attempt between " << CID(f) << " ("
+                << f->requestingMating() << ": "
+                << f->reproductionReadiness() << ", "
+                << f->reproductionOutput() << ") & "
+                << CID(m) << " (" << m->requestingMating() << ": "
+                << m->reproductionReadiness()
+                << ", " << m->reproductionOutput() << ")" << std::endl;
 
-    const CGenome &lhs = p.first->genotype(), &rhs = p.second->genotype();
+    if (!f->requestingMating() || !m->requestingMating())
+      continue;
 
-    if (genotype::bailOutCrossver(lhs, rhs, children, dice(), fcompat)) {
+    const CGenome &lhs = f->genotype(), &rhs = m->genotype();
+
+    std::vector<CGenome> children (1);
+    if (genotype::bailOutCrossver(lhs, rhs, children, dice, fcompat)) {
       assert(children.size() == 1);
       children.front().genealogy().updateAfterCrossing(
             lhs.genealogy(), rhs.genealogy(), _gidManager);
 
+      // Pick one as reference critter to define position
+      Critter *rc = dice(.5) ? f : m;
+      float r = rc->bodyRadius();
+      P2D p = rc->pos() + fromPolar(dice(0., 2*M_PI), dice(r, 10*r));
+      utils::clip(-W, p.x, W);
+      utils::clip(-W, p.y, W);
+
       Critter *c = addCritter(children.front(),
-                              .5 * (p.first->x() + p.second->x()),
-                              .5 * (p.first->y() + p.second->y()),
-                              dice()(0., 2.*M_PI),
-                              p.first->reproductionReserve()
-                              + p.second->reproductionReserve());
+                              p.x, p.y,
+                              dice(0., 2.*M_PI),
+                              f->reproductionReserve()
+                              + m->reproductionReserve());
 
       if (debugReproduction)  std::cerr << "\tSpawned " << CID(c) << std::endl;
 
       _reproductions.autonomous++;
 
-      if (_ssga.watching()) _ssga.recordChildFor({p.first,p.second});
+      if (_ssga.watching()) _ssga.recordChildFor({f,m});
     }
 
     _reproductions.attempts++;
 
-    p.first->resetMating();
-    p.second->resetMating();
+    f->resetMating();
+    m->resetMating();
   }
 }
 
@@ -563,7 +610,7 @@ void Simulation::logStats (void) {
   s.favg = _ssga.averageFitness();
   s.fmax = _ssga.bestFitness();
 
-  if (_startTime == _time)
+  if (_startTime == _time) {
     _statsLogger << "Step Date"
                     " NCritters NYoungs NAdults NElders"
                     " NCorpses NPlants"
@@ -572,27 +619,40 @@ void Simulation::logStats (void) {
                     " eE"
                     " AReproduction SReproduction EReproduction"
                     " GMin GMax FMin FAvg FMax"
-                    "\n";
+                    " DYInj DAInj DOInj DYStr DAStr DOStr DOAge";
 
-  _statsLogger << _time.timestamp() << " " << _time.pretty() << " "
+    for (const auto &p: _ssga.champStats())
+      _statsLogger << " SSGAC" << p.first;
 
-               << s.ncritters << " "
-               << s.nyoungs << " " << s.nadults << " " << s.nelders << " "
+    _statsLogger << "\n";
+  }
 
-               << s.ncorpses << " " << s.nplants << " "
-               << s.nfeedings << " " << s.nfights << " "
+  _statsLogger << _time.timestamp() << " " << _time.pretty()
 
-               << s.ecritters << " " << s.ecorpses << " " << s.eplants << " "
-               << s.ereserve << " "
-               << eE << " "
+               << " " << s.ncritters << " "
+               << s.nyoungs << " " << s.nadults << " " << s.nelders
 
-               << _reproductions.attempts << " " << _reproductions.autonomous
-               << " " << _reproductions.ssga << " "
+               << " " << s.ncorpses << " " << s.nplants << " "
+               << s.nfeedings << " " << s.nfights
 
-               << _minGen << " " << _maxGen << " "
-               << s.fmin << " " << s.favg << " " << s.fmax
+               << " " << s.ecritters << " " << s.ecorpses << " " << s.eplants
+               << " " << s.ereserve << " " << eE
 
-               << std::endl;
+               << " " << _reproductions.attempts << " "
+               << _reproductions.autonomous << " " << _reproductions.ssga
+
+               << " " << _minGen << " " << _maxGen << " "
+               << s.fmin << " " << s.favg << " " << s.fmax;
+
+  for (const auto &a: _autopsies.counts)
+    for (const auto v: a)
+      _statsLogger << " " << v;
+  _statsLogger << " " << _autopsies.oldage;
+
+  for (const auto &p: _ssga.champStats())
+    _statsLogger << " " << p.second;
+
+  _statsLogger << std::endl;
 
   processStats(s);
 }

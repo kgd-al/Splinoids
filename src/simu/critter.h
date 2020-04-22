@@ -26,8 +26,8 @@ public:
   static constexpr float MAX_SIZE = 1;  // Adult size
   static constexpr float RADIUS = .5; // Body size of a mature splinoid
 
-  static constexpr float BODY_DENSITY = 1;
-  static constexpr float ARTIFACTS_DENSITY = 2;
+  static constexpr float MIN_DENSITY = 1;
+  static constexpr float MAX_DENSITY = 2;
 
   static constexpr auto SPLINES_COUNT = Genome::SPLINES_COUNT;
   static constexpr uint SPLINES_PRECISION = 4;
@@ -131,6 +131,7 @@ private:
 
   decimal _reproductionReserve;
   b2Fixture *_reproductionSensor;
+  static const FixtureData _reproUserData;
 
   /* Each portion managed independantly
    * Indices are
@@ -170,6 +171,10 @@ public:
 
   auto id (void) const {
     return genotype().id();
+  }
+
+  auto species (void) const {
+    return genotype().species();
   }
 
   auto sex (void) const {
@@ -264,11 +269,16 @@ public:
   }
 
   bool requestingMating (void) const {
-    return reproductionReadiness() == 1 && _reproduction > .9;
+    return reproductionReadiness() == 1
+        && _reproduction > config::Simulation::reproductionRequestThreshold();
   }
 
   const auto reproductionSensor (void) const {
     return _reproductionSensor;
+  }
+
+  auto reproductionOutput (void) const {
+    return _reproduction;
   }
 
   void resetMating (void) {
@@ -488,7 +498,7 @@ public:
   static decimal maximalEnergyStorage (float size) {
     assert(MIN_SIZE <= size && size <= MAX_SIZE);
 //    return size * BODY_DENSITY;
-    return decimal(M_PI * size * size * RADIUS * RADIUS * BODY_DENSITY);
+    return decimal(M_PI * size * size * RADIUS * RADIUS * MIN_DENSITY);
   }
 
   static float computeVisionRange (float visionWidth);

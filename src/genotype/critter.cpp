@@ -78,7 +78,7 @@ DEFINE_GENOME_FIELD_WITH_BOUNDS(float, minClockSpeed, "minCS", .1f, 1.f, 1.f, 1.
 DEFINE_GENOME_FIELD_WITH_BOUNDS(float, maxClockSpeed, "maxCS", 1.f, 1.f, 1.f, 2.f)
 DEFINE_GENOME_FIELD_WITH_BOUNDS(float, matureAge, "mature", .25f, .33f, .33f, .5f)
 DEFINE_GENOME_FIELD_WITH_BOUNDS(float, oldAge, "old", .5f, .66f, .66f, .75f)
-DEFINE_GENOME_FIELD_WITH_BOUNDS(uint, brainSubsteps, "bdepth", 2u, 2u, 2u, 2u)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(uint, brainSubsteps, "bdepth", 1u, 2u, 2u, 2u)
 
 using Config = genotype::Critter::config_t;
 
@@ -244,7 +244,7 @@ DEFINE_GENOME_MUTATION_RATES({
   EDNA_PAIR(    matureAge, 1),
   EDNA_PAIR(       oldAge, 1),
 
-  EDNA_PAIR( connectivity, 10),
+  EDNA_PAIR( connectivity, 40),
   EDNA_PAIR(brainSubsteps, .1),
 
   EDNA_PAIR(        cdata, 3.f),

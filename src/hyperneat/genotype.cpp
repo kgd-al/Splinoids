@@ -98,7 +98,6 @@ void genotype::HyperNEAT::phenotypeToDat (std::ostream &os,
     os << c.m_weight / W << "\n";
   }
   os << "\n";
-
 }
 
 // Copied (and altered) from MultiNEAT/src/Species.cpp::MutateGenome
@@ -187,12 +186,18 @@ void mutateHyperNEATGenome (HN &g) {
 auto hyperNeatFunctor = [] {
   GENOME_FIELD_FUNCTOR(HN, data) functor;
 
-  functor.random = [] (auto&) {
+  functor.random = [] (auto &dice) {
     auto s = simu::substrateFor({});
-    return HN(0, s.GetMinCPPNInputs(), 0, s.GetMinCPPNOutputs(),
-              false,
-              ACT_FUNC_OUTPUT, ACT_FUNC_HIDDEN,
-              0, Config::params(), 0, 0);
+    HN hn (0, s.GetMinCPPNInputs(), 0, s.GetMinCPPNOutputs(),
+           false,
+           ACT_FUNC_OUTPUT, ACT_FUNC_HIDDEN,
+           0, Config::params(), 0, 0);
+
+    auto rmin = Config::minWeight() * Config::weightInitialRange(),
+         rmax = Config::maxWeight() * Config::weightInitialRange();
+    for (NEAT::LinkGene &l: hn.m_LinkGenes) l.m_Weight += dice(rmin, rmax);
+
+    return hn;
   };
 
   functor.mutate = [] (auto &hn, auto &/*dice*/) {
@@ -378,6 +383,11 @@ DEFINE_PARAMETER(double, recurrentLoop, 0)
 DEFINE_PARAMETER(double, weightMutationRate, 1)
 DEFINE_PARAMETER(double, weightReplacementMaxPower, 1)
 DEFINE_PARAMETER(double, weightReplacementRate, .2)
+
+
+DEFINE_PARAMETER(double, weightInitialRange, .05)
+
+
 DEFINE_PARAMETER(int, maxLinks, -1)
 DEFINE_PARAMETER(int, maxNeurons, -1)
 DEFINE_PARAMETER(int, neuronTries, 64)

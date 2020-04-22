@@ -95,6 +95,11 @@ public:
   }
 #endif
 
+  void abort (void) override {
+    Simulation::abort();
+    emit aborted();
+  }
+
   visu::Critter* selection (void) {
     return _selection;
   }
@@ -109,6 +114,7 @@ public:
 
 signals:
   void selectionDeleted (void);
+  void aborted (void);
 
 private:
   void processStats(const Stats &s) const override;

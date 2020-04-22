@@ -52,7 +52,7 @@ struct CollisionMonitor : public b2ContactListener {
     switch (pair(dA.type, dB.type)) {
     case pair(BodyType::CRITTER, BodyType::CRITTER):
       if (isMatingAttempt(fA, fB))
-        registerMatingAttempt(critter(dA), critter(dB));
+        registerStartOfMatingAttempt(critter(dA), critter(dB));
       else
         registerFightStart(critter(dA), fA, critter(dB), fB);
       break;
@@ -113,7 +113,9 @@ struct CollisionMonitor : public b2ContactListener {
 
     switch (pair(dA.type, dB.type)) {
     case pair(BodyType::CRITTER, BodyType::CRITTER):
-      if (!isMatingAttempt(fA, fB))
+      if (isMatingAttempt(fA, fB))
+        registerEndOfMatingAttempt(critter(dA), critter(dB));
+      else
         registerFightEnd(critter(dA), fA, critter(dB), fB);
       break;
 
@@ -221,9 +223,25 @@ struct CollisionMonitor : public b2ContactListener {
     e._feedingEvents.erase({c,p});
   }
 
-  void registerMatingAttempt (Critter *cA, Critter *cB) {
-    if (cA->requestingMating() && cB->requestingMating())
-      e._matingEvents.insert({cA,cB});
+  void registerStartOfMatingAttempt (Critter *cA, Critter *cB) {
+    if (cA->sex() == cB->sex()) return;
+
+    if (debugMating)
+      std::cerr << "Start of mating attempt between " << CID(cA) << " ("
+                << cA->requestingMating() << ": " << cA->reproductionReadiness()
+                << ", " << cA->reproductionOutput() << ") & " << CID(cB) << " ("
+                << cB->requestingMating() << ": " << cB->reproductionReadiness()
+                << ", " << cB->reproductionOutput() << ")" << std::endl;
+    e._matingEvents.insert({cA,cB});
+  }
+
+  void registerEndOfMatingAttempt (Critter *cA, Critter *cB) {
+    if (cA->sex() == cB->sex()) return;
+
+    if (debugMating)
+      std::cerr << "End of mating attempt between " << CID(cA) << " & "
+                << CID(cB) << std::endl;
+    e._matingEvents.erase({cA,cB});
   }
 
   void watchForWarp (Critter *c, const Critter::FixtureData *fd) {
@@ -266,7 +284,7 @@ void Environment::modifyEnergyReserve (decimal e) {
 //  std::cerr << " >> " << _energyReserve << std::endl;
 }
 
-void Environment::step (MatingEvents &events) {
+void Environment::step (void) {
 
   // Box2D parameters
   static const int V_ITER = config::Simulation::b2VelocityIter();
@@ -284,10 +302,6 @@ void Environment::step (MatingEvents &events) {
   for (const auto &p: destroyedSplines)
     p.first->destroySpline(p.second);
 
-  assert(events.empty());
-  std::swap(events, _matingEvents);
-  assert(_matingEvents.empty());
-
   for (Critter *c: _edgeCritters) maybeTeleport(c);
 
 //  std::cerr << "Physical step took " << _physics.GetProfile().step
@@ -295,7 +309,7 @@ void Environment::step (MatingEvents &events) {
 }
 
 void Environment::createEdges(void) {
-  static constexpr float W = .1, W2 = 2*W;
+  static constexpr float W = 10, W2 = 2*W;
   real HS = extent();
 
   b2BodyDef edgesBodyDef;
@@ -350,7 +364,9 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
   fdd.vB = d.velocities[1];
 
   // Ignore small enough collisions
-  if (fdd.vA.Length() + fdd.vB.Length() < 1e-2) return;
+  bool ignoreA = (fdd.vA.Length() < config::Simulation::combatMinVelocity());
+  bool ignoreB = (fdd.vB.Length() < config::Simulation::combatMinVelocity());
+  if (ignoreA && ignoreB) return;
 
   fdd.pA = cA->pos();
   fdd.pB = cB->pos();
@@ -382,15 +398,27 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
     const Critter::FixtureData &fdA = *Critter::get(fA);
     const Critter::FixtureData &fdB = *Critter::get(fB);
 
-    float alpha = (fB->GetDensity())
-        / (fA->GetDensity() + fB->GetDensity());
+    static constexpr float MIN_DENSITY_ALPHA = .01;
+    static constexpr float MAX_DENSITY_ALPHA = 1;
+    static constexpr float DENSITY_ALPHA_RANGE =
+        MAX_DENSITY_ALPHA - MIN_DENSITY_ALPHA;
+    static constexpr float DENSITY_RANGE =
+        Critter::MAX_DENSITY - Critter::MIN_DENSITY;
 
-    float N = config::Simulation::combatBaselineIntensity() * (
-        cA->body().GetMass() * fdd.VA * fdd.VA
-      + cB->body().GetMass() * fdd.VB * fdd.VB);
+    float alpha_a = MIN_DENSITY_ALPHA + DENSITY_ALPHA_RANGE *
+        (fA->GetDensity() - Critter::MIN_DENSITY) / DENSITY_RANGE;
+    float alpha_b = MIN_DENSITY_ALPHA + DENSITY_ALPHA_RANGE *
+        (fA->GetDensity() - Critter::MIN_DENSITY) / DENSITY_RANGE;
 
-    float deA = alpha * .5 * N,
-          deB = (1 - alpha) * .5 * N;
+    if (alpha_a == 0 && alpha_b == 0) continue;
+    float alpha = (alpha_b) / (alpha_a + alpha_b);
+
+    float N = dt() * config::Simulation::combatBaselineIntensity() * (
+        cA->body().GetMass() * fdd.VA * fdd.VA * (1-ignoreA)
+      + cB->body().GetMass() * fdd.VB * fdd.VB * (1-ignoreB));
+
+    float deA = alpha * .5 * alpha_b * N,
+          deB = (1 - alpha) * .5 * alpha_a * N;
 
     if (debugFighting > 2)
       std::cerr << "\tFixtures " << CID(cA) << "F" << fdA << " and "
@@ -434,7 +462,7 @@ void Environment::maybeTeleport(Critter *c) {
 }
 
 decimal Environment::dt (void) {
-  static const decimal DT = 1.f / config::Simulation::secondsPerDay();
+  static const decimal DT = 1.f / config::Simulation::ticksPerSecond();
   return DT;
 }
 

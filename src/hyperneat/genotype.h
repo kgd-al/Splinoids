@@ -8,7 +8,9 @@
 #pragma GCC diagnostic ignored "-Wpedantic"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wunused-variable"
+#if __GNUC__ >= 9
 #pragma GCC diagnostic ignored "-Wdeprecated-copy"
+#endif
 #include "../../MultiNEAT/src/Genome.h" // Bad header
 #pragma GCC diagnostic pop
 
@@ -80,6 +82,9 @@ struct EDNA_CONFIG_FILE(HyperNEAT) {
   DECLARE_PARAMETER(double, weightMutationRate)
   DECLARE_PARAMETER(double, weightReplacementMaxPower)
   DECLARE_PARAMETER(double, weightReplacementRate)
+
+  /// Addition. Ratio of min/max weight affected at random creation
+  DECLARE_PARAMETER(double, weightInitialRange)
 
   DECLARE_PARAMETER(int, maxLinks)
   DECLARE_PARAMETER(int, maxNeurons)

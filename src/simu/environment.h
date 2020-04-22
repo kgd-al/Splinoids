@@ -92,7 +92,7 @@ public:
   }
 
   auto extent (void) const {
-    return .5 * size();
+    return .5f * size();
   }
 
   bool isTaurus (void) const {
@@ -119,9 +119,17 @@ public:
     return _fightingEvents;
   }
 
+  auto& matingEvents (void) {
+    return _matingEvents;
+  }
+
+  const auto& matingEvents (void) const {
+    return _matingEvents;
+  }
+
   void vision (const Critter *c) const;
 
-  virtual void step (MatingEvents &events);
+  virtual void step (void);
 
   void modifyEnergyReserve (decimal e);
 
