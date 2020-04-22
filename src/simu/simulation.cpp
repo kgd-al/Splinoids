@@ -394,6 +394,7 @@ void Simulation::step (void) {
     _minGen = std::min(_minGen, c->genotype().gdata.generation);
     _maxGen = std::max(_maxGen, c->genotype().gdata.generation);
   }
+  if (_critters.empty())  _minGen = 0;
   _splnTimeMs = durationFrom(start);  start = now();
 
   _environment->step();
