@@ -28,10 +28,6 @@ struct Time {
   Time& next (void);
   std::string pretty (void) const;
 
-//  bool isStartOfYear (void) const {
-//    return _day == 0 && _hour == 0;
-//  }
-
   static Time fromTimestamp (uint t);
 
   friend bool operator== (const Time &lhs, const Time &rhs) {

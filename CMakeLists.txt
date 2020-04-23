@@ -171,6 +171,15 @@ add_executable(
 target_link_libraries(simulator ${SIMU_LIBS} ${APOGeT_LIBRARIES})
 
 ################################################################################
+## Target (evaluation)
+################################################################################
+add_executable(
+  evaluator
+  $<TARGET_OBJECTS:SIMU_OBJS>
+  "src/evaluator.cpp")
+target_link_libraries(evaluator ${SIMU_LIBS} ${APOGeT_LIBRARIES})
+
+################################################################################
 ## Target (timelines explorer)
 ################################################################################
 #find_package(OpenMP)

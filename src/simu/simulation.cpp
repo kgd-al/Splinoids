@@ -7,7 +7,6 @@
 namespace simu {
 
 static constexpr bool debugShowStepHeader = false;
-static constexpr bool debugShowStaticStats = true;
 static constexpr int debugEntropy = 0;
 static constexpr int debugCritterManagement = 0;
 static constexpr int debugFoodletManagement = 0;
@@ -45,7 +44,7 @@ struct FormatAbsorption {
 };
 
 }
-void staticStats (void) {
+void Simulation::printStaticStats (void) {
   std::cerr << "==================\n"
                "== Static stats ==\n";
 
@@ -171,7 +170,8 @@ void Simulation::init(const Environment::Genome &egenome,
   _aborted = false;
   _minGen = 0;
   _maxGen = 0;
-  if (debugShowStaticStats) staticStats();
+  _time.set(0);
+  _startTime = _endTime = _time;
 
   // TODO Remove (debug)
 //  cgenome.vision.angleBody = M_PI/4.;
@@ -189,13 +189,15 @@ void Simulation::init(const Environment::Genome &egenome,
       Critter::maximalEnergyStorage(s),
       Critter::clockSpeed(cgenome, v));
   };
-  std::cerr << "Stats for provided genome\n"
-            << "   Old age duration: " << le(0) << ", " << le(.5) << ", "
-              << le(1) << "\n"
-            << "Starvation duration:\n\t"
-              << sd(0, true) << ", " << sd(.5, true) << ", " << sd(1, true)
-              << "\n\t" << sd(0, false) << ", " << sd(.5, false) << ", "
-              << sd(1, false) << std::endl;
+
+//  if (debugShowStaticStats)
+//    std::cerr << "Stats for provided genome\n"
+//              << "   Old age duration: " << le(0) << ", " << le(.5) << ", "
+//                << le(1) << "\n"
+//              << "Starvation duration:\n\t"
+//                << sd(0, true) << ", " << sd(.5, true) << ", " << sd(1, true)
+//                << "\n\t" << sd(0, false) << ", " << sd(.5, false) << ", "
+//                << sd(1, false) << std::endl;
 
   _systemExpectedEnergy = data.ienergy;
 
@@ -298,7 +300,8 @@ b2Body* Simulation::critterBody (float x, float y, float a) {
 }
 
 Critter* Simulation::addCritter (const CGenome &genome,
-                                 float x, float y, float a, decimal e) {
+                                 float x, float y, float a, decimal e,
+                                 float age) {
 
   b2Body *body = critterBody(x, y, a);
 
@@ -392,6 +395,8 @@ void Simulation::delFoodlet(Foodlet *foodlet) {
 }
 
 void Simulation::clear (void) {
+  preClear();
+//  _environment.reset(nullptr);
   while (!_critters.empty())  delCritter(*_critters.begin());
   while (!_foodlets.empty())  delFoodlet(*_foodlets.begin());
 }

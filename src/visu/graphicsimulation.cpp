@@ -128,9 +128,10 @@ void GraphicSimulation::addVisuCritter(simu::Critter *sc) {
 
 simu::Critter*
 GraphicSimulation::addCritter (const CGenome &genome,
-                               float x, float y, float a, simu::decimal e) {
+                               float x, float y, float a, simu::decimal e,
+                               float age) {
 
-  auto *sc = Simulation::addCritter(genome, x, y, a, e);
+  auto *sc = Simulation::addCritter(genome, x, y, a, e, age);
   addVisuCritter(sc);
   return sc;
 }

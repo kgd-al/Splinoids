@@ -78,7 +78,8 @@ public:
 
   simu::Critter* addCritter(const CGenome &genome,
                             float x, float y, float a,
-                            simu::decimal e) override;
+                            simu::decimal e,
+                            float age) override;
   void delCritter (simu::Critter *critter) override;
 
   simu::Foodlet* addFoodlet(simu::BodyType t, float x, float y,

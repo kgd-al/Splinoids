@@ -239,9 +239,10 @@ int main(int argc, char *argv[]) {
 //    s.setDuration(simu::Environment::DurationSetType(duration[0]), dvalue);
 //  }
 
+  simu::Simulation::printStaticStats();
+
   uint stopAfterGeneration = 1000;
   uint saveEveryGen = 1, saveNextGen = 1;
-  uint saveEveryDay = 10;
   while (!s.finished()
          && s.minGeneration() <= stopAfterGeneration
          && s.currTime().year() < 1000) {
@@ -252,8 +253,7 @@ int main(int argc, char *argv[]) {
       s.save(s.periodicSaveName());
       saveNextGen += saveEveryGen;
 
-    } else if (s.currTime().isStartOfDay()
-               && (s.currTime().day() % saveEveryDay) == 0)
+    } else if (s.currTime().isStartOfYear())
       s.save(s.periodicSaveName());
   }
   s.atEnd();

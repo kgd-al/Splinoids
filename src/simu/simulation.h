@@ -93,6 +93,10 @@ public:
     return *_environment;
   }
 
+  const auto& environment (void) const {
+    return *_environment;
+  }
+
   auto& physics (void) {
     return _environment->physics();
   }
@@ -126,7 +130,8 @@ public:
   virtual void postInit (void) {}
 
   virtual Critter* addCritter (const CGenome &genome,
-                               float x, float y, float a, decimal e);
+                               float x, float y, float a, decimal e,
+                               float age = 0);
   virtual void delCritter (Critter *critter);
 
   virtual Foodlet* addFoodlet (BodyType t, float x, float y, float r, decimal e);
@@ -138,6 +143,10 @@ public:
   virtual void step (void);
 
   void atEnd (void);
+
+  const auto& critters (void) const {
+    return _critters;
+  }
 
   decimal totalEnergy(void) const;
 
@@ -167,6 +176,8 @@ public:
 
   friend void assertEqual (const Simulation &lhs, const Simulation &rhs,
                            bool deepcopy);
+
+  static void printStaticStats (void);
 
 protected:
   struct Stats {

@@ -1229,7 +1229,7 @@ float Critter::nextGrowthStepAt (uint currentStep) {
 }
 
 float Critter::computeVisionRange(float visionWidth) {
-  return std::max(.5f, std::min(5/visionWidth, 20.f));
+  return std::max(.5f, std::min(10/visionWidth, 20.f));
 }
 
 float Critter::agingSpeed (float clockSpeed) {
