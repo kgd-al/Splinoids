@@ -42,9 +42,9 @@ DEFINE_PARAMETER(std::string, logFile, "stats.dat")
 DEFINE_PARAMETER(Color, emptyColor, utils::uniformStdArray<Color>(1))
 DEFINE_PARAMETER(Color, obstacleColor, utils::uniformStdArray<Color>(0))
 
-DEFINE_PARAMETER(float, plantMinRadius, .75)
-DEFINE_PARAMETER(float, plantMaxRadius, 1.25)
-DEFINE_PARAMETER(float, plantEnergyDensity, 2)
+DEFINE_PARAMETER(float, plantMinRadius, .25)
+DEFINE_PARAMETER(float, plantMaxRadius, .75)
+DEFINE_PARAMETER(float, plantEnergyDensity, 4)
 DEFINE_PARAMETER(decimal, decompositionRate, .01)
 
 DEFINE_PARAMETER(int, growthSubsteps, 4)

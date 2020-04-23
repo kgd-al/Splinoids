@@ -138,6 +138,7 @@ PREPEND(MultiNEAT_SRC "MultiNEAT/src" ${MultiNEAT_SRC})
 set(MultiNEAT_SRC ${MultiNEAT_SRC}
     "src/hyperneat/genotype.h" "src/hyperneat/genotype.cpp"
     "src/hyperneat/phenotype.h" "src/hyperneat/phenotype.cpp")
+add_definitions(-DUSE_BOOST_RANDOM)
 
 #set(MultiNEAT_SRC
 #    "genome.h"

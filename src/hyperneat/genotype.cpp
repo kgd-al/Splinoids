@@ -100,11 +100,18 @@ void genotype::HyperNEAT::phenotypeToDat (std::ostream &os,
   os << "\n";
 }
 
+auto getNEATDice (rng::AbstractDice &dice) {
+  NEAT::RNG rng;
+  rng.Seed(dice(std::numeric_limits<long>::min(),
+                std::numeric_limits<long>::max()));
+  return rng;
+}
+
 // Copied (and altered) from MultiNEAT/src/Species.cpp::MutateGenome
-void mutateHyperNEATGenome (HN &g) {
+void mutateHyperNEATGenome (HN &g, rng::AbstractDice &dice) {
   NEAT::InnovationDatabase &idb = Config::innovations();
   const NEAT::Parameters &params = Config::params();
-  NEAT::RNG &rng = Config::RNG();
+  auto rng = getNEATDice(dice);
 
   if (rng.RandFloat() < params.MutateAddNeuronProb) {
     if (params.MaxNeurons > 0) {
@@ -200,16 +207,17 @@ auto hyperNeatFunctor = [] {
     return hn;
   };
 
-  functor.mutate = [] (auto &hn, auto &/*dice*/) {
-    mutateHyperNEATGenome(hn);
+  functor.mutate = [] (auto &hn, auto &dice) {
+    mutateHyperNEATGenome(hn, dice);
   };
 
-  functor.cross = [] (auto &lhs, auto &rhs, auto &/*dice*/) {
+  functor.cross = [] (auto &lhs, auto &rhs, auto &dice) {
     // Could just go with a const_cast but I don't trust the underlying code
     HN lhs_copy = lhs, rhs_copy = rhs;
     auto params = Config::params();
+    auto rng = getNEATDice(dice);
 
-    HN res = lhs_copy.Mate(rhs_copy, false, true, Config::RNG(), params);
+    HN res = lhs_copy.Mate(rhs_copy, false, true, rng, params);
     return res;
   };
 
@@ -447,11 +455,6 @@ const NEAT::Parameters& Config::params (void) {
     return params;
   }();
   return p;
-}
-
-NEAT::RNG& Config::RNG (void) {
-  static auto rng = [] { NEAT::RNG rng; rng.Seed(0); return rng; }();
-  return rng;
 }
 
 NEAT::InnovationDatabase& Config::innovations (void) {

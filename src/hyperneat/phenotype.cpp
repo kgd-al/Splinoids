@@ -59,7 +59,7 @@ NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays) {
 
   substrate.m_with_distance = false;
 
-  substrate.m_max_weight_and_bias = 8.0;
+  substrate.m_max_weight_and_bias = genotype::HyperNEAT::config_t::maxWeight();
 
   return substrate;
 }

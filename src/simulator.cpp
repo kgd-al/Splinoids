@@ -244,7 +244,7 @@ int main(int argc, char *argv[]) {
   uint saveEveryDay = 10;
   while (!s.finished()
          && s.minGeneration() <= stopAfterGeneration
-         && s.currTime().year() < 10) {
+         && s.currTime().year() < 1000) {
     if (aborted)  s.abort();
     s.step();
 
@@ -257,6 +257,7 @@ int main(int argc, char *argv[]) {
       s.save(s.periodicSaveName());
   }
   s.atEnd();
+  s.save(s.periodicSaveName());
 
 //  s.destroy();
   return 0;

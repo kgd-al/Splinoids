@@ -2,6 +2,8 @@
 
 #include "simulation.h"
 
+#include "../hyperneat/phenotype.h" // WARNING REMOVE
+
 namespace simu {
 
 static constexpr bool debugShowStepHeader = false;
@@ -249,17 +251,38 @@ void Simulation::init(const Environment::Genome &egenome,
 
   logStats();
 
-  if (true) {
-    const Critter *c = *_critters.begin();
-    const CGenome &g = c->genotype();
+  if (false) {
+    Critter *c = *_critters.begin();
+    CGenome &g = c->genotype();
 
-    std::ofstream gos ("tmp/cppn.dot");
-    g.connectivity.toDot(gos);
-    std::cerr << "debug saved first critter's connectivity: " << bool(gos) << "\n";
+    auto save = [] (Critter *c, CGenome &g, uint i) {
+      std::ostringstream oss;
+      oss << "tmp/mutated_" << i << "_";
+      std::string p = oss.str();
+      std::ofstream gos (p + "cppn.dot");
+      g.connectivity.toDot(gos);
 
-    std::ofstream pos ("tmp/ann.dat");
-    g.connectivity.phenotypeToDat(pos, c->brain());
-    std::cerr << "debug saved first critter's brain: " << bool(pos) << "\n";
+      std::ofstream pos (p + "ann.dat");
+      auto substrate = substrateFor(c->raysEnd());
+      NEAT::NeuralNetwork brain;
+      g.connectivity.BuildHyperNEATPhenotype(brain, substrate);
+      g.connectivity.phenotypeToDat(pos, brain);
+    };
+
+    auto &mr = genotype::Critter::config_t::mutationRates.ref();
+    for (auto &p: mr) if (p.first != "connectivity")  p.second = 0;
+
+    genotype::Critter::printMutationRates(std::cout, 2);
+
+    rng::FastDice dice (1);
+    save(c, g, 0);
+    for (uint i=1; i<=10; i++) {
+      uint n = 100;
+      for (uint j=0; j<n; j++)  g.mutate(dice);
+      save(c, g, i*n);
+    }
+
+    exit(242);
   }
 }
 

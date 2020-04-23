@@ -96,8 +96,6 @@ struct EDNA_CONFIG_FILE(HyperNEAT) {
 
   static const NEAT::Parameters& params (void);
 
-  static NEAT::RNG& RNG (void);
-
   static NEAT::InnovationDatabase& innovations (void);
 };
 
