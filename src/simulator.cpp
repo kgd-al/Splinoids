@@ -249,9 +249,9 @@ int main(int argc, char *argv[]) {
     if (aborted)  s.abort();
     s.step();
 
-    if (s.minGeneration() == saveNextGen) {
+    if (saveNextGen <= s.minGeneration()) {
       s.save(s.periodicSaveName());
-      saveNextGen += saveEveryGen;
+      saveNextGen = s.minGeneration() + saveEveryGen;
 
     } else if (s.currTime().isStartOfYear())
       s.save(s.periodicSaveName());

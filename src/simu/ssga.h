@@ -41,7 +41,7 @@ class SSGA {
 
     uint children;
 
-    CritterData (void) : beforeStep(), totals(), children(0) {}
+    CritterData (void) : distance(0), beforeStep(), totals(), children(0) {}
   };
   using CData = std::map<const Critter*, CritterData>;
   CData _watchData;

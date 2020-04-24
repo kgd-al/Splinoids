@@ -480,30 +480,7 @@ void GeneticManipulator::saveSubjectBrain(void) {
 }
 
 void GeneticManipulator::saveSubjectBrain(const QString &prefix) const {
-  std::string cppn_f = (prefix + "_cppn.dot").toStdString();
-  std::ofstream cppn_ofs (cppn_f);
-  _subject->object().genotype().connectivity.toDot(cppn_ofs);
-
-  std::string ann_f = (prefix + "_ann.dat").toStdString();
-  std::ofstream ann_ofs (ann_f);
-  genotype::HyperNEAT::phenotypeToDat(ann_ofs, _subject->object().brain());
-
-//#if defined(unix) || defined(__unix__) || defined(__unix)
-//  std::ostringstream cmd;
-////  std::string cppn_pdf = (prefix + "_cppn.pdf").toStdString();
-////  cmd << "dot " << cppn_f << " -Tpdf -o " << cppn_pdf << " >log 2>&1";
-////  std::cerr << "Executing \"" << cmd.str() << "\"\n";
-////  int res = system(cmd.str().c_str());
-////  if (res == 0) std::cerr << "\tSuccess\n";
-////  else          std::cerr << "\tFailed\n";
-
-//  cmd.str("");
-//  cmd << "./scripts/plot_brain.sh " << prefix.toStdString();
-//  std::cerr << "Executing \"" << cmd.str() << "\"\n";
-//  int res = system(cmd.str().c_str());
-//  if (res == 0) std::cerr << "\tSuccess\n";
-//  else          std::cerr << "\tFailed\n";
-//#endif
+  _subject->object().saveBrain(prefix.toStdString());
 }
 
 void GeneticManipulator::saveSubjectGenotype(void) {
@@ -852,7 +829,8 @@ void GeneticManipulator::readCurrentStatus(void) {
   set("Age", &SCritter::age, percent);
   set("Clock", &SCritter::clockSpeed, percent);
   set("Effcy", &SCritter::efficiency, percent);
-  set("Repro", &SCritter::reproductionReadiness, percent);
+
+  set("Repro", &SCritter::reproductionReadinessBrittle, percent);
 
   set("LSpeed", &SCritter::linearSpeed,
       [] (float v) { return QString::number(v, 'f', 2) + " m/s"; });

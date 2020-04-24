@@ -38,7 +38,7 @@ protected:
         _splnTimeMs, _envTimeMs, _decayTimeMs, _regenTimeMs;
 
   struct ReproductionStats {
-    uint attempts = 0, autonomous = 0, ssga = 0;
+    uint attempts = 0, sexual = 0, asexual = 0, ssga = 0;
   } _reproductions;
 
   struct Autopsies {
@@ -206,6 +206,9 @@ private:
   b2Body* foodletBody (float x, float y);
 
   void reproduction (void);
+  Critter* createChild (const Critter *parent, const CGenome &genome,
+                        decimal energy, rng::AbstractDice &dice);
+
   void produceCorpses (void);
   void steadyStateGA (void);
 

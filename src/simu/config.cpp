@@ -38,6 +38,7 @@ DEFINE_SUBCONFIG(genotype::Environment::config_t, configEnvironment)
 DEFINE_SUBCONFIG(PTree, configPhylogeny)
 
 DEFINE_PARAMETER(std::string, logFile, "stats.dat")
+DEFINE_PARAMETER(uint, logStatsEvery, 0)
 
 DEFINE_PARAMETER(Color, emptyColor, utils::uniformStdArray<Color>(1))
 DEFINE_PARAMETER(Color, obstacleColor, utils::uniformStdArray<Color>(0))
@@ -58,7 +59,7 @@ DEFINE_PARAMETER(float, reproductionRequestThreshold, .9)
 DEFINE_PARAMETER(float, baselineAgingSpeed, .001)
 DEFINE_PARAMETER(decimal, baselineEnergyConsumption, .0005)
 DEFINE_PARAMETER(decimal, baselineRegenerationRate, .01)
-DEFINE_PARAMETER(decimal, baselineGametesGrowth, .002)
+DEFINE_PARAMETER(decimal, baselineGametesGrowth, .001)
 DEFINE_PARAMETER(decimal, motorEnergyConsumption, .00025)
 DEFINE_PARAMETER(decimal, energyAbsorptionRate, .025)
 
@@ -71,9 +72,9 @@ DEFINE_PARAMETER(uint, daysPerYear, 1000)
 
 DEFINE_PARAMETER(bool, screwTheEntropy, true)
 DEFINE_PARAMETER(uint, ssgaMinPopSizeRatio, 1)
-DEFINE_PARAMETER(uint, ssgaArchiveSizeRatio, 2)
+DEFINE_PARAMETER(uint, ssgaArchiveSizeRatio, 0)
 DEFINE_PARAMETER(uint, ssgaMutationProbability, .5)
-DEFINE_PARAMETER(uint, ssgaMaxGenerationalSpan, 10)
+DEFINE_PARAMETER(uint, ssgaMaxGenerationalSpan, 5)
 
 #undef CFILE
 } // end of namespace config

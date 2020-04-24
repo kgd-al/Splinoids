@@ -246,6 +246,8 @@ void Simulation::init(const Environment::Genome &egenome,
   plantRenewal(W * data.pRange);
 
   _statsLogger.open(config::Simulation::logFile());
+  _reproductions = ReproductionStats{};
+  _autopsies = Autopsies{};
 
   _ssga.init(_critters.size());
 
@@ -259,7 +261,8 @@ void Simulation::init(const Environment::Genome &egenome,
 
     auto save = [] (Critter *c, CGenome &g, uint i) {
       std::ostringstream oss;
-      oss << "tmp/mutated_" << i << "_";
+      oss << "tmp/mutated_" << i;
+
       std::string p = oss.str();
       std::ofstream gos (p + "cppn.dot");
       g.connectivity.toDot(gos);
@@ -411,8 +414,6 @@ void Simulation::step (void) {
   auto prevMinGen = _minGen, prevMaxGen = _maxGen;
   _minGen = std::numeric_limits<uint>::max();
   _maxGen = 0;
-  _reproductions = ReproductionStats{};
-  _autopsies = Autopsies{};
 
   if (_ssga.watching()) _ssga.preStep(_critters);
 
@@ -476,7 +477,12 @@ void Simulation::step (void) {
 //    });
   }
 
-  if (_statsLogger) logStats();
+  static const auto &lse = config::Simulation::logStatsEvery();
+  if (_statsLogger && lse > 0 && (_time.timestamp() % lse) == 0) {
+    logStats();
+    _reproductions = ReproductionStats{};
+    _autopsies = Autopsies{};
+  }
 
   _time.next();
 
@@ -502,16 +508,21 @@ void Simulation::atEnd (void) {
 }
 
 void Simulation::reproduction(void) {
+  static constexpr auto S = CGenome::SEXUAL;
+  static constexpr auto A = CGenome::ASEXUAL;
+
   static const genotype::_details::FCOMPAT<CGenome> fcompat =
       &CGenome::compatibility;
 
-  const auto W = _environment->extent();
   auto &dice = this->dice();
   auto matings = _environment->matingEvents();
   for (auto p: matings) {
     Critter *f = p.first, *m = p.second;
-    if (!f->requestingMating()) continue; // Already reproduced this timestep
-    if (!m->requestingMating()) continue;
+    assert(f->hasSexualReproduction());
+    assert(m->hasSexualReproduction());
+
+    if (!f->requestingMating(S)) continue; // Already reproduced this timestep
+    if (!m->requestingMating(S)) continue;
 
     if (f->sex() != Critter::Sex::FEMALE) std::swap(f, m);
     assert(f->sex() == Critter::Sex::FEMALE);
@@ -519,14 +530,14 @@ void Simulation::reproduction(void) {
 
     if (debugReproduction)
       std::cerr << "Start of mating attempt between " << CID(f) << " ("
-                << f->requestingMating() << ": "
-                << f->reproductionReadiness() << ", "
+                << f->requestingMating(S) << ": "
+                << f->reproductionReadiness(S) << ", "
                 << f->reproductionOutput() << ") & "
-                << CID(m) << " (" << m->requestingMating() << ": "
-                << m->reproductionReadiness()
+                << CID(m) << " (" << m->requestingMating(S) << ": "
+                << m->reproductionReadiness(S)
                 << ", " << m->reproductionOutput() << ")" << std::endl;
 
-    if (!f->requestingMating() || !m->requestingMating())
+    if (!f->requestingMating(S) || !m->requestingMating(S))
       continue;
 
     const CGenome &lhs = f->genotype(), &rhs = m->genotype();
@@ -538,23 +549,11 @@ void Simulation::reproduction(void) {
             lhs.genealogy(), rhs.genealogy(), _gidManager);
 
       // Pick one as reference critter to define position
-      Critter *rc = dice(.5) ? f : m;
-      float r = rc->bodyRadius();
-      P2D p = rc->pos() + fromPolar(dice(0., 2*M_PI), dice(r, 10*r));
-      utils::clip(-W, p.x, W);
-      utils::clip(-W, p.y, W);
-
-      Critter *c = addCritter(children.front(),
-                              p.x, p.y,
-                              dice(0., 2.*M_PI),
-                              f->reproductionReserve()
-                              + m->reproductionReserve());
-
-      if (debugReproduction)  std::cerr << "\tSpawned " << CID(c) << std::endl;
-
-      _reproductions.autonomous++;
+      createChild(dice(.5) ? f : m, children.front(),
+                  f->reproductionReserve() + m->reproductionReserve(), dice);
 
       if (_ssga.watching()) _ssga.recordChildFor({f,m});
+      _reproductions.sexual++;
     }
 
     _reproductions.attempts++;
@@ -562,6 +561,36 @@ void Simulation::reproduction(void) {
     f->resetMating();
     m->resetMating();
   }
+
+  for (Critter *c: _critters) {
+    if (!c->hasAsexualReproduction() || !c->requestingMating(A)) continue;
+
+    CGenome g = c->genotype();
+    while (dice(genotype::BOCData::config_t::mutateChild()))  g.mutate(dice);
+    g.genealogy().updateAfterCloning(_gidManager);
+
+    createChild(c, g, c->reproductionReserve(), dice);
+    _reproductions.asexual++;
+
+    c->resetMating();
+  }
+}
+
+Critter* Simulation::createChild(const Critter *parent, const CGenome &genome,
+                                 decimal energy,
+                                 rng::AbstractDice &dice) {
+
+  const auto W = _environment->extent();
+  float r = parent->bodyRadius();
+  P2D p = parent->pos() + fromPolar(dice(0., 2*M_PI), dice(r, 10*r));
+  utils::clip(-W, p.x, W);
+  utils::clip(-W, p.y, W);
+
+  Critter *c = addCritter(genome, p.x, p.y, dice(0., 2.*M_PI), energy);
+
+  if (debugReproduction)  std::cerr << "\tSpawned " << CID(c) << std::endl;
+
+  return c;
 }
 
 void Simulation::produceCorpses(void) {
@@ -646,7 +675,7 @@ void Simulation::logStats (void) {
                     " NFeeding NFights"
                     " ECritters ECorpses EPlants EReserve"
                     " eE"
-                    " AReproduction SReproduction EReproduction"
+                    " FRepro SRepro ARepro ERepro"
                     " GMin GMax FMin FAvg FMax"
                     " DYInj DAInj DOInj DYStr DAStr DOStr DOAge";
 
@@ -667,8 +696,8 @@ void Simulation::logStats (void) {
                << " " << s.ecritters << " " << s.ecorpses << " " << s.eplants
                << " " << s.ereserve << " " << eE
 
-               << " " << _reproductions.attempts << " "
-               << _reproductions.autonomous << " " << _reproductions.ssga
+               << " " << _reproductions.attempts << " " << _reproductions.sexual
+               << " " << _reproductions.asexual << " " << _reproductions.ssga
 
                << " " << _minGen << " " << _maxGen << " "
                << s.fmin << " " << s.favg << " " << s.fmax;
@@ -872,6 +901,8 @@ void Simulation::save (stdfs::path file) const {
   load(file, that, "");
   assertEqual(*this, that);
 #endif
+
+//  std::cerr << "Saved to " << file << std::endl;
 }
 
 void Simulation::load (const stdfs::path &file, Simulation &s,

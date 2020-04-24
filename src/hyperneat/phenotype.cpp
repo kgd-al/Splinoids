@@ -20,7 +20,10 @@ NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays) {
   for (const simu::P2D &r: rays) {
     simu::P2D r_ = r;
     r_.Normalize();
-    for (uint i=0; i<3; i++) add(inputs, r_.x, r_.y, -.2*i-.6);
+    for (uint i=0; i<3; i++) add(inputs, r_.x, r_.y, float(i)-1);
+
+    // old formula for color: -.2*i-.6
+    // new formula is just: -1 -> r, 0 -> g, 1 -> b
   }
 
   // Hidden

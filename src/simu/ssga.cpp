@@ -81,8 +81,8 @@ void SSGA::registerDeath(const Critter *c) {
   float fitness = std::min(cd.distance, 10.f)
                 * 10 * std::min(cd.totals.energy, 1.f);
   if (fitness > 0) {
-    fitness += (cd.children > 0) * 1000;
-    fitness += 100 * std::min(cd.totals.gametes, 10.f);
+    if (cd.children > 0) fitness *= 2;
+    else fitness *= (1+std::min(cd.totals.gametes, 1.f));
   }
 
   assert(fitness >= 0);
@@ -151,8 +151,13 @@ void SSGA::postStep(const std::set<Critter*> &pop) {
     auto it = _watchData.find(c);
     if (it == _watchData.end()) it = registerBirth(c);
     CritterData &cd = it->second;
-    cd.distance = (c->pos() - cd.pos).Length();
-    cd.totals.energy += std::max(c->usableEnergy() - cd.beforeStep.energy, 0.);
+
+    cd.distance += (c->pos() - cd.pos).Length();
+
+    if (c->usableEnergy() / c->maxUsableEnergy() < .75)
+      cd.totals.energy +=
+          std::max(c->usableEnergy() - cd.beforeStep.energy, 0.);
+
     cd.totals.gametes += std::max(c->reproductionReserve() - cd.beforeStep.gametes, 0.);
 
     if (debugManagement > 1)

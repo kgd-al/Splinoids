@@ -71,6 +71,10 @@ struct CollisionMonitor : public b2ContactListener {
     case pair(BodyType::WARP_ZONE, BodyType::CRITTER):
         watchForWarp(critter(dB), Critter::get(fB));  break;
 
+    case pair(BodyType::OBSTACLE, BodyType::CRITTER):
+    case pair(BodyType::CRITTER, BodyType::OBSTACLE):
+      break;
+
     default:
         std::cerr << "Collision started between types " << uint(dA.type)
                   << " & " << uint(dB.type) << std::endl;
@@ -132,6 +136,10 @@ struct CollisionMonitor : public b2ContactListener {
 
     case pair(BodyType::WARP_ZONE, BodyType::CRITTER):
       unwatchForWarp(critter(dB), Critter::get(fB));  break;
+
+    case pair(BodyType::OBSTACLE, BodyType::CRITTER):
+    case pair(BodyType::CRITTER, BodyType::OBSTACLE):
+      break;
 
     default:
 //      std::cerr << "Collision finished between types " << uint(tA) << " & "
@@ -224,13 +232,18 @@ struct CollisionMonitor : public b2ContactListener {
   }
 
   void registerStartOfMatingAttempt (Critter *cA, Critter *cB) {
+    static constexpr auto S = Critter::Genome::SEXUAL;
     if (cA->sex() == cB->sex()) return;
+    assert(cA->hasSexualReproduction());
+    assert(cB->hasSexualReproduction());
 
     if (debugMating)
       std::cerr << "Start of mating attempt between " << CID(cA) << " ("
-                << cA->requestingMating() << ": " << cA->reproductionReadiness()
-                << ", " << cA->reproductionOutput() << ") & " << CID(cB) << " ("
-                << cB->requestingMating() << ": " << cB->reproductionReadiness()
+                << cA->requestingMating(S) << ": "
+                << cA->reproductionReadiness(S) << ", "
+                << cA->reproductionOutput() << ") & " << CID(cB) << " ("
+                << cB->requestingMating(S) << ": "
+                << cB->reproductionReadiness(S)
                 << ", " << cB->reproductionOutput() << ")" << std::endl;
     e._matingEvents.insert({cA,cB});
   }

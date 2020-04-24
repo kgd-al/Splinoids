@@ -234,7 +234,7 @@ auto hyperNeatFunctor = [] {
   return functor;
 };
 
-DEFINE_GENOME_FIELD_WITH_FUNCTOR(HN, data, "HNeat", hyperNeatFunctor())
+DEFINE_GENOME_FIELD_WITH_FUNCTOR(HN, data, "", hyperNeatFunctor())
 
 DEFINE_GENOME_MUTATION_RATES({ EDNA_PAIR(data, 1) })
 DEFINE_GENOME_DISTANCE_WEIGHTS({ EDNA_PAIR(data, 1) })

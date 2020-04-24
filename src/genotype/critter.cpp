@@ -46,11 +46,11 @@ DEFINE_GENOME_DISTANCE_WEIGHTS({
 #define GENOME Vision
 
 static constexpr float fPI = M_PI;
-static constexpr float aVI = fPI / 12;
+static constexpr float aVI = fPI / 6;
 DEFINE_GENOME_FIELD_WITH_BOUNDS(float, angleBody, "", 0.f, aVI, aVI, fPI/2.f)
-DEFINE_GENOME_FIELD_WITH_BOUNDS(float, angleRelative, "", -fPI/2.f, -aVI, -aVI, fPI/2.f)
-DEFINE_GENOME_FIELD_WITH_BOUNDS(float, width, "", fPI/60, fPI/6, fPI/6, 2*fPI/3.f)
-DEFINE_GENOME_FIELD_WITH_BOUNDS(uint, precision, "", 0u, 0u, 0u, 5u)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, angleRelative, "", -fPI/2.f, 0.f, 0.f, fPI/2.f)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, width, "", fPI/60, fPI/3, fPI/3, 2*fPI/3.f)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(uint, precision, "", 0u, 1u, 1u, 5u)
 
 DEFINE_GENOME_MUTATION_RATES({
   EDNA_PAIR(    angleBody, 1),
@@ -69,6 +69,7 @@ DEFINE_GENOME_DISTANCE_WEIGHTS({
 
 
 #define GENOME Critter
+using Config = genotype::Critter::config_t;
 
 DEFINE_GENOME_FIELD_AS_SUBGENOME(BOCData, cdata, "")
 DEFINE_GENOME_FIELD_AS_SUBGENOME(Vision, vision, "")
@@ -80,7 +81,33 @@ DEFINE_GENOME_FIELD_WITH_BOUNDS(float, matureAge, "mature", .25f, .33f, .33f, .5
 DEFINE_GENOME_FIELD_WITH_BOUNDS(float, oldAge, "old", .5f, .66f, .66f, .75f)
 DEFINE_GENOME_FIELD_WITH_BOUNDS(uint, brainSubsteps, "bdepth", 1u, 2u, 2u, 2u)
 
-using Config = genotype::Critter::config_t;
+auto sexualityFunctor = [] {
+  GENOME_FIELD_FUNCTOR(int, asexual) functor;
+
+  functor.random = [] (auto &/*dice*/) {
+    return Critter::ASEXUAL;
+  };
+
+  functor.mutate = [] (auto &/*a*/, auto &/*dice*/) {
+  };
+
+  functor.cross = [] (auto &lhs, auto &rhs, auto &dice) {
+    return dice.toss(lhs, rhs);
+  };
+
+  functor.distance = [] (auto &/*lhs*/, auto &/*rhs*/) {
+    float d = 0;
+    return d;
+  };
+
+  functor.check = [] (auto &/*set*/) {
+    bool ok = true;
+    return ok;
+  };
+
+  return functor;
+};
+DEFINE_GENOME_FIELD_WITH_FUNCTOR(int, asexual, "", sexualityFunctor())
 
 using Ss = GENOME::Splines;
 using S = Ss::value_type;
@@ -243,6 +270,7 @@ DEFINE_GENOME_MUTATION_RATES({
   EDNA_PAIR(maxClockSpeed, 1),
   EDNA_PAIR(    matureAge, 1),
   EDNA_PAIR(       oldAge, 1),
+  EDNA_PAIR(      asexual, 0),
 
   EDNA_PAIR( connectivity, 40),
   EDNA_PAIR(brainSubsteps, .1),
@@ -258,11 +286,20 @@ DEFINE_GENOME_DISTANCE_WEIGHTS({
   EDNA_PAIR(maxClockSpeed, 1),
   EDNA_PAIR(    matureAge, 1),
   EDNA_PAIR(       oldAge, 1),
+  EDNA_PAIR(      asexual, 0),
 
   EDNA_PAIR( connectivity, 0),
   EDNA_PAIR(brainSubsteps, .1),
   EDNA_PAIR(        cdata, 0.f),
 })
+
+template <>
+struct genotype::MutationRatesPrinter<int, GENOME, &GENOME::asexual> {
+  static constexpr bool recursive = false;
+  static void print (std::ostream &os, uint width, uint depth, float ratio) {
+    prettyPrintMutationRate(os, width, depth, ratio, 1, "mut", true);
+  }
+};
 
 template <>
 struct genotype::MutationRatesPrinter<Ss, GENOME, &GENOME::splines> {

@@ -251,25 +251,42 @@ public:
     return _efficiency;
   }
 
+  auto reproductionType (void) const {
+    return Genome::ReproductionType(_genotype.asexual);
+  }
+
+  bool hasSexualReproduction (void) const {
+    return reproductionType() == Genome::SEXUAL;
+  }
+
+  bool hasAsexualReproduction (void) const {
+    return reproductionType() == Genome::ASEXUAL;
+  }
+
   auto reproductionReserve (void) const {
     return _reproductionReserve;
   }
 
-  auto reproductiveInvestment (void) const {
-    return _genotype.reproductiveInvestment();
+  auto reproductiveInvestment (Genome::ReproductionType t) const {
+    return (t+1)*_genotype.reproductiveInvestment();
   }
 
-  auto energyForChild (void) const {
-    return reproductiveInvestment() * energyForCreation();
+  auto energyForChild (Genome::ReproductionType t) const {
+    return reproductiveInvestment(t) * energyForCreation();
   }
 
   // For now both contribute the same
-  auto reproductionReadiness (void) const {
-    return _reproductionReserve / energyForChild();
+  auto reproductionReadiness (Genome::ReproductionType t) const {
+    return _reproductionReserve / energyForChild(t);
   }
 
-  bool requestingMating (void) const {
-    return reproductionReadiness() == 1
+  // Uses "current" scheme
+  auto reproductionReadinessBrittle (void) const {
+    return _reproductionReserve / energyForChild(reproductionType());
+  }
+
+  bool requestingMating (Genome::ReproductionType t) const {
+    return reproductionReadiness(t) == 1
         && _reproduction > config::Simulation::reproductionRequestThreshold();
   }
 
@@ -283,8 +300,10 @@ public:
 
   void resetMating (void) {
     _reproductionReserve = 0;
-    delFixture(_reproductionSensor);
-    _reproductionSensor = nullptr;
+    if (_reproductionSensor) {
+      delFixture(_reproductionSensor);
+      _reproductionSensor = nullptr;
+    }
   }
 
   auto clockSpeed (void) const {
@@ -477,6 +496,8 @@ public:
 
   static FixtureData* get (b2Fixture *f);
   static const FixtureData* get (const b2Fixture *f);
+
+  void saveBrain (const std::string &prefix) const;
 
   // ===========================================================================
   // == Static computers

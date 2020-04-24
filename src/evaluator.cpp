@@ -6,19 +6,23 @@
 
 //#include "config/dependencies.h"
 
+using CGenome = genotype::Critter;
+using EGenome = genotype::Environment;
+
 namespace eval {
 using namespace simu;
 
 class ForagingEvaluator : public Simulation {
   std::ofstream _logger;
 public:
+  static std::string ofstreamFor (const std::string &tag) {
+    std::ostringstream oss;
+    oss << tag << ".dat";
+    return oss.str();
+  }
+
   void init (const Simulation &reference, const CGenome &g, float a,
              const std::string &tag) {
-    if (!tag.empty()) {
-      std::ostringstream oss;
-      oss << tag << ".dat";
-      _logger.open(oss.str());
-    }
 
     InitData idata {};
     idata.ienergy = 100;
@@ -26,7 +30,10 @@ public:
     idata.nCritters = 0;
     idata.cRange = 0;
     idata.seed = 0;
-    Simulation::init(reference.environment().genotype(), g, idata);
+
+    EGenome eg = reference.environment().genotype();
+    eg.taurus = false;
+    Simulation::init(eg, g, idata);
 
     clear();
     _ssga.clear();
@@ -34,13 +41,18 @@ public:
 
     float age = .5 * (g.matureAge + g.oldAge);
     Critter *c = addCritter(g, 0, 0, 0,
-                            2 * Critter::maximalEnergyStorage(Critter::MAX_SIZE),
+                            .5 * 2 // Half the max (which is double the storage)
+                            * Critter::maximalEnergyStorage(Critter::MAX_SIZE),
                             age);
 
     float r = config::Simulation::plantMaxRadius();
     P2D p = fromPolar(a, .75*c->visionRange());
     addFoodlet(BodyType::PLANT, p.x, p.y, r,
                Foodlet::maxStorage(BodyType::PLANT, r));
+
+    if (!tag.empty()) _logger.open(ofstreamFor(tag));
+
+    _logger << p.x << " " << p.y << " " << r << "\n\n";
   }
 
   void step (void) override {
@@ -63,8 +75,6 @@ public:
 }
 
 int main(int argc, char *argv[]) {
-  using CGenome = genotype::Critter;
-//  using EGenome = genotype::Environment;
 
   // ===========================================================================
   // == Command line arguments parsing
@@ -170,27 +180,50 @@ int main(int argc, char *argv[]) {
   for (const auto &g: genomes)
     gid_w = std::max(gid_w, uint(std::ceil(std::log10(uint(g.id())))));
 
-  uint ncritters = std::min(genomes.size(), 50ul);
+  float cratio = .25;
+  uint ncritters = cratio * genomes.size();
   float nangles = 8;
+  float fweights [] {
+    1, 2, 3, 4, 2, 4, 3, 2
+  };
+
+  const auto dangle = [&nangles] (uint j) {
+    return 360 * (j/nangles);
+  };
+  const auto rangle = [&nangles] (uint j) {
+    return 2 * M_PI * (j/nangles);
+  };
+  static const auto gid = [] (const CGenome &g) {
+    std::ostringstream oss;
+    oss << "G0x" << std::hex << g.id();
+    return oss.str();
+  };
+  static const auto tagFor = [] (const CGenome &g, float dangle){
+    std::ostringstream oss;
+    oss << gid(g) << "A" << std::setw(3) << std::setfill('0')
+        << dangle;
+    return oss.str();
+  };
 
   std::ostream &os = std::cout;
 
   os << "GID/Angle";
   for (uint j=0; j<nangles; j++)
-    os << " " << 360 * (j / nangles);
-  os << "\n";
+    os << " " << dangle(j);
+  os << " Total\n";
 
+  std::vector<float> fitnesses (ncritters, 0);
   for (uint i=0; i<ncritters; i++) {
     const auto &g = genomes[i];
+    fitnesses[i] = 0;
 
-    os << "G" << g.id();
+    os << gid(g);
     for (uint j=0; j<nangles; j++) {
-      float angle = 2 * M_PI * (j / nangles);
+      std::string tag = tagFor(g, dangle(j));
+      testArea.init(reference, g, rangle(j), tag);
 
-      std::ostringstream oss;
-      oss << "G" << g.id() << "A" << 360 * (j/nangles);
-
-      testArea.init(reference, g, angle, oss.str());
+      // save brain on first angle tested
+      if (j == 0) (*testArea.critters().begin())->saveBrain(gid(g));
 
       for (uint k=0; k<steps && !testArea.success(); k++)
         testArea.step();
@@ -199,11 +232,30 @@ int main(int argc, char *argv[]) {
       if (testArea.success()) fitness = steps - testArea.currTime().timestamp();
 
       os << " " << fitness;
+      fitnesses[i] += fitness * fweights[j];
 
       testArea.clear();
     }
 
-    os << std::endl;
+    os << " " << fitnesses[i] << std::endl;
+  }
+
+  std::vector<uint> indices (ncritters);
+  std::iota(std::begin(indices), std::end(indices), 0);
+
+  std::sort(indices.begin(), indices.end(),
+            [&fitnesses] (uint ilhs, uint irhs) {
+              return fitnesses[ilhs] < fitnesses[irhs];
+  });
+
+  // best is at indices.back()
+  const CGenome &champ = genomes[indices.back()];
+  for (uint j=0; j<nangles; j++) {
+    float a = dangle(j);
+    std::string tag = tagFor(champ, a);
+    std::ostringstream oss;
+    oss << "champ_A" << std::setfill('0') << std::setw(3) << a << ".dat";
+    stdfs::create_symlink(eval::ForagingEvaluator::ofstreamFor(tag), oss.str());
   }
 
   return 0;

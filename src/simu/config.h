@@ -77,6 +77,7 @@ struct CONFIG_FILE(Simulation) {
   DECLARE_SUBCONFIG(PTree, configPhylogeny)
 
   DECLARE_PARAMETER(std::string, logFile)
+  DECLARE_PARAMETER(uint, logStatsEvery)
 
   DECLARE_PARAMETER(Color, emptyColor)
   DECLARE_PARAMETER(Color, obstacleColor)

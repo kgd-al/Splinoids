@@ -343,7 +343,7 @@ void Critter::neuralStep(Environment &env) {  ERR
     inputs.reserve(_retina.size() * std::tuple_size_v<Color> + 3);
     inputs.push_back(sex() == Sex::FEMALE ? -1 : 1);
     inputs.push_back(_age);
-    inputs.push_back(reproductionReadiness());
+    inputs.push_back(reproductionReadiness(reproductionType()));
     inputs.push_back(usableEnergy() / maxUsableEnergy());
     inputs.push_back(bodyHealthness());
 //    inputs.push_back(dice(-1,1));
@@ -576,13 +576,15 @@ void Critter::aging(Environment &env) {
     decimal dE = _energy * config::Simulation::baselineGametesGrowth()
                * _clockSpeed * dt;
     dE = std::min(dE, _energy);
-    dE = std::min(dE, energyForChild() - _reproductionReserve);
+    dE = std::min(dE, energyForChild(reproductionType()) - _reproductionReserve);
     _energy -= dE;
     _reproductionReserve += dE;
     env.modifyEnergyReserve(+dE);
 
     // Just turned active -> create sensor
-    if (reproductionReadiness() == 1 && _reproductionSensor == nullptr)
+    if (hasSexualReproduction()
+        && reproductionReadiness(reproductionType()) == 1
+        && _reproductionSensor == nullptr)
       _reproductionSensor = addReproFixture();
   }
 
@@ -1092,7 +1094,7 @@ Color Critter::computeCurrentColor(void) const {
   static constexpr auto CM = Genome::config_t::COLOR_MIN;
   float h = bodyHealthness();
   if (h < 1)  for (float &v: color) v = CM + h * (v-CM);
-  if (requestingMating()) color[0] = 1;
+  if (requestingMating(reproductionType())) color[0] = 1;
 
 //  using utils::operator <<;
 //  std::cerr << CID(this) << " body color: " << color << std::endl;
@@ -1306,6 +1308,16 @@ Critter* Critter::load (const nlohmann::json &j, b2Body *body) {
   c->_destroyed = decltype(c->_destroyed)(j[6].get<std::string>());
 
   return c;
+}
+
+void Critter::saveBrain (const std::string &prefix) const {
+  std::string cppn_f = prefix + "_cppn.dot";
+  std::ofstream cppn_ofs (cppn_f);
+  _genotype.connectivity.toDot(cppn_ofs);
+
+  std::string ann_f = prefix + "_ann.dat";
+  std::ofstream ann_ofs (ann_f);
+  genotype::HyperNEAT::phenotypeToDat(ann_ofs, _brain);
 }
 
 } // end of namespace simu

@@ -81,6 +81,9 @@ public:
   BOCData cdata;
   phylogeny::Genealogy gdata;
 
+  enum ReproductionType { SEXUAL = 0, ASEXUAL = 1 };
+  int asexual;
+
   HyperNEAT connectivity;
   uint brainSubsteps;
 
@@ -153,6 +156,7 @@ DECLARE_GENOME_FIELD(Critter, Critter::Dimorphism, dimorphism)
 DECLARE_GENOME_FIELD(Critter, Critter::Colors, colors)
 DECLARE_GENOME_FIELD(Critter, Vision, vision)
 DECLARE_GENOME_FIELD(Critter, BOCData, cdata)
+DECLARE_GENOME_FIELD(Critter, int, asexual)
 DECLARE_GENOME_FIELD(Critter, float, minClockSpeed)
 DECLARE_GENOME_FIELD(Critter, float, maxClockSpeed)
 DECLARE_GENOME_FIELD(Critter, float, matureAge)
