@@ -78,7 +78,9 @@ public:
   virtual ~Simulation (void);
 
   bool finished (void) const {
-    return _aborted || (_startTime < _endTime && _endTime <= _time);
+    return _aborted
+        || _critters.empty()
+        || (_startTime < _endTime && _endTime <= _time);
   }
 
   bool aborted (void) const {
