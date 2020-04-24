@@ -79,7 +79,7 @@ public:
 
   bool finished (void) const {
     return _aborted
-        || _critters.empty()
+        || (!_ssga.enabled() && _critters.empty())
         || (_startTime < _endTime && _endTime <= _time);
   }
 
