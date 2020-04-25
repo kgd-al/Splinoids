@@ -260,7 +260,7 @@ int main(int argc, char *argv[]) {
   s.save(s.periodicSaveName());
 
   std::cout << "Simulation ";
-  if (s.extinct)  std::cout << "went extinct";
+  if (s.extinct())  std::cout << "went extinct";
   else
     std::cout << "completed";
   std::cout << " at step " << s.currTime().pretty() << std::endl;
