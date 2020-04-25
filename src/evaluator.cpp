@@ -257,6 +257,8 @@ int main(int argc, char *argv[]) {
     oss << "champ_A" << std::setfill('0') << std::setw(3) << a << ".dat";
     stdfs::create_symlink(eval::ForagingEvaluator::ofstreamFor(tag), oss.str());
   }
+  stdfs::create_symlink(gid(champ) + "_cppn.dot", "champ_cppn.dot");
+  stdfs::create_symlink(gid(champ) + "_ann.dat", "champ_ann.dat");
 
   return 0;
 }

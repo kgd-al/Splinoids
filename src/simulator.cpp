@@ -259,6 +259,12 @@ int main(int argc, char *argv[]) {
   s.atEnd();
   s.save(s.periodicSaveName());
 
+  std::cout << "Simulation ";
+  if (s.extinct)  std::cout << "went extinct";
+  else
+    std::cout << "completed";
+  std::cout << " at step " << s.currTime().pretty() << std::endl;
+
 //  s.destroy();
   return 0;
 }

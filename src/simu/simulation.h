@@ -78,8 +78,7 @@ public:
   virtual ~Simulation (void);
 
   bool finished (void) const {
-    return _aborted
-        || (!_ssga.enabled() && _critters.empty())
+    return _aborted || extinct()
         || (_startTime < _endTime && _endTime <= _time);
   }
 
@@ -89,6 +88,10 @@ public:
 
   virtual void abort (void) {
     _aborted = true;
+  }
+
+  bool extinct (void) const {
+    return !_ssga.enabled() && _critters.empty();
   }
 
   auto& environment (void) {

@@ -1,9 +1,10 @@
 #!/bin/bash
 
-[ "${1:-1}" != '_' ] $1=$1"_"
+prefix=$1
+[ "${prefix: -1}" != '_' ] && prefix=$1"_"
 
-cppn=${1}cppn.dot
-cppn_pdf=${1}cppn.pdf
+cppn=${prefix}cppn.dot
+cppn_pdf=${prefix}cppn.pdf
 if [ -f "$cppn" ]
 then
   dot $cppn -Tpdf -o $cppn_pdf > log
@@ -11,7 +12,7 @@ then
   ls -lh $cppn $cppn_pdf
 fi
 
-ann=${1}ann.dat
+ann=${prefix}ann.dat
 if [ -f "$ann" ]
 then
   cmd="
