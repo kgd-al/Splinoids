@@ -66,6 +66,8 @@ NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays) {
   add(outputs, -.125,  .0,  .5); // Clock
   add(outputs, -.25,   .0,  .5); // Reproduction
 
+  bool noHidden = (NHiddenLayers == 0) && (NVisual == 0);
+
   NEAT::Substrate substrate (inputs, hidden, outputs);
   substrate.m_leaky = false;
   substrate.m_query_weights_only = false;
@@ -80,7 +82,7 @@ NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays) {
   substrate.m_allow_looped_output_links = false;
 
   substrate.m_allow_input_hidden_links = true;
-  substrate.m_allow_input_output_links = false;
+  substrate.m_allow_input_output_links = noHidden;
   substrate.m_allow_hidden_output_links = true;
   substrate.m_allow_hidden_hidden_links = false;
 
