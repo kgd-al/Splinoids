@@ -422,6 +422,7 @@ struct genotype::Aggregator<Cs, Critter> {
 
 DEFINE_SUBCONFIG(genotype::Vision::config_t, configVision)
 DEFINE_SUBCONFIG(Config::Crossover, configCrossover)
+DEFINE_SUBCONFIG(genotype::HyperNEAT::config_t, configBrain)
 
 DEFINE_CONTAINER_PARAMETER(CFILE::MutationRates, dimorphism_mutationRates,
                            utils::normalizeRates({

@@ -59,6 +59,8 @@ int main(int argc, char *argv[]) {
   std::string outputFolder = "tmp_simu_run";
   char overwrite = simu::Simulation::UNSPECIFIED;
 
+  uint generations = 1000;
+
   cxxopts::Options options("Splinoids (headless)",
                            "2D simulation of critters in a changing environment");
   options.add_options()
@@ -97,6 +99,9 @@ int main(int argc, char *argv[]) {
 
     ("taurus", "Whether the environment is a taurus or uses fixed boundaries",
       cxxopts::value(taurus))
+
+    ("generations", "Number of generations to let the simulation run for",
+     cxxopts::value(generations))
 
 //    ("l,load", "Load a previously saved simulation",
 //     cxxopts::value(loadSaveFile))
@@ -241,10 +246,11 @@ int main(int argc, char *argv[]) {
 
   simu::Simulation::printStaticStats();
 
-  uint stopAfterGeneration = 1000;
+  auto start = simu::Simulation::now();
+
   uint saveEveryGen = 1, saveNextGen = 1;
   while (!s.finished()
-         && s.minGeneration() <= stopAfterGeneration
+         && s.minGeneration() <= generations
          && s.currTime().year() < 1000) {
     if (aborted)  s.abort();
     s.step();
@@ -259,11 +265,32 @@ int main(int argc, char *argv[]) {
   s.atEnd();
   s.save(s.periodicSaveName());
 
+  auto duration = simu::Simulation::durationFrom(start);
+  uint days, hours, minutes, seconds, mseconds;
+  mseconds = duration % 1000;
+  duration /= 1000;
+  seconds = duration % 60;
+  duration /= 60;
+  minutes = duration % 60;
+  duration /= 60;
+  hours = duration % 24;
+  days = duration / 24;
+
   std::cout << "Simulation ";
-  if (s.extinct())  std::cout << "went extinct";
-  else
-    std::cout << "completed";
-  std::cout << " at step " << s.currTime().pretty() << std::endl;
+  if (s.extinct())  std::cout << "failed";
+  else              std::cout << "completed";
+  std::cout << " at step " << s.currTime().pretty()
+            << "; Wall time of ";
+  if (days > 0)
+    std::cout << days << " days ";
+  if (days > 0 || hours > 0)
+    std::cout << hours << "h ";
+  if (days > 0 || hours > 0 || minutes > 0)
+    std::cout << minutes << "min ";
+  if (days > 0 || hours > 0 || minutes > 0 || seconds > 0)
+    std::cout << seconds << "s ";
+
+  std::cout << mseconds << std::endl;
 
 //  s.destroy();
   return 0;

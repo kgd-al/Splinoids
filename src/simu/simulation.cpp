@@ -255,13 +255,13 @@ void Simulation::init(const Environment::Genome &egenome,
 
   logStats();
 
-  if (false) {
+  if (true) {
     Critter *c = *_critters.begin();
     CGenome &g = c->genotype();
 
     auto save = [] (Critter *c, CGenome &g, uint i) {
       std::ostringstream oss;
-      oss << "tmp/mutated_" << i;
+      oss << "tmp/mutated_" << i << "_";
 
       std::string p = oss.str();
       std::ofstream gos (p + "cppn.dot");

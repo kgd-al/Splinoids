@@ -3,7 +3,10 @@
 namespace simu {
 
 NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays) {
-  // TODO Move to a function
+  using GConfig = genotype::HyperNEAT::config_t;
+  static const auto &NHiddenLayers = GConfig::hyperNEATHiddenNeuronLayers();
+  static const auto &NVisual = GConfig::hyperNEATVisualNeurons();
+
   using Coordinates = decltype(NEAT::Substrate::m_input_coords);
   Coordinates inputs, hidden, outputs;
 
@@ -27,10 +30,34 @@ NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays) {
   }
 
   // Hidden
-  uint NH = 5;
-  for (uint i=0; i<NH; i++) {
-    simu::P2D p = fromPolar(2 * M_PI * i / NH, .25);
-    add(hidden, p.x, p.y, 0.);
+  if (NHiddenLayers > 0) {
+    static constexpr uint N = 5;
+    for (uint i=0; i<N; i++) {
+      simu::P2D p = fromPolar(2 * M_PI * i / N, .25);
+      add(hidden, p.x, p.y, 0.);
+
+      if (NHiddenLayers > 1) {
+        for (uint i=0; i<N; i++) {
+          simu::P2D p_ = p + fromPolar(2 * M_PI * i / N, .1);
+          add(hidden, p_.x, p_.y, 0.);
+        }
+      }
+    }
+  }
+
+  // Visual
+  if (NVisual > 0) {
+    float a = 0;
+    for (uint i=0; i<rays.size()/2; i++)  a += std::atan2(rays[i].y, rays[i].x);
+    a /= rays.size() / 2;
+    float width = M_PI/3;
+    for (uint i=0; i<NVisual; i++) {
+      simu::P2D pl = fromPolar(a + width * i / NVisual, .66);
+      add(hidden, pl.x, pl.y, 0.);
+
+      simu::P2D pr = fromPolar(-a - width * i / NVisual, .66);
+      add(hidden, pr.x, pr.y, 0.);
+    }
   }
 
   // Outputs

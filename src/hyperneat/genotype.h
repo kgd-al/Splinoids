@@ -91,6 +91,9 @@ struct EDNA_CONFIG_FILE(HyperNEAT) {
   DECLARE_PARAMETER(int, neuronTries)
   DECLARE_PARAMETER(int, linkTries)
 
+  DECLARE_PARAMETER(uint, hyperNEATHiddenNeuronLayers)
+  DECLARE_PARAMETER(uint, hyperNEATVisualNeurons)
+
   DECLARE_PARAMETER(MutationRates, mutationRates)
   DECLARE_PARAMETER(DistanceWeights, distanceWeights)
 

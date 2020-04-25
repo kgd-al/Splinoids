@@ -184,6 +184,17 @@ public:
 
   static void printStaticStats (void);
 
+
+  using clock = std::chrono::steady_clock;
+  using time_point = clock::time_point;
+
+  static time_point now (void) {  return clock::now(); }
+
+  template <typename D = std::chrono::milliseconds>
+  static auto durationFrom (const time_point &start) {
+    return std::chrono::duration_cast<D>(now() - start).count();
+  }
+
 protected:
   struct Stats {
     uint ncritters = 0, ncorpses = 0, nplants = 0;
@@ -195,16 +206,6 @@ protected:
     float fmin = 0, favg = 0, fmax = 0;
   };
   virtual void processStats (const Stats&) const {}
-
-  using clock = std::chrono::steady_clock;
-  using time_point = clock::time_point;
-
-  static time_point now (void) {  return clock::now(); }
-
-  template <typename D = std::chrono::milliseconds>
-  static auto durationFrom (const time_point &start) {
-    return std::chrono::duration_cast<D>(now() - start).count();
-  }
 
 private:
   b2Body* critterBody (float x, float y, float a);

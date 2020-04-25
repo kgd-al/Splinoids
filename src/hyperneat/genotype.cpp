@@ -401,6 +401,9 @@ DEFINE_PARAMETER(int, maxNeurons, -1)
 DEFINE_PARAMETER(int, neuronTries, 64)
 DEFINE_PARAMETER(int, linkTries, 64)
 
+DEFINE_PARAMETER(uint, hyperNEATHiddenNeuronLayers, 2)
+DEFINE_PARAMETER(uint, hyperNEATVisualNeurons, 0)
+
 const NEAT::Parameters& Config::params (void) {
   static const auto p = [] {
     NEAT::Parameters params {};

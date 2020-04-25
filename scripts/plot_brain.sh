@@ -17,6 +17,9 @@ if [ -f "$ann" ]
 then
   cmd="
     set title 'Neural connections';
+    set xrange [-1:1];
+    set yrange [-1:1];
+    set zrange [-1:1];
     argb(w) = ((int(255*(1-(w > 0 ? w : -w))))<<24) + (int(w > 0 ? 255*w : 0)<<16) + (int(0)<<8) + int(w < 0 ? -255*w : 0);
     splot '$ann' lc variable with points notitle, \
               '' using 1:2:3:4:5:6:(argb(\$7)) every :::1 with vectors lc rgb variable notitle;"
