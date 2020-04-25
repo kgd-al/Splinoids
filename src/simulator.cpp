@@ -246,12 +246,16 @@ int main(int argc, char *argv[]) {
 
   simu::Simulation::printStaticStats();
 
+  const uint years = 1000;
+
   auto start = simu::Simulation::now();
+  std::cout << "Staring simulation for a max of " << generations
+            << " generations or " << years << " years" << std::endl;
 
   uint saveEveryGen = 1, saveNextGen = 1;
   while (!s.finished()
          && s.minGeneration() <= generations
-         && s.currTime().year() < 1000) {
+         && s.currTime().year() < years) {
     if (aborted)  s.abort();
     s.step();
 
