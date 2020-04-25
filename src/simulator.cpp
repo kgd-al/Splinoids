@@ -280,7 +280,7 @@ int main(int argc, char *argv[]) {
   hours = duration % 24;
   days = duration / 24;
 
-  std::cout << "Simulation ";
+  std::cout << "### Simulation ";
   if (s.extinct())  std::cout << "failed";
   else              std::cout << "completed";
   std::cout << " at step " << s.currTime().pretty()
@@ -294,7 +294,7 @@ int main(int argc, char *argv[]) {
   if (days > 0 || hours > 0 || minutes > 0 || seconds > 0)
     std::cout << seconds << "s ";
 
-  std::cout << mseconds << std::endl;
+  std::cout << mseconds << "ms" << std::endl;
 
 //  s.destroy();
   return 0;
