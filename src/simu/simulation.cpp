@@ -255,7 +255,7 @@ void Simulation::init(const Environment::Genome &egenome,
 
   logStats();
 
-  if (true) {
+  if (false) {
     Critter *c = *_critters.begin();
     CGenome &g = c->genotype();
 
