@@ -297,6 +297,16 @@ void strategyEvaluation (const Simulation &reference, const CGenome &g) {
 
 }
 
+void extractField (const simu::Simulation &simu,
+                   const std::vector<std::string> &fields) {
+//  std::cout << "Extracting field '" << field << "'..." << std::endl;
+  for (const simu::Critter *c: simu.critters())
+    for (const auto &field: fields)
+      std::cout << field << ": " << c->genotype().getField(field)
+                << "\n";
+  std::cout << std::endl;
+}
+
 int main(int argc, char *argv[]) {
 
   // ===========================================================================
@@ -308,6 +318,8 @@ int main(int argc, char *argv[]) {
   Verbosity verbosity = Verbosity::QUIET;
 
   std::string loadSaveFile, loadConstraints, loadFields;
+
+  std::vector<std::string> fieldsToExtract;
 
 //  std::string duration = "=100";
   std::string outputFolder = "tmp/eval/";
@@ -333,6 +345,11 @@ int main(int argc, char *argv[]) {
 
     ("l,load", "Load a previously saved simulation",
      cxxopts::value(loadSaveFile))
+
+      ("extract-field",
+       "Extracts field from the plant population (repeatable option)",
+       cxxopts::value(fieldsToExtract))
+
 //    ("load-constraints", "Constraints to apply on dependencies check",
 //     cxxopts::value(loadConstraints))
 //    ("load-fields", "Individual fields to load",
@@ -383,6 +400,12 @@ int main(int argc, char *argv[]) {
   simu::Simulation reference;
   simu::Simulation::load(loadSaveFile, reference, loadConstraints, loadFields);
   if (verbosity != Verbosity::QUIET)  config::Simulation::printConfig();
+
+
+  if (!fieldsToExtract.empty()) {
+    extractField(reference, fieldsToExtract);
+    exit(0);
+  }
 
   std::vector<CGenome> genomes;
   for (const simu::Critter *c: reference.critters())
