@@ -125,7 +125,8 @@ public:
   enum Overwrite : char {
     UNSPECIFIED = '\0',
     ABORT = 'a',
-    PURGE = 'p'
+    PURGE = 'p',
+    IGNORE = 'i'
   };
   bool setDataFolder (const stdfs::path &path, Overwrite o = UNSPECIFIED);
 

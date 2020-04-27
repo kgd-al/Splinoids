@@ -361,6 +361,10 @@ public:
     return maxUsableEnergy() - usableEnergy();
   }
 
+  void overrideUsableEnergyStorage (decimal newValue) {
+    _energy = newValue;
+  }
+
   static auto splineIndex (uint i, Side side) {
     return uint(side) * SPLINES_COUNT + i;
   }

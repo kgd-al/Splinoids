@@ -113,6 +113,10 @@ bool Simulation::setDataFolder (const stdfs::path &path, Overwrite o) {
     }
 
     switch (o) {
+    case IGNORE:  std::cerr << "Assuming you know what you are doing..."
+                            << std::endl;
+                  break;
+
     case PURGE: std::cerr << "Purging contents from " << path << std::endl;
                 stdfs::remove_all(path);
                 break;
@@ -315,9 +319,11 @@ Critter* Simulation::addCritter (const CGenome &genome,
   decimal dissipatedEnergy =
     e * .5 *(1 - config::Simulation::healthToEnergyRatio());
   decimal e_ = e - dissipatedEnergy;
+
+  /// ERROR This should not happen for reproduction...
   _environment->modifyEnergyReserve(-e_);
 
-  Critter *c = new Critter (genome, body, e_);
+  Critter *c = new Critter (genome, body, e_, age);
   _critters.insert(c);
 
 #ifndef NDEBUG
@@ -744,6 +750,9 @@ void Simulation::steadyStateGA(void) {
 }
 
 void Simulation::correctFloatingErrors(void) {
+  // Monitoring is deactivated
+  if (_systemExpectedEnergy < 0)  return;
+
   static constexpr auto epsilonE = config::Simulation::epsilonE;
   static constexpr decltype(epsilonE) epsilonE_ = epsilonE / 10.f;
   decimal E = totalEnergy(), dE = E - _systemExpectedEnergy;
@@ -756,6 +765,9 @@ void Simulation::correctFloatingErrors(void) {
 
 #ifndef NDEBUG
 void Simulation::detectBudgetFluctuations(float threshold) {
+  // Monitoring is deactivated
+  if (_systemExpectedEnergy < 0)  return;
+
   decimal E = totalEnergy(), dE = _systemExpectedEnergy-E;
   if (std::fabs(dE) > threshold) {
     std::cerr << std::setprecision(std::numeric_limits<decimal>::digits10)
@@ -988,6 +1000,7 @@ void Simulation::load (const stdfs::path &file, Simulation &s,
     s.deserializePopulations(jc, jf, loadTree);
   }
 
+  s._aborted = false;
   s._minGen = 0;
   s._maxGen = 0;
   s._gidManager.setNext(j["nextCID"]);
