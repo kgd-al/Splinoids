@@ -143,6 +143,12 @@ private:
   std::array<decimal, 1+2*SPLINES_COUNT> _currHealth;
   std::bitset<2*SPLINES_COUNT> _destroyed;
 
+  // To monitor feeding behavior
+  std::array<float, 2> _feedingSources;
+
+  // To monitor behavior
+  std::vector<double> _neuralOutputs;
+
   // Potential extension
   //  float _water;
 
@@ -152,6 +158,8 @@ public:
   std::array<std::vector<Vertices>, 2*SPLINES_COUNT> collisionObjects;
 
   bool brainDead; // TODO for external control
+
+  uint userIndex;  // To monitor source population
 
   Critter(const Genome &g, b2Body *body, decimal e, float age = 0);
 
@@ -365,6 +373,10 @@ public:
     _energy = newValue;
   }
 
+  void overrideReproductionReserve (decimal newValue) {
+    _reproductionReserve = newValue;
+  }
+
   static auto splineIndex (uint i, Side side) {
     return uint(side) * SPLINES_COUNT + i;
   }
@@ -413,6 +425,12 @@ public:
     return _brain;
   }
 
+  float carnivorousBehavior (void) const {
+    float total = 0;
+    for (float f: _feedingSources)  total += f;
+    return _feedingSources[int(BodyType::CORPSE)-1] / total;
+  }
+
   bool applyHealthDamage(const FixtureData &d, float amount, Environment &env);
   void destroySpline(uint splineIndex);
 
@@ -422,6 +440,17 @@ public:
 
   float motorOutput (Motor m) const {
     return _motors.at(m);
+  }
+
+  const auto& neuralOutputs (void) const {
+    return _neuralOutputs;
+  }
+
+  const auto& neuralOutputsHeader (void) const {
+    static const std::vector<std::string> v {
+      "LMotor", "RMotor", "Clock", "Repro"
+    };
+    return v;
   }
 
   void feed (Foodlet *f, float dt);

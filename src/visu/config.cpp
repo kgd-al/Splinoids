@@ -15,7 +15,7 @@ namespace config {
 
 DEFINE_SUBCONFIG(Simulation, configSimulation)
 
-DEFINE_PARAMETER(float, viewZoom, 1000)//100)
+DEFINE_PARAMETER(float, viewZoom, 100)//100)
 DEFINE_PARAMETER(bool, opaqueBodies, true)
 DEFINE_PARAMETER(bool, drawInnerEdges, false)
 DEFINE_PARAMETER(int, drawVision, 0)

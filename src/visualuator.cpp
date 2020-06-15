@@ -41,23 +41,7 @@ int main(int argc, char *argv[]) {
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::QUIET;
 
-  simu::Simulation::InitData idata {};
-  idata.ienergy = 1000;
-  idata.cRatio = 1. / (1+config::Simulation::plantEnergyDensity());
-  idata.nCritters = 50;
-  idata.cRange = .25;
-  idata.pRange = 1;
-  idata.seed = -1;
-
-  int startspeed = 1;
-
-  int taurus = -1;
-  std::string eGenomeArg = "-1", cGenomeArg = "-1";
-
-  genotype::Environment eGenome;
-  genotype::Critter cGenome;
-  uint cGenomeMutations = 0;
-
+  std::string printMorphoLargerOut;
   std::string loadSaveFile, loadConstraints, loadFields;
 
 //  std::string morphologiesSaveFolder, screenshotSaveFile;
@@ -66,8 +50,8 @@ int main(int argc, char *argv[]) {
 //  bool autoQuit = false;
 
 //  std::string duration = "=100";
-  std::string outputFolder = "tmp_visu_run/";
-  char overwrite = simu::Simulation::UNSPECIFIED;
+  std::string outputFolder = "tmp/visu_eval/";
+  char overwrite = simu::Simulation::ABORT;
 
   cxxopts::Options options("Splinoids (visualisation)",
                            "2D simulation of critters in a changing environment");
@@ -79,30 +63,8 @@ int main(int argc, char *argv[]) {
     ("v,verbosity", "Verbosity level. " + config::verbosityValues(),
      cxxopts::value(verbosity))
 
-    ("e,energy", "Total energy of the system", cxxopts::value(idata.ienergy))
-    ("s,seed", "Seed value for simulation's RNG", cxxopts::value(idata.seed))
-    ("n,i-splinoids", "Initial number of splinoids",
-     cxxopts::value(idata.nCritters))
-    ("i-prange", "Region in which initial plants are placed",
-     cxxopts::value(idata.pRange))
-    ("i-crange", "Region in which initial splinoids are placed",
-     cxxopts::value(idata.cRange))
-    ("sratio", "Initial fraction of energy devoted to the splinoids",
-     cxxopts::value(idata.cRatio))
-
-    ("start", "Whether to start running immendiatly after initialisation"
-              " (and optionally at which speed > 1)",
-     cxxopts::value(startspeed)->implicit_value("1"))
-
-    ("env-genome", "Environment's genome or a random seed",
-     cxxopts::value(eGenomeArg))
-    ("spln-genome", "Splinoid genome to start from or a random seed",
-     cxxopts::value(cGenomeArg))
-    ("spln-mutations", "Additional mutations applied to the original genome",
-     cxxopts::value(cGenomeMutations))
-
-    ("taurus", "Whether the environment is a taurus or uses fixed boundaries",
-      cxxopts::value(taurus))
+//    ("show-morphology", "Print the morphology of provided genome",
+//     cxxopts::value(cGenomeArg))
 
 //    ("d,duration", "Simulation duration. ",
 //     cxxopts::value(duration))
@@ -113,6 +75,10 @@ int main(int argc, char *argv[]) {
      cxxopts::value(overwrite))
     ("l,load", "Load a previously saved simulation",
      cxxopts::value(loadSaveFile))
+
+    ("show-largest", "Print morphology of largest critter to provided location",
+     cxxopts::value(printMorphoLargerOut))
+
 //    ("load-constraints", "Constraints to apply on dependencies check",
 //     cxxopts::value(loadConstraints))
 //    ("load-fields", "Individual fields to load",
@@ -188,49 +154,7 @@ int main(int argc, char *argv[]) {
   // == Simulation setup
 
   if (loadSaveFile.empty()) {
-//    config::Simulation::setupConfig(configFile, verbosity);
-    if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
-    if (configFile.empty()) config::Simulation::printConfig("");
-    genotype::Critter::printMutationRates(std::cout, 2);
-
-    long eGenomeSeed = maybeSeed(eGenomeArg);
-    if (eGenomeSeed < -1) {
-      std::cout << "Reading environment genome from input file '"
-                << eGenomeArg << "'" << std::endl;
-      eGenome = EGenome::fromFile(eGenomeArg);
-
-    } else {
-      rng::FastDice dice;
-      if (eGenomeSeed >= 0) dice.reset(eGenomeSeed);
-      std::cout << "Generating environment genome from rng seed "
-                << dice.getSeed() << std::endl;
-      eGenome = EGenome::random(dice);
-    }
-    if (taurus != -1) eGenome.taurus = taurus;
-    eGenome.toFile("last", 2);
-
-    long cGenomeSeed = maybeSeed(cGenomeArg);
-    if (cGenomeSeed < -1) {
-      std::cout << "Reading splinoid genome from input file '"
-                << cGenomeArg << "'" << std::endl;
-      cGenome = CGenome::fromFile(cGenomeArg);
-
-    } else {
-      rng::FastDice dice;
-      if (cGenomeSeed >= 0) dice.reset(cGenomeSeed);
-      std::cout << "Generating splinoid genome from rng seed "
-                << dice.getSeed() << std::endl;
-      cGenome = CGenome::random(dice);
-      for (uint i=0; i<cGenomeMutations; i++) cGenome.mutate(dice);
-    }
-
-    cGenome.toFile("last", 2);
-
-    std::cout << "Environment:\n" << eGenome
-              << "\nSplinoid:\n" << cGenome
-              << std::endl;
-
-    s.init(eGenome, {cGenome}, idata);
+    std::cerr << "No save file provided... I don't know what to do......\n";
 
   } else {
     visu::GraphicSimulation::load(loadSaveFile, s, loadConstraints, loadFields);
@@ -241,6 +165,23 @@ int main(int argc, char *argv[]) {
   if (!outputFolder.empty()) {
     bool ok = s.setDataFolder(outputFolder, simu::Simulation::Overwrite(overwrite));
     if (!ok)  exit(2);
+  }
+
+  if (!printMorphoLargerOut.empty()) {
+    const visu::Critter *largest = nullptr;
+    float maxMass = 0;
+    for (const auto &p: s.critters()) {
+      const simu::Critter *sc = p.first;
+      if (maxMass < sc->mass()) {
+        largest = p.second;
+        maxMass = sc->mass();
+      }
+    }
+
+    std::ostringstream oss;
+    oss << printMorphoLargerOut << "_" << maxMass << "kg.png";
+    largest->printPhenotype(QString::fromStdString(oss.str()));
+    exit(0);
   }
 
 //  if (!duration.empty()) {
@@ -293,30 +234,31 @@ int main(int argc, char *argv[]) {
 //    s.step();
 //  }
 
-  // ===========================================================================
-  // Final preparations
-  w.show();
+//  // ===========================================================================
+//  // Final preparations
+//  w.show();
 
-  // Load settings
-//  qDebug() << "Loaded MainWindow::Geometry:" << settings.value("geometry").toRect();
-  w.setGeometry(settings.value("geometry").toRect());
-//  qDebug() << "MainWindow::Geometry:" << w.geometry();
+//  // Load settings
+////  qDebug() << "Loaded MainWindow::Geometry:" << settings.value("geometry").toRect();
+//  w.setGeometry(settings.value("geometry").toRect());
+////  qDebug() << "MainWindow::Geometry:" << w.geometry();
 
 
-  v->fitInView(s.bounds(), Qt::KeepAspectRatio);
-  v->selectNext();
+//  v->fitInView(s.bounds(), Qt::KeepAspectRatio);
+//  v->selectNext();
 
-  QTimer::singleShot(100, [&v, startspeed] {
-    if (startspeed) v->start(startspeed);
-    else            v->stop();
-  });
+//  QTimer::singleShot(100, [&v, startspeed] {
+//    if (startspeed) v->start(startspeed);
+//    else            v->stop();
+//  });
 
-  auto ret = a.exec();
+//  auto ret = a.exec();
 
-  // Save settings
-//  qDebug() << "MainWindow::Geometry:" << w.geometry();
-  if (w.geometry().isValid())  settings.setValue("geometry", w.geometry());
-//  qDebug() << "Saved MainWindow::Geometry:" << settings.value("geometry").toRect();
+//  // Save settings
+////  qDebug() << "MainWindow::Geometry:" << w.geometry();
+//  if (w.geometry().isValid())  settings.setValue("geometry", w.geometry());
+////  qDebug() << "Saved MainWindow::Geometry:" << settings.value("geometry").toRect();
 
-  return ret;
+//  return ret;
+  return 0;
 }

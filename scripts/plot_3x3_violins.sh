@@ -23,7 +23,6 @@ do
   gnuplot -c ./scripts/violin_plot.gp $tmp $2 $tmpimg \
     "$tics; 
      set term pngcairo size $(tr ' ' ',' <<< $size) font \",24\";
-     set lmargin at screen $lmargin;
      set rmargin at screen .99;
      set bmargin at screen 0.15;
      set tmargin at screen 0.95;
@@ -31,6 +30,7 @@ do
      $3"
   rm $tmp
 done
+#      set lmargin at screen $lmargin;
 
 montage -tile 1x3 -geometry "$(tr ' ' 'x' <<< "$size")+0+0" ${base}_row*.png $out
 rm ${base}_row*.png

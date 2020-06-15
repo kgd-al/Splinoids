@@ -32,6 +32,9 @@ protected:
 
   std::ofstream _statsLogger;
 
+  std::ofstream _competitionLogger;
+  uint _populations;
+
   decimal _systemExpectedEnergy;
 
   uint _stepTimeMs,
@@ -131,7 +134,8 @@ public:
   bool setDataFolder (const stdfs::path &path, Overwrite o = UNSPECIFIED);
 
   void init (const Environment::Genome &egenome,
-             Critter::Genome cgenome, const InitData &data = InitData{});
+             std::vector<Critter::Genome> cgenomes,
+             const InitData &data = InitData{});
 
   virtual void postInit (void) {}
 
@@ -208,10 +212,11 @@ protected:
   };
   virtual void processStats (const Stats&) const {}
 
-private:
+protected:
   b2Body* critterBody (float x, float y, float a);
   b2Body* foodletBody (float x, float y);
 
+private:
   void reproduction (void);
   Critter* createChild (const Critter *parent, const CGenome &genome,
                         decimal energy, rng::AbstractDice &dice);

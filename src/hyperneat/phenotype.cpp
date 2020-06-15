@@ -2,10 +2,15 @@
 
 namespace simu {
 
-NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays) {
-  using GConfig = genotype::HyperNEAT::config_t;
-  static const auto &NHiddenLayers = GConfig::hyperNEATHiddenNeuronLayers();
-  static const auto &NVisual = GConfig::hyperNEATVisualNeurons();
+NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays,
+                              const genotype::HyperNEAT &genome) {
+  return substrateFor(rays,
+                      genome.hiddenNeuronLayers,
+                      genome.hiddenNeuronVision);
+}
+
+NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays,
+                              uint hiddenLayers, uint visionNeurons) {
 
   using Coordinates = decltype(NEAT::Substrate::m_input_coords);
   Coordinates inputs, hidden, outputs;
@@ -29,14 +34,14 @@ NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays) {
     // new formula is just: -1 -> r, 0 -> g, 1 -> b
   }
 
-  // Hidden
-  if (NHiddenLayers > 0) {
+  // Hidden  
+  if (hiddenLayers > 0) {
     static constexpr uint N = 5;
     for (uint i=0; i<N; i++) {
       simu::P2D p = fromPolar(2 * M_PI * i / N, .25);
       add(hidden, p.x, p.y, 0.);
 
-      if (NHiddenLayers > 1) {
+      if (hiddenLayers > 1) {
         for (uint i=0; i<N; i++) {
           simu::P2D p_ = p + fromPolar(2 * M_PI * i / N, .1);
           add(hidden, p_.x, p_.y, 0.);
@@ -46,16 +51,16 @@ NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays) {
   }
 
   // Visual
-  if (NVisual > 0) {
+  if (visionNeurons > 0) {
     float a = 0;
     for (uint i=0; i<rays.size()/2; i++)  a += std::atan2(rays[i].y, rays[i].x);
     a /= rays.size() / 2;
     float width = M_PI/3;
-    for (uint i=0; i<NVisual; i++) {
-      simu::P2D pl = fromPolar(a + width * i / NVisual, .66);
+    for (uint i=0; i<visionNeurons; i++) {
+      simu::P2D pl = fromPolar(a + width * i / visionNeurons, .66);
       add(hidden, pl.x, pl.y, 0.);
 
-      simu::P2D pr = fromPolar(-a - width * i / NVisual, .66);
+      simu::P2D pr = fromPolar(-a - width * i / visionNeurons, .66);
       add(hidden, pr.x, pr.y, 0.);
     }
   }
@@ -66,7 +71,7 @@ NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays) {
   add(outputs, -.125,  .0,  .5); // Clock
   add(outputs, -.25,   .0,  .5); // Reproduction
 
-  bool noHidden = (NHiddenLayers == 0) && (NVisual == 0);
+  bool noHidden = (hiddenLayers == 0) && (visionNeurons == 0);
 
   NEAT::Substrate substrate (inputs, hidden, outputs);
   substrate.m_leaky = false;

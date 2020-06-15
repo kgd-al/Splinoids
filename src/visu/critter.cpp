@@ -55,11 +55,12 @@ QPointF fromPolar (float angle, float length) {
 }
 
 QRectF squarify (const QRectF &r) {
+  QPointF c = r.center();
   qreal s = std::max(
-    std::max(r.right(), -r.left()),
-    std::max(r.top(), -r.bottom())
+    std::max(r.right() - c.x(), c.x() - r.left()),
+    std::max(r.top() - c.y(), c.y() - r.bottom())
   );
-  return QRectF (-s, -s, 2*s, 2*s);
+  return QRectF (c-QPointF(s, s), QSizeF(2*s, 2*s));
 }
 
 void Critter::update (void) {

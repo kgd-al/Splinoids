@@ -7,7 +7,11 @@
 
 namespace simu {
 
-NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays);
+NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays,
+                              uint hiddenLayers, uint visionNeurons);
+
+NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays,
+                              const genotype::HyperNEAT &genome);
 
 } // end of namespace simu
 

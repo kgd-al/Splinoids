@@ -5,9 +5,9 @@ import csv
 from scipy.stats import mannwhitneyu
 
 def usage ():
-  print ("Usage: ", sys.argv[0], " <file>")
+  print ("Usage: ", sys.argv[0], " <file> [verbose]")
 
-if (len(sys.argv) != 2):
+if (len(sys.argv) != 2 and len(sys.argv) != 3):
   usage()
   exit(10)
   
@@ -15,14 +15,22 @@ import os
 infile = sys.argv[1]
 filebase = os.path.splitext(infile)[0];
 
+verbose = len(sys.argv) >= 3;
+
 groups = {}
 with open(infile) as file:
   reader = csv.reader(file, delimiter=' ')
   for row in reader:
-    key=row[0] + "_" + row[1];
+    if len(row) > 2:
+      key = row[0] + "_" + row[1];
+      i = 2
+    else:
+      key = row[0]
+      i = 1
+      
     if (not key in groups):
       groups[key] = [];
-    groups[key].append(row[2]);
+    groups[key].append(row[i]);
 
 for key, items in groups.items():
   print(key, "({}): ".format(len(items)), items)
@@ -42,8 +50,11 @@ for ilhs, klhs in enumerate(groups):
   for irhs, krhs in enumerate(groups):
     if (klhs != krhs):
       [U,p] = mannwhitneyu(groups[klhs], groups[krhs], alternative='less');
-      if (p < .05):
+      
+      if (p < .05 or verbose):
         print('{} < {} (p-value = {})'.format(klhs, krhs, p));  
+        
+      if (p < .05):
         g.add_edges([(ilhs, irhs)])
         
 #print(g)

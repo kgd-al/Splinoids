@@ -331,18 +331,38 @@ if (NOT CLUSTER_BUILD)
 
 
 #################################################################################
-### Targets (Test)
+### Targets (Watchmaker)
 #################################################################################
-#    if (BUILD_TESTS)
-#      add_executable(test-cgp-blindwatchmaker
-#                     $<TARGET_OBJECTS:SIMU_OBJS>
-#                     "src/cgp/minicgp_blindwatchmaker.cpp")
-#      set_property(TARGET test-cgp-blindwatchmaker PROPERTY AUTOMOC ON)
-#      target_link_libraries(test-cgp-blindwatchmaker ${QT_LIBS}
-#                                                     ${APOGeT_LIBRARIES}
-#                                                     ${APOGeT_GUI_LIBRARIES})
 
-#    endif()
+    add_executable(
+      watchmaker
+      $<TARGET_OBJECTS:SIMU_OBJS>
+      $<TARGET_OBJECTS:VISU_OBJS>
+      "src/misc/watchmaker_classes.h"
+      "src/misc/watchmaker_classes.cpp"
+      "src/watchmaker.cpp"
+    )
+    set_property(TARGET watchmaker PROPERTY AUTOMOC ON)
+    target_link_libraries(watchmaker ${SIMU_LIBS}
+                                     ${APOGeT_LIBRARIES} ${APOGeT_GUI_LIBRARIES}
+                                     ${QT_LIBS} ${MultiNEAT_LIBS})
+
+#################################################################################
+### Targets (Visu tool)
+#################################################################################
+
+    add_executable(
+        visu-tool
+        $<TARGET_OBJECTS:SIMU_OBJS>
+        $<TARGET_OBJECTS:VISU_OBJS>
+        "src/visualuator.cpp"
+    )
+    set_property(TARGET visu-tool PROPERTY AUTOMOC ON)
+    target_link_libraries(visu-tool ${SIMU_LIBS}
+                                    ${APOGeT_LIBRARIES} ${APOGeT_GUI_LIBRARIES}
+                                    ${QT_LIBS} ${MultiNEAT_LIBS})
+
+
 endif()
 
 

@@ -18,7 +18,7 @@ using namespace simu;
 
 class BaseEvaluator : public Simulation {
 protected:
-  std::ofstream _logger;
+  std::ofstream _trajectoryLogger, _annLogger;
 
   void baseEvaluatorInit (const Simulation &reference, const CGenome &g,
                           const std::string &tag, bool taurus) {
@@ -32,7 +32,7 @@ protected:
 
     EGenome eg = reference.environment().genotype();
     eg.taurus = taurus;
-    Simulation::init(eg, g, idata);
+    Simulation::init(eg, {g}, idata);
 
     assert(_critters.empty());
     assert(_foodlets.empty());
@@ -41,22 +41,48 @@ protected:
     _ssga.clear();
     _ssga.setEnabled(false);
     _systemExpectedEnergy = -1; // Deactivate closed-system monitoring
-    if (!tag.empty()) _logger.open(ofstreamFor(tag));
+
+    if (!tag.empty()) {
+      _trajectoryLogger.open(trajectoriesOfstreamFor(tag));
+      _annLogger.open(annOfstreamFor(tag));
+    }
+  }
+
+  void annLoggerHeader (Critter *c) {
+    for (const auto &h: c->neuralOutputsHeader()) _annLogger << h << " ";
+    _annLogger << "\n";
   }
 
 public:
-  static std::string ofstreamFor (const std::string &tag) {
-    std::ostringstream oss;
-    oss << tag << ".dat";
-    return oss.str();
+  static std::string trajectoriesSuffix (void) {
+    return ".dat";
+  }
+  static std::string trajectoriesOfstreamFor (const std::string &tag) {
+    return tag + trajectoriesSuffix();
+  }
+
+  static std::string annSuffix (void) {
+    return "_ann.outputs.dat";
+  }
+  static std::string annOfstreamFor (const std::string &tag) {
+    return tag + annSuffix();
   }
 
   virtual void step (void) override {
     Simulation::step();
-    if (_logger && !_critters.empty()) {
+    if (_trajectoryLogger && !_critters.empty()) {
       Critter *c = *_critters.begin();
-      _logger << c->x() << " " << c->y() << "\n";
+      _trajectoryLogger << c->x() << " " << c->y() << " " << c->rotation()
+                        << "\n";
+
+      for (const auto &v: c->neuralOutputs()) _annLogger << v << " ";
+      _annLogger << "\n";
     }
+  }
+
+  void preClear(void) {
+    _trajectoryLogger.close();
+    _annLogger.close();
   }
 };
 
@@ -82,7 +108,8 @@ public:
     P2D p = fromPolar(a, .75*c->visionRange());
     Simulation::addFoodlet(BodyType::PLANT, p.x, p.y, r, fe);
 
-    _logger << p.x << " " << p.y << " " << r << "\n\n";
+    _trajectoryLogger << p.x << " " << p.y << " " << r << "\n\n";
+    annLoggerHeader(c);
   }
 
   void step (void) override {
@@ -97,10 +124,6 @@ public:
 
   bool success (void) const {
     return !_environment->feedingEvents().empty();
-  }
-
-  void preClear(void) {
-    _logger.close();
   }
 };
 
@@ -197,8 +220,16 @@ uint foragingEvaluation (const Simulation &reference,
     float a = dangle(j);
     std::string tag = tagFor(champ, a);
     std::ostringstream oss;
-    oss << "champ_A" << std::setfill('0') << std::setw(3) << a << ".dat";
-    stdfs::create_symlink(eval::ForagingEvaluator::ofstreamFor(tag), oss.str());
+    oss << "champ_A" << std::setfill('0') << std::setw(3) << a
+        << eval::ForagingEvaluator::trajectoriesSuffix();
+    stdfs::create_symlink(eval::ForagingEvaluator::trajectoriesOfstreamFor(tag),
+                          oss.str());
+
+    oss.str("");
+    oss << "champ_A" << std::setfill('0') << std::setw(3) << a
+        << eval::ForagingEvaluator::annSuffix();
+    stdfs::create_symlink(eval::ForagingEvaluator::annOfstreamFor(tag),
+                          oss.str());
   }
 
   std::string champBase = gid(champ);
@@ -216,6 +247,7 @@ uint foragingEvaluation (const Simulation &reference,
 class StrategyEvaluator : public BaseEvaluator {
   Critter *subject;
   uint contacts = 0;
+  uint maxsteps = -1;
 public:
   void init (const Simulation &reference, const CGenome &g,
              const std::string &tag) {
@@ -227,6 +259,7 @@ public:
 
     float age = 0;
     subject = addCritter(g, 0, 0, 0, ce, age);
+    maxsteps = Critter::lifeExpectancy(g.minClockSpeed) * _environment->dt();
 
     float r = config::Simulation::plantMaxRadius();
     float fe = Foodlet::maxStorage(BodyType::PLANT, r);
@@ -241,11 +274,12 @@ public:
         float x = S * (float(i) / (NP-1) - .5);
         float y = S * (float(j) / (NP-1) - .5);
         Simulation::addFoodlet(BodyType::PLANT, x, y, r, fe);
-        _logger << x << " " << y << " " << r << "\n";
+        _trajectoryLogger << x << " " << y << " " << r << "\n";
       }
     }
-    _logger << "\n";
 
+    _trajectoryLogger << "\n";
+    annLoggerHeader(subject);
   }
 
   void step (void) override {
@@ -255,6 +289,9 @@ public:
 
     // Keep it starving
     subject->overrideUsableEnergyStorage(.25*subject->maxUsableEnergy());
+
+    // And sterile
+    subject->overrideReproductionReserve(0);
 
     while (!_environment->feedingEvents().empty()) {
       auto f = _environment->feedingEvents().begin()->foodlet;
@@ -268,12 +305,20 @@ public:
 //    return nullptr;
 //  }
 
-//  bool success (void) const {
-//    return !_environment->feedingEvents().empty();
-//  }
+  bool success (void) const {
+    return _foodlets.empty();
+  }
 
-  void preClear(void) {
-    _logger.close();
+  auto duration (void) const {
+    return _time.timestamp();
+  }
+
+  auto maxDuration (void) const {
+    return maxsteps;
+  }
+
+  auto successSpeed (void) const {
+    return (float(maxsteps) - _time.timestamp()) / maxsteps;
   }
 
   auto result (void) {
@@ -287,15 +332,24 @@ void strategyEvaluation (const Simulation &reference, const CGenome &g) {
 
   std::ofstream os ("log", std::ios_base::in | std::ios_base::ate);
 
-  while (!evaluator.extinct())  evaluator.step();
+  while (!evaluator.extinct() && !evaluator.success())  evaluator.step();
 
   auto res = evaluator.result();
+  auto time = evaluator.duration();
+  auto maxtime = evaluator.maxDuration();
+  auto speed = evaluator.successSpeed();
 
   os << "Champ G0x" << std::hex << g.id() << std::dec << " reached " << res
-     << " foodlets" << std::endl;
+     << " foodlets in " << time << " steps out of " << maxtime;
+  if (evaluator.success())  os << " (speed = " << speed << ")";
+  os << std::endl;
 }
 
 }
+
+// =============================================================================
+// == Simple genetic field extraction ==========================================
+// =============================================================================
 
 void extractField (const simu::Simulation &simu,
                    const std::vector<std::string> &fields) {
@@ -305,6 +359,27 @@ void extractField (const simu::Simulation &simu,
       std::cout << field << ": " << c->genotype().getField(field)
                 << "\n";
   std::cout << std::endl;
+}
+
+
+// =============================================================================
+// == Evaluation of feeding behavior ===========================================
+// =============================================================================
+
+void feedingBehavior (simu::Simulation &s) {
+  uint startGen = s.minGeneration();
+
+  while (!s.finished() && s.minGeneration() < startGen+2)
+    s.step();
+
+  if (s.extinct())
+    std::cout << "Unable to collect feeding behavior: simulation went extinct";
+
+  else {
+    std::ofstream ofs ("carnivorous_behavior.dat");
+    for (const simu::Critter *c: s.critters())
+      ofs << c->carnivorousBehavior() << "\n";
+  }
 }
 
 int main(int argc, char *argv[]) {
@@ -320,6 +395,7 @@ int main(int argc, char *argv[]) {
   std::string loadSaveFile, loadConstraints, loadFields;
 
   std::vector<std::string> fieldsToExtract;
+  bool extractFeedingBehavior = false;
 
 //  std::string duration = "=100";
   std::string outputFolder = "tmp/eval/";
@@ -346,9 +422,13 @@ int main(int argc, char *argv[]) {
     ("l,load", "Load a previously saved simulation",
      cxxopts::value(loadSaveFile))
 
-      ("extract-field",
-       "Extracts field from the plant population (repeatable option)",
-       cxxopts::value(fieldsToExtract))
+    ("extract-field",
+     "Extracts field from the plant population (repeatable option)",
+     cxxopts::value(fieldsToExtract))
+
+    ("feeding-behavior",
+     "Extracts information of the feeding behavior of the provided population",
+     cxxopts::value(extractFeedingBehavior))
 
 //    ("load-constraints", "Constraints to apply on dependencies check",
 //     cxxopts::value(loadConstraints))
@@ -402,8 +482,16 @@ int main(int argc, char *argv[]) {
   if (verbosity != Verbosity::QUIET)  config::Simulation::printConfig();
 
 
+  if (!outputFolder.empty())
+    reference.setDataFolder(outputFolder,
+                            simu::Simulation::Overwrite(overwrite));
+
   if (!fieldsToExtract.empty()) {
     extractField(reference, fieldsToExtract);
+    exit(0);
+
+  } else if (extractFeedingBehavior) {
+    feedingBehavior(reference);
     exit(0);
   }
 
@@ -413,10 +501,6 @@ int main(int argc, char *argv[]) {
 
   rng::FastDice dice (0);
   dice.shuffle(genomes);
-
-  if (!outputFolder.empty())
-    reference.setDataFolder(outputFolder,
-                            simu::Simulation::Overwrite(overwrite));
 
 //  genotype::Critter::printMutationRates(std::cout, 2);
 

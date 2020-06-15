@@ -3,6 +3,7 @@
 
 #include <QGraphicsView>
 #include <QMenuBar>
+#include <QTimer>
 
 #include "../visu/graphicsimulation.h"
 

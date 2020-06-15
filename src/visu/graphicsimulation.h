@@ -18,7 +18,7 @@ namespace visu {
 
 class GraphicSimulation : public QObject, public simu::Simulation {
   Q_OBJECT
-
+protected:
   std::map<const simu::Critter*, visu::Critter*> _critters;
   std::map<const simu::Foodlet*, visu::Foodlet*> _foodlets;
   std::unique_ptr<QGraphicsScene> _scene;

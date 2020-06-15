@@ -194,7 +194,7 @@ auto hyperNeatFunctor = [] {
   GENOME_FIELD_FUNCTOR(HN, data) functor;
 
   functor.random = [] (auto &dice) {
-    auto s = simu::substrateFor({});
+    auto s = simu::substrateFor({}, 0, 0);
     HN hn (0, s.GetMinCPPNInputs(), 0, s.GetMinCPPNOutputs(),
            false,
            ACT_FUNC_OUTPUT, ACT_FUNC_HIDDEN,
@@ -236,8 +236,19 @@ auto hyperNeatFunctor = [] {
 
 DEFINE_GENOME_FIELD_WITH_FUNCTOR(HN, data, "", hyperNeatFunctor())
 
-DEFINE_GENOME_MUTATION_RATES({ EDNA_PAIR(data, 1) })
-DEFINE_GENOME_DISTANCE_WEIGHTS({ EDNA_PAIR(data, 1) })
+DEFINE_GENOME_FIELD_WITH_BOUNDS(uint, hiddenNeuronLayers, "hnl", 0u, 1u, 1u, 2u)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(uint, hiddenNeuronVision, "hnv", 0u, 1u, 1u, 3u)
+
+DEFINE_GENOME_MUTATION_RATES({
+  EDNA_PAIR(              data, 1),
+  EDNA_PAIR(hiddenNeuronLayers, 0),
+  EDNA_PAIR(hiddenNeuronVision, 0)
+})
+DEFINE_GENOME_DISTANCE_WEIGHTS({
+  EDNA_PAIR(              data, 1),
+  EDNA_PAIR(hiddenNeuronLayers, 1),
+  EDNA_PAIR(hiddenNeuronVision, 1)
+})
 
 
 
@@ -400,9 +411,6 @@ DEFINE_PARAMETER(int, maxLinks, -1)
 DEFINE_PARAMETER(int, maxNeurons, -1)
 DEFINE_PARAMETER(int, neuronTries, 64)
 DEFINE_PARAMETER(int, linkTries, 64)
-
-DEFINE_PARAMETER(uint, hyperNEATHiddenNeuronLayers, 1)
-DEFINE_PARAMETER(uint, hyperNEATVisualNeurons, 0)
 
 const NEAT::Parameters& Config::params (void) {
   static const auto p = [] {

@@ -198,8 +198,10 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
 
   brainDead = false;
 
-  auto substrate = substrateFor(_raysEnd);
+  auto substrate = substrateFor(_raysEnd, _genotype.connectivity);
   _genotype.connectivity.BuildHyperNEATPhenotype(_brain, substrate);
+
+  _feedingSources.fill(0);
 }
 
 
@@ -352,14 +354,14 @@ void Critter::neuralStep(Environment &env) {  ERR
     // Process n propagation steps
     _brain.Input(inputs);
     for (uint i=0; i<_genotype.brainSubsteps; i++)  _brain.Activate();
-    std::vector<double> outputs = _brain.Output();
+    _neuralOutputs = _brain.Output();
 
     // Collect outputs
-    for (double &v: outputs)  assert(0 <= v && v <= 1);
-    _motors[Motor::LEFT] = 2*outputs[0]-1;
-    _motors[Motor::RIGHT] = 2*outputs[1]-1;
-    _clockSpeed = clockSpeed(outputs[2]);
-    _reproduction = outputs[3];
+    for (double &v: _neuralOutputs)  assert(0 <= v && v <= 1);
+    _motors[Motor::LEFT] = 2*_neuralOutputs[0]-1;
+    _motors[Motor::RIGHT] = 2*_neuralOutputs[1]-1;
+    _clockSpeed = clockSpeed(_neuralOutputs[2]);
+    _reproduction = _neuralOutputs[3];
 
     if (false) {
       auto motorsIn = _motors;
@@ -610,6 +612,7 @@ void Critter::feed (Foodlet *f, float dt) {
               << " to " << CID(this) << " (" << f->energy()
               << " remaining)" << std::endl;
 
+  _feedingSources[int(f->type())-1] += E;
   f->consumed(E);
 
   assert(0 <= E && E <= storableEnergy());

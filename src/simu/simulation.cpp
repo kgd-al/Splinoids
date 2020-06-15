@@ -147,6 +147,13 @@ bool Simulation::setDataFolder (const stdfs::path &path, Overwrite o) {
     utils::doThrow<std::invalid_argument>(
       "Unable to open stats file ", statsPath);
 
+  stdfs::path competPath = "competition.dat";
+  if (_competitionLogger.is_open()) _competitionLogger.close();
+  _competitionLogger.open(competPath, std::ofstream::out | std::ofstream::trunc);
+  if (!_competitionLogger.is_open())
+    utils::doThrow<std::invalid_argument>(
+      "Unable to open compet file ", competPath);
+
 //  using O = genotype::cgp::Outputs;
 //  using U = EnumUtils<O>;
 //  for (O o: U::iterator()) {
@@ -168,7 +175,7 @@ bool Simulation::setDataFolder (const stdfs::path &path, Overwrite o) {
 }
 
 void Simulation::init(const Environment::Genome &egenome,
-                      Critter::Genome cgenome,
+                      std::vector<Critter::Genome> cgenomes,
                       const InitData &data) {
 
   _aborted = false;
@@ -184,15 +191,15 @@ void Simulation::init(const Environment::Genome &egenome,
 //  cgenome.vision.precision = 1;
 //  cgenome.matureAge = .05;
 
-  auto le = [&cgenome] (float v) {
-    return Critter::lifeExpectancy(Critter::clockSpeed(cgenome, v));
-  };
-  auto sd = [&cgenome] (float v, bool y) {
-    auto s = y ? Critter::MIN_SIZE : Critter::MAX_SIZE;
-    return Critter::starvationDuration(s,
-      Critter::maximalEnergyStorage(s),
-      Critter::clockSpeed(cgenome, v));
-  };
+//  auto le = [&cgenome] (float v) {
+//    return Critter::lifeExpectancy(Critter::clockSpeed(cgenome, v));
+//  };
+//  auto sd = [&cgenome] (float v, bool y) {
+//    auto s = y ? Critter::MIN_SIZE : Critter::MAX_SIZE;
+//    return Critter::starvationDuration(s,
+//      Critter::maximalEnergyStorage(s),
+//      Critter::clockSpeed(cgenome, v));
+//  };
 
 //  if (debugShowStaticStats)
 //    std::cerr << "Stats for provided genome\n"
@@ -208,8 +215,12 @@ void Simulation::init(const Environment::Genome &egenome,
   _environment = std::make_unique<Environment>(egenome);
   _environment->init(data.ienergy, data.seed);
 
-  _gidManager.setNext(cgenome.id());
-  cgenome.gdata.setAsPrimordial(_gidManager);
+  auto nextGID = cgenomes.front().id();
+  for (CGenome &g: cgenomes) {
+    if (g.id() != Critter::ID::INVALID) nextGID = std::max(nextGID, g.id());
+    g.gdata.setAsPrimordial(_gidManager);
+  }
+  _gidManager.setNext(nextGID);
 
   decimal energy = data.ienergy;
   decimal cenergy = energy * data.cRatio;
@@ -223,9 +234,11 @@ void Simulation::init(const Environment::Genome &egenome,
   const float W = _environment->extent();
   const float C = W * data.cRange;
 
+  _populations = cgenomes.size();
   auto &dice = _environment->dice();
   for (uint i=0; i<data.nCritters; i++) {
-    auto cg = cgenome.clone(_gidManager);
+    uint bindex = i%_populations;
+    auto cg = cgenomes[bindex].clone(_gidManager);
     cg.cdata.sex = (i%2 ? Critter::Sex::MALE : Critter::Sex::FEMALE);
     float a = dice(0., 2*M_PI);
     float x = dice(-C, C);
@@ -239,7 +252,8 @@ void Simulation::init(const Environment::Genome &egenome,
 //    if (i == 1) x = 47, y = 50-sqrt(2), a = M_PI/2;
 //    if (i == 2) x = 50-sqrt(2), y = 47, a = 0;
 
-    addCritter(cg, x, y, a, energyPerCritter);
+    Critter *c = addCritter(cg, x, y, a, energyPerCritter);
+    c->userIndex = bindex;
   }
 
   _nextFoodletID = 0;
@@ -272,7 +286,7 @@ void Simulation::init(const Environment::Genome &egenome,
       g.connectivity.toDot(gos);
 
       std::ofstream pos (p + "ann.dat");
-      auto substrate = substrateFor(c->raysEnd());
+      auto substrate = substrateFor(c->raysEnd(), g.connectivity);
       NEAT::NeuralNetwork brain;
       g.connectivity.BuildHyperNEATPhenotype(brain, substrate);
       g.connectivity.phenotypeToDat(pos, brain);
@@ -575,10 +589,12 @@ void Simulation::reproduction(void) {
     while (dice(genotype::BOCData::config_t::mutateChild()))  g.mutate(dice);
     g.genealogy().updateAfterCloning(_gidManager);
 
-    createChild(c, g, c->reproductionReserve(), dice);
+    Critter *child = createChild(c, g, c->reproductionReserve(), dice);
     _reproductions.asexual++;
 
     c->resetMating();
+
+    child->userIndex = c->userIndex;
   }
 }
 
@@ -719,6 +735,30 @@ void Simulation::logStats (void) {
   _statsLogger << std::endl;
 
   processStats(s);
+
+
+  // Also log competition data
+  std::vector<uint> counts (_populations, 0);
+  std::vector<float> regimens (_populations, 0);
+  for (const auto &c: _critters) {
+    auto i = c->userIndex;
+    counts[i]++;
+    auto r = c->carnivorousBehavior();
+    if (!isnan(r)) regimens[i] += r;
+  }
+  for (uint i=0; i<_populations; i++) regimens[i] /= counts[i];
+
+  if (_startTime == _time) {
+    _competitionLogger << "Time";
+    for (uint i=0; i<_populations; i++)
+      _competitionLogger << " Count" << i << " Carn" << i;
+    _competitionLogger << "\n";
+  }
+
+  _competitionLogger << _time.timestamp();
+  for (uint i=0; i<_populations; i++)
+    _competitionLogger << " " << counts[i] << " " << regimens[i];
+  _competitionLogger << std::endl;
 }
 
 decimal Simulation::totalEnergy(void) const {

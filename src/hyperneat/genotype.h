@@ -20,6 +20,8 @@ class HyperNEAT : public genotype::EDNA<HyperNEAT> {
   APT_EDNA()
 public:
   NEAT::Genome data;
+  uint hiddenNeuronLayers;
+  uint hiddenNeuronVision;
 
   void toDot (std::ostream &os) const;
   static void phenotypeToDat (std::ostream &os, const NEAT::NeuralNetwork &n);
@@ -30,6 +32,8 @@ public:
 };
 
 DECLARE_GENOME_FIELD(HyperNEAT, NEAT::Genome, data)
+DECLARE_GENOME_FIELD(HyperNEAT, uint, hiddenNeuronLayers)
+DECLARE_GENOME_FIELD(HyperNEAT, uint, hiddenNeuronVision)
 
 } // end of namespace genotype
 
@@ -91,8 +95,8 @@ struct EDNA_CONFIG_FILE(HyperNEAT) {
   DECLARE_PARAMETER(int, neuronTries)
   DECLARE_PARAMETER(int, linkTries)
 
-  DECLARE_PARAMETER(uint, hyperNEATHiddenNeuronLayers)
-  DECLARE_PARAMETER(uint, hyperNEATVisualNeurons)
+  DECLARE_PARAMETER(Bounds<uint>, hiddenNeuronLayersBounds)
+  DECLARE_PARAMETER(Bounds<uint>, hiddenNeuronVisionBounds)
 
   DECLARE_PARAMETER(MutationRates, mutationRates)
   DECLARE_PARAMETER(DistanceWeights, distanceWeights)

@@ -12,30 +12,33 @@ GraphicSimulation::GraphicSimulation(QStatusBar *sbar, gui::StatsView *stats)
     _timeLabel(new QLabel ("Not started yet")), _genLabel(new QLabel ("")),
     _selection(nullptr) {
 
-  _sbar->addPermanentWidget(_timeLabel);
-  _sbar->addPermanentWidget(_genLabel);
+  if (_sbar) {
+    _sbar->addPermanentWidget(_timeLabel);
+    _sbar->addPermanentWidget(_genLabel);
+  }
 
-  _stats->setupFields({
-    "-- Counts --",
-    "Critters",
-     "Youngs ",
-     "Adults ",
-     "Elders ",
-    "Plants", "Corpses", "Feedings", "Fights",
+  if (_stats)
+    _stats->setupFields({
+      "-- Counts --",
+      "Critters",
+       "Youngs ",
+       "Adults ",
+       "Elders ",
+      "Plants", "Corpses", "Feedings", "Fights",
 
-    "-- Energy --",
-    "[E] Plants", "[E] Corpses", "[E] Splinoids", "[E] Reserve",
-    "[E] Total",
+      "-- Energy --",
+      "[E] Plants", "[E] Corpses", "[E] Splinoids", "[E] Reserve",
+      "[E] Total",
 
-    "-- Durations --",
-    "[D] Visu    ",
-     "[D] Simu   ",
-      "[D] Spln  ",
-      "[D] Env   ",
-       "[D] Box2D",
-      "[D] Decay ",
-      "[D] Regen ",
-  });
+      "-- Durations --",
+      "[D] Visu    ",
+       "[D] Simu   ",
+        "[D] Spln  ",
+        "[D] Env   ",
+         "[D] Box2D",
+        "[D] Decay ",
+        "[D] Regen ",
+    });
 
   _gstepTimeMs = 0;
 }
