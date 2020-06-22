@@ -182,17 +182,16 @@ target_link_libraries(evaluator ${SIMU_LIBS} ${APOGeT_LIBRARIES})
 ################################################################################
 ## Target (timelines explorer)
 ################################################################################
-#find_package(OpenMP)
-#if (OPENMP_FOUND)
-#    message("> OpenMP Found.")
-#    message("  > OpenMP flags are " ${OpenMP_CXX_LIBRARIES})
-#  add_executable(
-#    timelines
-#    $<TARGET_OBJECTS:SIMU_OBJS>
-#    "src/genotype/genepool.cpp"
-#    "src/timelines.cpp")
-#  target_link_libraries(timelines ${APOGeT_LIBRARIES} OpenMP::OpenMP_CXX)
-#endif()
+find_package(OpenMP)
+if (OPENMP_FOUND)
+    message("> OpenMP Found.")
+    message("  > OpenMP flags are " ${OpenMP_CXX_LIBRARIES})
+  add_executable(
+    timelines
+    $<TARGET_OBJECTS:SIMU_OBJS>
+    "src/timelines.cpp")
+  target_link_libraries(timelines ${APOGeT_LIBRARIES} OpenMP::OpenMP_CXX)
+endif()
 
 #add_executable(
 #    pve

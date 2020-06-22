@@ -6,7 +6,7 @@
 #include "critter.h"
 #include "foodlet.h"
 #include "environment.h"
-#include "ssga.h"
+//#include "ssga.h"
 
 #include "time.h"
 #include "config.h"
@@ -25,11 +25,14 @@ protected:
 
   std::unique_ptr<Environment> _environment;
 
-  Time _startTime, _time, _endTime;
-  uint _minGen, _maxGen;
+  Time _currTime;
+  struct {
+    uint min, max, goal;
+  } _genData;
 
-  SSGA _ssga;
+//  SSGA _ssga;
 
+  stdfs::path _workPath;
   std::ofstream _statsLogger;
 
   std::ofstream _competitionLogger;
@@ -41,7 +44,7 @@ protected:
         _splnTimeMs, _envTimeMs, _decayTimeMs, _regenTimeMs;
 
   struct ReproductionStats {
-    uint attempts = 0, sexual = 0, asexual = 0, ssga = 0;
+    uint attempts = 0, sexual = 0, asexual = 0/*, ssga = 0*/;
   } _reproductions;
 
   struct Autopsies {
@@ -55,6 +58,19 @@ protected:
       return t + oldage;
     }
   } _autopsies;
+
+  struct CompetitionStats {
+    std::vector<uint> counts;
+    std::vector<float> regimens;
+    std::vector<uint> gens;
+    std::vector<uint> fights;
+
+    uint survivingPopulations (void) const {
+      uint n = 0;
+      for (uint i: counts)  if (i > 0) n++;
+      return n;
+    }
+  } _competitionStats;
 
   bool _aborted;
 
@@ -78,6 +94,8 @@ public:
   using CGenome = Critter::Genome;
 
   Simulation();
+  Simulation (Simulation &&that) {  swap(*this, that);  }
+
   virtual ~Simulation (void);
 
   bool finished (void) const {
@@ -94,7 +112,7 @@ public:
   }
 
   bool extinct (void) const {
-    return !_ssga.enabled() && _critters.empty();
+    return /*!_ssga.enabled() &&*/ _critters.empty();
   }
 
   auto& environment (void) {
@@ -125,13 +143,25 @@ public:
     return _maxGen;
   }
 
+  const CompetitionStats& competitionStats (void) const {
+    return _competitionStats;
+  }
+
   enum Overwrite : char {
     UNSPECIFIED = '\0',
     ABORT = 'a',
     PURGE = 'p',
     IGNORE = 'i'
   };
-  bool setDataFolder (const stdfs::path &path, Overwrite o = UNSPECIFIED);
+  bool setWorkPath (const stdfs::path &path, Overwrite o = UNSPECIFIED);
+
+  const stdfs::path workPath (void) const {
+    return _workPath;
+  }
+
+  stdfs::path localFilePath (const stdfs::path &path) {
+    return workPath() / path;
+  }
 
   void init (const Environment::Genome &egenome,
              std::vector<Critter::Genome> cgenomes,
@@ -200,6 +230,22 @@ public:
     return std::chrono::duration_cast<D>(now() - start).count();
   }
 
+  static void swap (Simulation &lhs, Simulation &rhs) {
+    using std::swap;
+
+    swap(lhs._gidManager, rhs._gidManager);
+    swap(lhs._critters, rhs._critters);
+
+    swap(lhs._nextFoodletID, rhs._nextFoodletID);
+    swap(lhs._foodlets, rhs._foodlets);
+
+    swap(lhs._environment, rhs._environment);
+
+    swap(lhs._startTime, rhs._startTime);
+    swap(lhs._startTime, rhs._time);
+    swap(lhs._startTime, rhs._endTime);
+  }
+
 protected:
   struct Stats {
     uint ncritters = 0, ncorpses = 0, nplants = 0;
@@ -222,7 +268,7 @@ private:
                         decimal energy, rng::AbstractDice &dice);
 
   void produceCorpses (void);
-  void steadyStateGA (void);
+//  void steadyStateGA (void);
 
   void decomposition (void);
   void plantRenewal (float bounds = -1);

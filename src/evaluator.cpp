@@ -38,8 +38,8 @@ protected:
     assert(_foodlets.empty());
 
     clear();
-    _ssga.clear();
-    _ssga.setEnabled(false);
+//    _ssga.clear();
+//    _ssga.setEnabled(false);
     _systemExpectedEnergy = -1; // Deactivate closed-system monitoring
 
     if (!tag.empty()) {
@@ -483,7 +483,7 @@ int main(int argc, char *argv[]) {
 
 
   if (!outputFolder.empty())
-    reference.setDataFolder(outputFolder,
+    reference.setWorkPath(outputFolder,
                             simu::Simulation::Overwrite(overwrite));
 
   if (!fieldsToExtract.empty()) {

@@ -239,7 +239,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (!outputFolder.empty()) {
-    bool ok = s.setDataFolder(outputFolder, simu::Simulation::Overwrite(overwrite));
+    bool ok = s.setWorkPath(outputFolder, simu::Simulation::Overwrite(overwrite));
     if (!ok)  exit(2);
   }
 

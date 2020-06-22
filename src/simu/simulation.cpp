@@ -97,13 +97,13 @@ void Simulation::printStaticStats (void) {
 }
 
 Simulation::Simulation(void)
-  : _environment(nullptr), _stepTimeMs(0) {}
+  : _environment(nullptr), _workPath("."), _stepTimeMs(0) {}
 
 Simulation::~Simulation (void) {
   clear();
 }
 
-bool Simulation::setDataFolder (const stdfs::path &path, Overwrite o) {
+bool Simulation::setWorkPath (const stdfs::path &path, Overwrite o) {
   if (stdfs::exists(path) && !stdfs::is_empty(path)) {
     if (o == UNSPECIFIED) {
       std::cerr << "WARNING: data folder '" << path << "' is not empty."
@@ -136,18 +136,18 @@ bool Simulation::setDataFolder (const stdfs::path &path, Overwrite o) {
     stdfs::create_directories(path);
   }
 
-  std::cout << "Changed working directory from " << stdfs::current_path();
-  stdfs::current_path(path);
-  std::cout << " to " << stdfs::current_path() << std::endl;
+  std::cout << "Changed working directory from " << _workPath;
+  _workPath = path;
+  std::cout << " to " << _workPath << std::endl;
 
-  stdfs::path statsPath = "global.dat";
+  stdfs::path statsPath = localFilePath("global.dat");
   if (_statsLogger.is_open()) _statsLogger.close();
   _statsLogger.open(statsPath, std::ofstream::out | std::ofstream::trunc);
   if (!_statsLogger.is_open())
     utils::doThrow<std::invalid_argument>(
       "Unable to open stats file ", statsPath);
 
-  stdfs::path competPath = "competition.dat";
+  stdfs::path competPath = localFilePath("competition.dat");
   if (_competitionLogger.is_open()) _competitionLogger.close();
   _competitionLogger.open(competPath, std::ofstream::out | std::ofstream::trunc);
   if (!_competitionLogger.is_open())
@@ -267,7 +267,7 @@ void Simulation::init(const Environment::Genome &egenome,
   _reproductions = ReproductionStats{};
   _autopsies = Autopsies{};
 
-  _ssga.init(_critters.size());
+//  _ssga.init(_critters.size());
 
   postInit();
 
@@ -277,15 +277,15 @@ void Simulation::init(const Environment::Genome &egenome,
     Critter *c = *_critters.begin();
     CGenome &g = c->genotype();
 
-    auto save = [] (Critter *c, CGenome &g, uint i) {
+    auto save = [this] (Critter *c, CGenome &g, uint i) {
       std::ostringstream oss;
       oss << "tmp/mutated_" << i << "_";
 
       std::string p = oss.str();
-      std::ofstream gos (p + "cppn.dot");
+      std::ofstream gos (localFilePath(p + "cppn.dot"));
       g.connectivity.toDot(gos);
 
-      std::ofstream pos (p + "ann.dat");
+      std::ofstream pos (localFilePath(p + "ann.dat"));
       auto substrate = substrateFor(c->raysEnd(), g.connectivity);
       NEAT::NeuralNetwork brain;
       g.connectivity.BuildHyperNEATPhenotype(brain, substrate);
@@ -356,7 +356,7 @@ Critter* Simulation::addCritter (const CGenome &genome,
               << ", gen " << c->genotype().gdata.generation << ") at "
               << c->pos() << std::endl;
 
-  if (_ssga.watching()) _ssga.registerBirth(c);
+//  if (_ssga.watching()) _ssga.registerBirth(c);
 
   return c;
 }
@@ -376,7 +376,7 @@ void Simulation::delCritter (Critter *critter) {
   }
 
   if (debugCritterManagement) critter->autopsy();
-  if (_ssga.watching()) _ssga.registerDeath(critter);
+//  if (_ssga.watching()) _ssga.registerDeath(critter);
   _critters.erase(critter);
   physics().DestroyBody(&critter->body());
   delete critter;
@@ -435,7 +435,7 @@ void Simulation::step (void) {
   _minGen = std::numeric_limits<uint>::max();
   _maxGen = 0;
 
-  if (_ssga.watching()) _ssga.preStep(_critters);
+//  if (_ssga.watching()) _ssga.preStep(_critters);
 
   for (Critter *c: _critters) {
     c->step(*_environment);
@@ -448,7 +448,7 @@ void Simulation::step (void) {
 
   _environment->step();
 
-  if (_ssga.watching()) _ssga.postStep(_critters);
+//  if (_ssga.watching()) _ssga.postStep(_critters);
   _envTimeMs = durationFrom(start);  start = now();
 
   reproduction();
@@ -456,7 +456,7 @@ void Simulation::step (void) {
   decomposition();
   _decayTimeMs = durationFrom(start);  start = now();
 
-  steadyStateGA();
+//  steadyStateGA();
   if (_time.secondFraction() == 0)  plantRenewal();
   _regenTimeMs = durationFrom(start);  start = now();
 
@@ -572,7 +572,7 @@ void Simulation::reproduction(void) {
       createChild(dice(.5) ? f : m, children.front(),
                   f->reproductionReserve() + m->reproductionReserve(), dice);
 
-      if (_ssga.watching()) _ssga.recordChildFor({f,m});
+//      if (_ssga.watching()) _ssga.recordChildFor({f,m});
       _reproductions.sexual++;
     }
 
@@ -686,9 +686,9 @@ void Simulation::logStats (void) {
 
   decimal eE = totalEnergy() - _systemExpectedEnergy;
 
-  s.fmin = _ssga.worstFitness();
-  s.favg = _ssga.averageFitness();
-  s.fmax = _ssga.bestFitness();
+//  s.fmin = _ssga.worstFitness();
+//  s.favg = _ssga.averageFitness();
+//  s.fmax = _ssga.bestFitness();
 
   if (_startTime == _time) {
     _statsLogger << "Step Date"
@@ -697,12 +697,12 @@ void Simulation::logStats (void) {
                     " NFeeding NFights"
                     " ECritters ECorpses EPlants EReserve"
                     " eE"
-                    " FRepro SRepro ARepro ERepro"
-                    " GMin GMax FMin FAvg FMax"
+                    " FRepro SRepro ARepro"// ERepro"
+                    " GMin GMax"// FMin FAvg FMax"
                     " DYInj DAInj DOInj DYStr DAStr DOStr DOAge";
 
-    for (const auto &p: _ssga.champStats())
-      _statsLogger << " SSGAC" << p.first;
+//    for (const auto &p: _ssga.champStats())
+//      _statsLogger << " SSGAC" << p.first;
 
     _statsLogger << "\n";
   }
@@ -719,18 +719,18 @@ void Simulation::logStats (void) {
                << " " << s.ereserve << " " << eE
 
                << " " << _reproductions.attempts << " " << _reproductions.sexual
-               << " " << _reproductions.asexual << " " << _reproductions.ssga
+               << " " << _reproductions.asexual// << " " << _reproductions.ssga
 
                << " " << _minGen << " " << _maxGen << " "
-               << s.fmin << " " << s.favg << " " << s.fmax;
+               /*<< s.fmin << " " << s.favg << " " << s.fmax*/;
 
   for (const auto &a: _autopsies.counts)
     for (const auto v: a)
       _statsLogger << " " << v;
   _statsLogger << " " << _autopsies.oldage;
 
-  for (const auto &p: _ssga.champStats())
-    _statsLogger << " " << p.second;
+//  for (const auto &p: _ssga.champStats())
+//    _statsLogger << " " << p.second;
 
   _statsLogger << std::endl;
 
@@ -738,26 +738,41 @@ void Simulation::logStats (void) {
 
 
   // Also log competition data
-  std::vector<uint> counts (_populations, 0);
-  std::vector<float> regimens (_populations, 0);
+  auto &cs = _competitionStats;
+  cs.counts = std::vector<uint>(_populations, 0);
+  cs.regimens = std::vector<float>(_populations, 0);
+  cs.gens = std::vector<uint>(_populations, std::numeric_limits<uint>::max());
+  cs.fights = std::vector<uint>(_populations, 0);
   for (const auto &c: _critters) {
     auto i = c->userIndex;
-    counts[i]++;
+    cs.counts[i]++;
     auto r = c->carnivorousBehavior();
-    if (!isnan(r)) regimens[i] += r;
+    if (!isnan(r)) cs.regimens[i] += r;
+    cs.gens[i] = std::min(cs.gens[i],
+                                         c->genealogy().generation);
   }
-  for (uint i=0; i<_populations; i++) regimens[i] /= counts[i];
+  for (uint i=0; i<_populations; i++) {
+    cs.regimens[i] /= cs.counts[i];
+    if (cs.counts[i] == 0) cs.gens[i] = 0;
+  }
+
+  for (const auto &f: _environment->fightingEvents()) {
+    cs.fights[f.first.first->userIndex]++;
+    cs.fights[f.first.second->userIndex]++;
+  }
 
   if (_startTime == _time) {
     _competitionLogger << "Time";
     for (uint i=0; i<_populations; i++)
-      _competitionLogger << " Count" << i << " Carn" << i;
+      _competitionLogger << " Count" << i << " Carn" << i << " MinGen" << i
+                         << " Fight" << i;
     _competitionLogger << "\n";
   }
 
   _competitionLogger << _time.timestamp();
   for (uint i=0; i<_populations; i++)
-    _competitionLogger << " " << counts[i] << " " << regimens[i];
+    _competitionLogger << " " << cs.counts[i] << " " << cs.regimens[i] << " "
+                       << cs.gens[i] << " " << cs.fights[i];
   _competitionLogger << std::endl;
 }
 
@@ -769,25 +784,25 @@ decimal Simulation::totalEnergy(void) const {
   return e;
 }
 
-void Simulation::steadyStateGA(void) {
-  _ssga.update(_critters.size());
+//void Simulation::steadyStateGA(void) {
+////  _ssga.update(_critters.size());
 
-  static const auto minE = Critter::energyForCreation();
-  if (_ssga.active() && _time.secondFraction() == 0) {
-    float r = _environment->extent() - Critter::MIN_SIZE * Critter::RADIUS;
+//  static const auto minE = Critter::energyForCreation();
+//  if (_ssga.active() && _time.secondFraction() == 0) {
+//    float r = _environment->extent() - Critter::MIN_SIZE * Critter::RADIUS;
 
-    auto &dice = _environment->dice();
-    while (_environment->energy() >= minE && _ssga.active(_critters.size())) {
-//      auto genome = _ssga.getRandomGenome(dice, /*500*/0);
-      auto genome = _ssga.getGoodGenome(dice);
-      genome.gdata.updateAfterCloning(_gidManager);
-      float a = dice(0., 2*M_PI);
-      float x = dice(-r, r), y = dice(-r, r);
-      addCritter(genome, x, y, a, minE);
-      _reproductions.ssga++;
-    }
-  }
-}
+//    auto &dice = _environment->dice();
+//    while (_environment->energy() >= minE && _ssga.active(_critters.size())) {
+////      auto genome = _ssga.getRandomGenome(dice, /*500*/0);
+//      auto genome = _ssga.getGoodGenome(dice);
+//      genome.gdata.updateAfterCloning(_gidManager);
+//      float a = dice(0., 2*M_PI);
+//      float x = dice(-r, r), y = dice(-r, r);
+//      addCritter(genome, x, y, a, minE);
+////      _reproductions.ssga++;
+//    }
+//  }
+//}
 
 void Simulation::correctFloatingErrors(void) {
   // Monitoring is deactivated
@@ -835,7 +850,7 @@ void Simulation::detectBudgetFluctuations(float threshold) {
 
 // Low level writing of a bytes array
 bool save (const std::string &file, const std::vector<uint8_t> &bytes) {
-  std::fstream ofs (file, std::ios::out | std::ios::binary);
+  std::ofstream ofs (file, std::ios::out | std::ios::binary);
   if (!ofs)
     utils::doThrow<std::invalid_argument>(
           "Unable to open '", file, "' for writing");

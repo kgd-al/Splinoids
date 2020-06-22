@@ -223,7 +223,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (!outputFolder.empty())
-    s.setDataFolder(outputFolder, simu::Simulation::Overwrite(overwrite));
+    s.setWorkPath(outputFolder, simu::Simulation::Overwrite(overwrite));
 
   genotype::Critter::printMutationRates(std::cout, 2);
 
@@ -264,7 +264,8 @@ int main(int argc, char *argv[]) {
   uint saveEveryGen = 1, saveNextGen = 1;
   while (!s.finished()
          && s.minGeneration() <= generations
-         && s.currTime().year() < years) {
+         && s.currTime().year() < years
+         && s.competitionStats().survivingPopulations() == cGenomes.size()) {
     if (aborted)  s.abort();
     s.step();
 
