@@ -52,6 +52,18 @@ public:
 
     friend std::ostream& operator<< (std::ostream &os, const FixtureData &fd);
     friend std::ostream& operator<< (std::ostream &os, const Side &s);
+
+    friend void assertEqual (const FixtureData &lhs, const FixtureData &rhs,
+                             bool deepcopy) {
+      using utils::assertEqual;
+#define ASRT(X) assertEqual(lhs.X, rhs.X, deepcopy)
+      ASRT(type);
+      ASRT(color);
+      ASRT(sindex);
+      ASRT(sside);
+      ASRT(aindex);
+#undef ASRT
+    }
   };
 
 private:
@@ -91,7 +103,30 @@ private:
     // Right spline
     P2D pr0;  // Destination
     P2D cr0;  // First control point
-    P2D cr1;  // Second control point
+    P2D cr1;  // Second control point'
+
+#ifndef NDEBUG
+    friend void assertEqual (const SplineData &lhs, const SplineData &rhs,
+                             bool deepcopy) {
+      using utils::assertEqual;
+#define ASRT(X) assertEqual(lhs.X, rhs.X, deepcopy)
+      ASRT(p0);
+      ASRT(c0);
+      ASRT(c1);
+      ASRT(p1);
+      ASRT(pc0);
+      ASRT(pc1);
+      ASRT(al0);
+      ASRT(ar0);
+      ASRT(pl0);
+      ASRT(cl0);
+      ASRT(cl1);
+      ASRT(pr0);
+      ASRT(cr0);
+      ASRT(cr1);
+#undef ASRT
+    }
+#endif
   };
   using SplinesData = std::array<SplineData, SPLINES_COUNT>;
   SplinesData _splinesData;
@@ -533,6 +568,12 @@ public:
   void saveBrain (const std::string &prefix) const;
 
   // ===========================================================================
+
+  static Critter* clone (const Critter *c, b2Body *b);
+  friend void assertEqual (const Critter &lhs, const Critter &rhs,
+                           bool deepcopy);
+
+  // ===========================================================================
   // == Static computers
 
   static void setEfficiencyCoeffs(float c0, float &c0Coeff,
@@ -567,6 +608,8 @@ public:
   static Critter* load (const nlohmann::json &j, b2Body *body);
 
 private:
+  Critter (const Genome &g, b2Body *b);
+
   Color computeCurrentColor(void) const;
 
   // ===========================================================================

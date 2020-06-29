@@ -13,10 +13,41 @@ static constexpr auto ACT_FUNC_OUTPUT = NEAT::TANH;
 
 namespace NEAT {
 
-void assertEqual(const HN &/*lhs*/, const HN &/*rhs*/, bool /*deepcopy*/) {
-  assert(false);
+#define ASRT(X) assertEqual(lhs.X, rhs.X, deepcopy)
+#define P_ASRT(X) assertEqual(lhs.X(), rhs.X(), false)
+
+void assertEqual (const Trait &lhs, const Trait &rhs, bool deepcopy) {
+  using utils::assertEqual;
+//  ASRT(value);
+//  ASRT(dep_key);
+//  ASRT(dep_values);
 }
 
+void assertEqual (const Gene &lhs, const Gene &rhs, bool deepcopy) {
+  using utils::assertEqual;
+//  ASRT(m_Traits);
+}
+
+void assertEqual(const HN &lhs, const HN &rhs, bool deepcopy) {
+  using utils::assertEqual;
+
+  P_ASRT(GetID);
+  P_ASRT(NumInputs);
+  P_ASRT(NumOutputs);
+  P_ASRT(GetFitness);
+  P_ASRT(GetAdjFitness);
+  P_ASRT(GetDepth);
+  P_ASRT(GetOffspringAmount);
+  ASRT(m_NeuronGenes);
+  ASRT(m_LinkGenes);
+  ASRT(m_GenomeGene);
+  ASRT(m_Evaluated);
+  ASRT(m_initial_num_neurons);
+  ASRT(m_initial_num_links);
+}
+
+#undef P_ASRT
+#undef ASRT
 }
 
 void genotype::HyperNEAT::toDot (std::ostream &os) const {

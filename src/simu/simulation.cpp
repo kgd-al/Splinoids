@@ -4,6 +4,8 @@
 
 #include "../hyperneat/phenotype.h" // WARNING REMOVE
 
+#include "box2dutils.h"
+
 namespace simu {
 
 static constexpr bool debugShowStepHeader = false;
@@ -97,7 +99,7 @@ void Simulation::printStaticStats (void) {
 }
 
 Simulation::Simulation(void)
-  : _environment(nullptr), _workPath("."), _stepTimeMs(0) {}
+  : _environment(nullptr), _printedHeader(false), _workPath("."), _timeMs() {}
 
 Simulation::~Simulation (void) {
   clear();
@@ -132,13 +134,16 @@ bool Simulation::setWorkPath (const stdfs::path &path, Overwrite o) {
   if (_aborted) return false;
 
   if (!stdfs::exists(path)) {
-    std::cout << "Creating data folder " << path << std::endl;
+    if (config::Simulation::verbosity() > 1)
+      std::cout << "Creating data folder " << path << std::endl;
     stdfs::create_directories(path);
   }
 
-  std::cout << "Changed working directory from " << _workPath;
+  if (config::Simulation::verbosity() > 1)
+    std::cout << "Changed working directory from " << _workPath;
   _workPath = path;
-  std::cout << " to " << _workPath << std::endl;
+  if (config::Simulation::verbosity() > 1)
+    std::cout << " to " << _workPath << std::endl;
 
   stdfs::path statsPath = localFilePath("global.dat");
   if (_statsLogger.is_open()) _statsLogger.close();
@@ -170,6 +175,7 @@ bool Simulation::setWorkPath (const stdfs::path &path, Overwrite o) {
 //      utils::doThrow<std::invalid_argument>(
 //        "Unable to open voxel file ", envPath, " for ", U::getName(o));
 //  }
+  _printedHeader = false;
 
   return true;
 }
@@ -179,10 +185,10 @@ void Simulation::init(const Environment::Genome &egenome,
                       const InitData &data) {
 
   _aborted = false;
-  _minGen = 0;
-  _maxGen = 0;
+  _genData.min = 0;
+  _genData.max = 0;
+  _genData.goal = std::numeric_limits<decltype(_genData.goal)>::max();
   _time.set(0);
-  _startTime = _endTime = _time;
 
   // TODO Remove (debug)
 //  cgenome.vision.angleBody = M_PI/4.;
@@ -254,6 +260,14 @@ void Simulation::init(const Environment::Genome &egenome,
 
     Critter *c = addCritter(cg, x, y, a, energyPerCritter);
     c->userIndex = bindex;
+
+    if (i == 0) {
+      _genData.min = cg.genealogy().generation;
+      _genData.max = cg.genealogy().generation;
+    } else {
+      _genData.min = std::min(_genData.min, cg.genealogy().generation);
+      _genData.max = std::max(_genData.max, cg.genealogy().generation);
+    }
   }
 
   _nextFoodletID = 0;
@@ -431,71 +445,30 @@ void Simulation::step (void) {
     std::cerr << "\n## Simulation step " << _time.timestamp() << " ("
               << _time.pretty() << ") ##" << std::endl;
 
-  auto prevMinGen = _minGen, prevMaxGen = _maxGen;
-  _minGen = std::numeric_limits<uint>::max();
-  _maxGen = 0;
-
-//  if (_ssga.watching()) _ssga.preStep(_critters);
+  auto prevMinGen = _genData.min, prevMaxGen = _genData.max;
+  _genData.min = std::numeric_limits<uint>::max();
+  _genData.max = 0;
 
   for (Critter *c: _critters) {
     c->step(*_environment);
 
-    _minGen = std::min(_minGen, c->genotype().gdata.generation);
-    _maxGen = std::max(_maxGen, c->genotype().gdata.generation);
+    _genData.min = std::min(_genData.min, c->genotype().gdata.generation);
+    _genData.max = std::max(_genData.max, c->genotype().gdata.generation);
   }
-  if (_critters.empty())  _minGen = 0;
-  _splnTimeMs = durationFrom(start);  start = now();
+  if (_critters.empty())  _genData.min = 0;
+  if (_timeMs.level > 1)  _timeMs.spln = durationFrom(start),  start = now();
 
   _environment->step();
 
-//  if (_ssga.watching()) _ssga.postStep(_critters);
-  _envTimeMs = durationFrom(start);  start = now();
+  if (_timeMs.level > 1)  _timeMs.env = durationFrom(start),  start = now();
 
   reproduction();
   produceCorpses();
   decomposition();
-  _decayTimeMs = durationFrom(start);  start = now();
+  if (_timeMs.level > 1)  _timeMs.decay = durationFrom(start),  start = now();
 
-//  steadyStateGA();
   if (_time.secondFraction() == 0)  plantRenewal();
-  _regenTimeMs = durationFrom(start);  start = now();
-
-  if (false) {
-  /* TODO DEBUG AREA
-  */
-    const auto doTo = [this] (Critter::ID id, auto f) {
-      Critter *c = nullptr;
-      for (Critter *c_: _critters) {
-        if (c_->id() == id) {
-          c = c_;
-          break;
-        }
-      }
-      if (c)  f(c);
-    };
-//    const auto forcedMotion = [this] (float a) {
-//      return [this, a] (Critter *c){
-//        if (_time.second() == 0)
-//          c->body().ApplyForceToCenter(
-//            4*config::Simulation::critterBaseSpeed()*fromPolar(a,1), true);
-//      };
-//    };
-//    doTo(Critter::ID(1), forcedMotion(M_PI/4));
-//    doTo(Critter::ID(2), forcedMotion(M_PI/2));
-//    doTo(Critter::ID(3), forcedMotion(0));
-//    doTo(Critter::ID(1), [this] (Critter *c) {
-//      if (_time.timestamp() == 50) {
-////        c->applyHealthDamage(
-////            Critter::FixtureData(Critter::FixtureType::BODY, {0,0,0}),
-////            .025,  *_environment);
-//        Critter::FixtureData fakeFD (
-//          Critter::FixtureType::ARTIFACT, {0,0,0}, 0, Critter::Side::LEFT, 0);
-
-//        bool d = c->applyHealthDamage(fakeFD, .5,  *_environment);
-//        if (d)  c->destroySpline(Critter::splineIndex(fakeFD));
-//      }
-//    });
-  }
+  if (_timeMs.level > 1)  _timeMs.regen = durationFrom(start),  start = now();
 
   static const auto &lse = config::Simulation::logStatsEvery();
   if (_statsLogger && lse > 0 && (_time.timestamp() % lse) == 0) {
@@ -514,12 +487,13 @@ void Simulation::step (void) {
   // If above did not fail, effect small corrections to keep things smooth
   if (config::Simulation::screwTheEntropy())  correctFloatingErrors();
 
-  _stepTimeMs = durationFrom(stepStart);
+  if (_timeMs.level > 0)  _timeMs.step = durationFrom(stepStart);
 
-  if (prevMinGen < _minGen || prevMaxGen < _maxGen) {
+  if (config::Simulation::verbosity() >= 1
+      && (prevMinGen < _genData.min || prevMaxGen < _genData.max)) {
     std::cerr << "## Simulation step " << _time.pretty() << " gens: ["
-              << _minGen << "; " << _maxGen << "] at " << utils::CurrentTime{}
-              << "\n";
+              << _genData.min << "; " << _genData.max << "] at "
+              << utils::CurrentTime{} << "\n";
   }
 }
 
@@ -690,7 +664,7 @@ void Simulation::logStats (void) {
 //  s.favg = _ssga.averageFitness();
 //  s.fmax = _ssga.bestFitness();
 
-  if (_startTime == _time) {
+  if (!_printedHeader) {
     _statsLogger << "Step Date"
                     " NCritters NYoungs NAdults NElders"
                     " NCorpses NPlants"
@@ -721,7 +695,7 @@ void Simulation::logStats (void) {
                << " " << _reproductions.attempts << " " << _reproductions.sexual
                << " " << _reproductions.asexual// << " " << _reproductions.ssga
 
-               << " " << _minGen << " " << _maxGen << " "
+               << " " << _genData.min << " " << _genData.max << " "
                /*<< s.fmin << " " << s.favg << " " << s.fmax*/;
 
   for (const auto &a: _autopsies.counts)
@@ -761,7 +735,7 @@ void Simulation::logStats (void) {
     cs.fights[f.first.second->userIndex]++;
   }
 
-  if (_startTime == _time) {
+  if (!_printedHeader) {
     _competitionLogger << "Time";
     for (uint i=0; i<_populations; i++)
       _competitionLogger << " Count" << i << " Carn" << i << " MinGen" << i
@@ -774,6 +748,8 @@ void Simulation::logStats (void) {
     _competitionLogger << " " << cs.counts[i] << " " << cs.regimens[i] << " "
                        << cs.gens[i] << " " << cs.fights[i];
   _competitionLogger << std::endl;
+
+  _printedHeader = true;
 }
 
 decimal Simulation::totalEnergy(void) const {
@@ -783,26 +759,6 @@ decimal Simulation::totalEnergy(void) const {
   e += _environment->energy();
   return e;
 }
-
-//void Simulation::steadyStateGA(void) {
-////  _ssga.update(_critters.size());
-
-//  static const auto minE = Critter::energyForCreation();
-//  if (_ssga.active() && _time.secondFraction() == 0) {
-//    float r = _environment->extent() - Critter::MIN_SIZE * Critter::RADIUS;
-
-//    auto &dice = _environment->dice();
-//    while (_environment->energy() >= minE && _ssga.active(_critters.size())) {
-////      auto genome = _ssga.getRandomGenome(dice, /*500*/0);
-//      auto genome = _ssga.getGoodGenome(dice);
-//      genome.gdata.updateAfterCloning(_gidManager);
-//      float a = dice(0., 2*M_PI);
-//      float x = dice(-r, r), y = dice(-r, r);
-//      addCritter(genome, x, y, a, minE);
-////      _reproductions.ssga++;
-//    }
-//  }
-//}
 
 void Simulation::correctFloatingErrors(void) {
   // Monitoring is deactivated
@@ -825,22 +781,26 @@ void Simulation::detectBudgetFluctuations(float threshold) {
 
   decimal E = totalEnergy(), dE = _systemExpectedEnergy-E;
   if (std::fabs(dE) > threshold) {
-    std::cerr << std::setprecision(std::numeric_limits<decimal>::digits10)
-              << "Excessive budget variation of "
-              << E-_systemExpectedEnergy << " = " << E << " - "
-              << _systemExpectedEnergy << std::endl;
+    std::ostringstream oss;
+    oss << std::setprecision(std::numeric_limits<decimal>::digits10)
+        << "Excessive budget variation of "
+        << E-_systemExpectedEnergy << " = " << E << " - "
+        << _systemExpectedEnergy << std::endl;
 
     decimal e = 0;
-    std::cerr << "\tCritters: ";
+    oss << "\tCritters: ";
     for (const auto &c: _critters)  e += c->totalEnergy();
-    std::cerr << e << "\n";
+    oss << e << "\n";
     e = 0;
-    std::cerr << "\tFoodlets: ";
+    oss << "\tFoodlets: ";
     for (const auto &f: _foodlets)  e += f->energy();
-    std::cerr << e << "\n";
-    std::cerr << "\t Reserve: " << _environment->energy() << "\n";
+    oss << e << "\n";
+    oss << "\t Reserve: " << _environment->energy() << "\n";
 
-    assert(false);
+    std::cerr << oss.str() << std::endl;
+
+//    assert(false);
+    abort();
   }
 }
 #endif
@@ -906,8 +866,6 @@ void Simulation::deserializePopulations (const json &jcritters,
     Critter *c = Critter::load(j[1], b);
 
     _critters.insert(c);
-
-//    _plants.insert({p->pos().x, Plant_ptr(p)});
 
 //    if (updatePTree) {
 //      PStats *pstats = _ptree.getUserData(p->genealogy().self);
@@ -1056,8 +1014,8 @@ void Simulation::load (const stdfs::path &file, Simulation &s,
   }
 
   s._aborted = false;
-  s._minGen = 0;
-  s._maxGen = 0;
+  s._genData.min = 0;
+  s._genData.max = 0;
   s._gidManager.setNext(j["nextCID"]);
   s._nextFoodletID = j["nextFID"];
   s._systemExpectedEnergy = j["energy"];
@@ -1069,5 +1027,128 @@ void Simulation::load (const stdfs::path &file, Simulation &s,
 
   std::cout << "Loaded " << file << std::endl;
 }
+
+
+// =============================================================================
+// == EDEnS cloning
+
+void Simulation::clone (const Simulation &s) {
+  clear();
+
+//  if (!_environment)
+//    _environment = std::make_unique<Environment>(s._environment->genotype());
+//  _environment->clone(*s._environment);
+  _environment.reset(Environment::clone(*s._environment));
+
+  _gidManager = s._gidManager;
+  for (Critter *c: s._critters) {
+    b2Body *b_ = Box2DUtils::clone(&c->body(), &physics());
+    Critter *c_ = Critter::clone(c, b_);
+    _critters.insert(c_);
+  }
+
+  _nextFoodletID = s._nextFoodletID;
+  for (Foodlet *f: s._foodlets) {
+    b2Body *b_ = Box2DUtils::clone(&f->body(), &physics());
+    Foodlet *f_ = Foodlet::clone(f, b_);
+    _foodlets.insert(f_);
+  }
+
+  _time = s._time;
+
+  _genData = s._genData;
+
+  _workPath = s._workPath;
+
+  _populations = s._populations;
+
+  _systemExpectedEnergy = s._systemExpectedEnergy;
+
+  _timeMs.level = s._timeMs.level;
+  _reproductions = s._reproductions;
+  _autopsies = s._autopsies;
+  _competitionStats = s._competitionStats;
+
+  _aborted = s._aborted;
+
+#ifndef NDEBUG
+  assertEqual(*this, s, true);
+
+  detectBudgetFluctuations();
+#endif
+}
+
+template <typename V>
+struct IDSort {
+  bool operator() (const V *lhs, const V *rhs) noexcept {
+    return lhs->id() < rhs->id();
+  }
+};
+
+#ifndef NDEBUG
+void assertEqual (const Simulation &lhs, const Simulation &rhs, bool deepcopy) {
+  using utils::assertEqual;
+
+#define ASRT(X) assertEqual(lhs.X, rhs.X, deepcopy)
+  ASRT(_environment);
+  ASRT(_gidManager);
+  ASRT(_nextFoodletID);
+  ASRT(_time);
+  ASRT(_genData.min);
+  ASRT(_genData.max);
+  ASRT(_genData.goal);
+//  ASRT(_workPath);
+//  ASRT(_statsLogger);
+//  ASRT(_competitionLogger);
+  ASRT(_populations);
+  ASRT(_systemExpectedEnergy);
+  ASRT(_timeMs.step);
+  ASRT(_timeMs.spln);
+  ASRT(_timeMs.env);
+  ASRT(_timeMs.decay);
+  ASRT(_timeMs.regen);
+  ASRT(_timeMs.level);
+  ASRT(_reproductions.attempts);
+  ASRT(_reproductions.sexual);
+  ASRT(_reproductions.asexual);
+  ASRT(_autopsies.counts);
+  ASRT(_autopsies.oldage);
+  ASRT(_competitionStats.counts);
+  ASRT(_competitionStats.regimens);
+  ASRT(_competitionStats.gens);
+  ASRT(_competitionStats.fights);
+  ASRT(_aborted);
+#undef ASRT
+
+  // Needs sorting
+  using P = IDSort<Critter>;
+  using V = decltype(lhs._critters)::value_type;
+  static_assert(std::is_nothrow_invocable_r<bool, P, V, V>::value, "No");
+  assertEqual(lhs._critters, rhs._critters, IDSort<Critter>(), deepcopy);
+  assertEqual(lhs._foodlets, rhs._foodlets, IDSort<Foodlet>(), deepcopy);
+
+  // Compare energy levels within some reasonnable margin
+  decimal eclhs = 0, ecrhs = 0, eflhs = 0, efrhs = 0;
+  for (auto ilhs = lhs._critters.begin(), irhs = rhs._critters.begin();
+       ilhs != lhs._critters.end(); ++ilhs, ++irhs) {
+    const Critter *clhs = *ilhs, *crhs = *irhs;
+    eclhs += clhs->totalEnergy();
+    ecrhs += crhs->totalEnergy();
+  }
+  for (auto ilhs = lhs._foodlets.begin(), irhs = rhs._foodlets.begin();
+       ilhs != lhs._foodlets.end(); ++ilhs, ++irhs) {
+    const Foodlet *flhs = *ilhs, *frhs = *irhs;
+    eflhs += flhs->energy();
+    efrhs += frhs->energy();
+  }
+  decimal eelhs = lhs._environment->energy(), eerhs = rhs._environment->energy();
+
+  decimal T = config::Simulation::epsilonE;
+  utils::assertFuzzyEqual(eclhs, ecrhs, T, false);
+  utils::assertFuzzyEqual(eflhs, efrhs, T, false);
+  utils::assertFuzzyEqual(eelhs, eerhs, T, false);
+  utils::assertFuzzyEqual(eclhs+eflhs+eelhs, ecrhs+efrhs+eerhs, T, false);
+}
+#endif
 
 } // end of namespace simu

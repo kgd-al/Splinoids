@@ -40,6 +40,13 @@ struct b2BodyUserData {
     Foodlet *foodlet;
     Obstacle *obstacle; // Always null
   } ptr;
+
+  friend void assertEqual (const b2BodyUserData &lhs, const b2BodyUserData &rhs,
+                           bool deepcopy) {
+    using utils::assertEqual;
+    assertEqual(lhs.type, rhs.type, deepcopy);
+    // Pointers ought to be different
+  }
 };
 
 enum struct CollisionFlag : uint16 {
@@ -63,6 +70,9 @@ enum struct CollisionFlag : uint16 {
 };
 
 }
+
+void assertEqual (const b2Vec2 &lhs, const b2Vec2 &rhs, bool deepcopy);
+
 namespace config {
 struct PTree;
 
@@ -78,6 +88,7 @@ struct CONFIG_FILE(Simulation) {
 
   DECLARE_PARAMETER(std::string, logFile)
   DECLARE_PARAMETER(uint, logStatsEvery)
+  DECLARE_PARAMETER(int, verbosity)
 
   DECLARE_PARAMETER(Color, emptyColor)
   DECLARE_PARAMETER(Color, obstacleColor)

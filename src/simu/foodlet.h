@@ -36,7 +36,7 @@ public:
     return _id;
   }
 
-  auto& body (void) {
+  b2Body& body (void) {
     return _body;
   }
 
@@ -79,8 +79,20 @@ public:
   void update (Environment &env);
   void updateColor (void);
 
+  // ===========================================================================
+
+  static Foodlet* clone (const Foodlet*f, b2Body *b);
+  friend void assertEqual (const Foodlet &lhs, const Foodlet &rhs,
+                           bool deepcopy);
+
+  // ===========================================================================
+
   static nlohmann::json save (const Foodlet &f);
   static Foodlet* load (const nlohmann::json &j, b2Body *body);
+
+private:
+  Foodlet (uint id, b2Body *body);
+
 };
 
 } // end of namespace simu

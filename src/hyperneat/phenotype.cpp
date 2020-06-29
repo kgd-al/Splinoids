@@ -102,3 +102,53 @@ NEAT::Substrate substrateFor (const std::vector<simu::P2D> &rays,
 }
 
 } // end of namespace simu
+
+namespace NEAT {
+#define ASRT(X) assertEqual(lhs.X, rhs.X, deepcopy)
+
+void assertEqual (const Connection &lhs, const Connection &rhs, bool deepcopy) {
+  using utils::assertEqual;
+  ASRT(m_source_neuron_idx);
+  ASRT(m_target_neuron_idx);
+  ASRT(m_weight);
+  ASRT(m_signal);
+  ASRT(m_recur_flag);
+  ASRT(m_hebb_rate);
+  ASRT(m_hebb_pre_rate);
+}
+
+
+void assertEqual (const Neuron &lhs, const Neuron &rhs, bool deepcopy) {
+  using utils::assertEqual;
+  ASRT(m_activesum);
+  ASRT(m_activation);
+  ASRT(m_a);
+  ASRT(m_b);
+  ASRT(m_timeconst);
+  ASRT(m_bias);
+  ASRT(m_membrane_potential);
+  ASRT(m_activation_function_type);
+  ASRT(m_x);
+  ASRT(m_y);
+  ASRT(m_z);
+  ASRT(m_sx);
+  ASRT(m_sy);
+  ASRT(m_sz);
+  ASRT(m_substrate_coords);
+  ASRT(m_split_y);
+  ASRT(m_type);
+  ASRT(m_sensitivity_matrix);
+}
+
+void assertEqual (const NeuralNetwork &lhs, const NeuralNetwork &rhs,
+                  bool deepcopy) {
+  using utils::assertEqual;
+
+  ASRT(m_num_inputs);
+  ASRT(m_num_outputs);
+  ASRT(m_connections);
+  ASRT(m_neurons);
+}
+
+#undef ASRT
+} // end of namespace NEAT

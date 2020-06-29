@@ -1,10 +1,13 @@
 #include "foodlet.h"
 #include "environment.h"
+#include "box2dutils.h"
 
 #include "box2d/b2_circle_shape.h"
 #include "box2d/b2_fixture.h"
 
 namespace simu {
+
+Foodlet::Foodlet (uint id, b2Body *body) : _id(id), _body(*body) {}
 
 Foodlet::Foodlet(BodyType type, uint id, b2Body *body, float r, decimal e)
   : _id(id), _body(*body), _radius(r), _energy(e) {
@@ -76,6 +79,46 @@ void Foodlet::update(Environment &env) {
     env.modifyEnergyReserve(+de);
   }
   updateColor();
+}
+
+Foodlet* Foodlet::clone (const Foodlet *f, b2Body *b) {
+  Foodlet *this_f = new Foodlet(f->id(), b);
+
+#define COPY(X) this_f->X = f->X;
+  COPY(_radius);
+  COPY(_energy);
+  COPY(_maxEnergy);
+  COPY(_color);
+  COPY(_baseColor);
+  COPY(_userData);
+#undef COPY
+
+  b2Fixture *fxt = f->_body.GetFixtureList();
+  b2Fixture *this_fxt = Box2DUtils::clone(fxt, b);
+  this_fxt->SetUserData(&this_f->_color);
+
+  this_f->_userData.ptr.foodlet = this_f;
+  this_f->_body.SetUserData(&this_f->_userData);
+
+  assert(&f->_userData == f->_body.GetUserData());
+  assert(&this_f->_userData == b->GetUserData());
+  assert(f->_body.GetUserData() != this_f->_body.GetUserData());
+
+  return this_f;
+}
+
+void assertEqual (const Foodlet &lhs, const Foodlet &rhs, bool deepcopy) {
+  using utils::assertEqual;
+#define ASRT(X) assertEqual(lhs.X, rhs.X, deepcopy)
+  ASRT(_id);
+  ASRT(_body);
+  ASRT(_radius);
+  ASRT(_energy);
+  ASRT(_maxEnergy);
+  ASRT(_color);
+  ASRT(_baseColor);
+  ASRT(_userData);
+#undef ASRT
 }
 
 nlohmann::json Foodlet::save (const Foodlet &f) {

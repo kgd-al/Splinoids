@@ -83,8 +83,8 @@ void GraphicSimulation::step (void) {
 
   _timeLabel->setText(QString::number(_time.timestamp()) + " "
                       + QString::fromStdString(_time.pretty()));
-  _genLabel->setText("[" + QString::number(_minGen) + ";"
-                     + QString::number(_maxGen) + "]");
+  _genLabel->setText("[" + QString::number(_genData.min) + ";"
+                     + QString::number(_genData.max) + "]");
 
   _gstepTimeMs = durationFrom(start);
 }
@@ -110,13 +110,14 @@ void GraphicSimulation::processStats(const Stats &s) const {
   _stats->update("[E] Total",
                  float(s.eplants+s.ecorpses+s.ecritters+s.ereserve), 2);
 
+  const auto &st = _timeMs;
   _stats->update("[D] Visu    ", _gstepTimeMs, 0);
-  _stats->update( "[D] Simu   ", _stepTimeMs, 0);
-  _stats->update(  "[D] Spln  ", _splnTimeMs, 0);
-  _stats->update(  "[D] Env   ", _envTimeMs, 0);
+  _stats->update( "[D] Simu   ", st.step, 0);
+  _stats->update(  "[D] Spln  ", st.spln, 0);
+  _stats->update(  "[D] Env   ", st.env, 0);
   _stats->update(   "[D] Box2D", _environment->physics().GetProfile().step, 0);
-  _stats->update(  "[D] Decay ", _envTimeMs, 0);
-  _stats->update(  "[D] Regen ", _envTimeMs, 0);
+  _stats->update(  "[D] Decay ", st.decay, 0);
+  _stats->update(  "[D] Regen ", st.regen, 0);
 }
 
 void GraphicSimulation::addVisuCritter(simu::Critter *sc) {

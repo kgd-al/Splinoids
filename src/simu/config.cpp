@@ -16,6 +16,12 @@ P2D operator* (const P2D &p, real v) {
 
 } // end of namespace simu
 
+void assertEqual (const b2Vec2 &lhs, const b2Vec2 &rhs, bool deepcopy) {
+  using utils::assertEqual;
+  assertEqual(lhs.x, rhs.x, deepcopy);
+  assertEqual(lhs.y, rhs.y, deepcopy);
+}
+
 //namespace cnl {
 
 //void from_json (const nlohmann::json &j, simu::decimal &f) {
@@ -39,6 +45,7 @@ DEFINE_SUBCONFIG(PTree, configPhylogeny)
 
 DEFINE_PARAMETER(std::string, logFile, "stats.dat")
 DEFINE_PARAMETER(uint, logStatsEvery, 0)
+DEFINE_PARAMETER(int, verbosity, 1)
 
 DEFINE_PARAMETER(Color, emptyColor, utils::uniformStdArray<Color>(1))
 DEFINE_PARAMETER(Color, obstacleColor, utils::uniformStdArray<Color>(0))

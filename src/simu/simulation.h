@@ -6,7 +6,6 @@
 #include "critter.h"
 #include "foodlet.h"
 #include "environment.h"
-//#include "ssga.h"
 
 #include "time.h"
 #include "config.h"
@@ -17,21 +16,24 @@ namespace simu {
 
 class Simulation {
 protected:
+  std::unique_ptr<Environment> _environment;
+
   phylogeny::GIDManager _gidManager;
   std::set<Critter*> _critters;
 
   uint _nextFoodletID;
   std::set<Foodlet*> _foodlets;
 
-  std::unique_ptr<Environment> _environment;
-
-  Time _currTime;
+  Time _time;
   struct {
     uint min, max, goal;
+
+    bool goalReached (void) const {
+      return goal <= min;
+    }
   } _genData;
 
-//  SSGA _ssga;
-
+  bool _printedHeader;
   stdfs::path _workPath;
   std::ofstream _statsLogger;
 
@@ -40,11 +42,16 @@ protected:
 
   decimal _systemExpectedEnergy;
 
-  uint _stepTimeMs,
-        _splnTimeMs, _envTimeMs, _decayTimeMs, _regenTimeMs;
+  struct SubstepMonitor {
+    uint step, spln, env, decay, regen;
+    uint level;
+
+    SubstepMonitor (void)
+      : step(0), spln(0), env(0), decay(0), regen(0), level(0) {}
+  } _timeMs;
 
   struct ReproductionStats {
-    uint attempts = 0, sexual = 0, asexual = 0/*, ssga = 0*/;
+    uint attempts = 0, sexual = 0, asexual = 0;
   } _reproductions;
 
   struct Autopsies {
@@ -99,8 +106,11 @@ public:
   virtual ~Simulation (void);
 
   bool finished (void) const {
-    return _aborted || extinct()
-        || (_startTime < _endTime && _endTime <= _time);
+    return failed() || generationGoalReached();
+  }
+
+  bool failed (void) const {
+    return _aborted || extinct();
   }
 
   bool aborted (void) const {
@@ -112,7 +122,7 @@ public:
   }
 
   bool extinct (void) const {
-    return /*!_ssga.enabled() &&*/ _critters.empty();
+    return _critters.empty();
   }
 
   auto& environment (void) {
@@ -136,11 +146,23 @@ public:
   }
 
   auto minGeneration (void) const {
-    return _minGen;
+    return _genData.min;
   }
 
   auto maxGeneration (void) const {
-    return _maxGen;
+    return _genData.max;
+  }
+
+  bool generationGoalReached (void) const {
+    return _genData.goalReached();
+  }
+
+  enum struct GGoalModifier { SET = '=', ADD = '+' };
+  void setGenerationGoal (uint g, GGoalModifier m) {
+    switch (m) {
+    case GGoalModifier::SET: _genData.goal = g; break;
+    case GGoalModifier::ADD: _genData.goal = _genData.min + g; break;
+    }
   }
 
   const CompetitionStats& competitionStats (void) const {
@@ -190,8 +212,14 @@ public:
 
   decimal totalEnergy(void) const;
 
+  void mutateEnvController (rng::AbstractDice &dice) {
+    _environment->mutateController(dice);
+  }
+
+  void clone (const Simulation &s);
+
   stdfs::path periodicSaveName (void) const {
-    return periodicSaveName("./", _time, _minGen, _maxGen);
+    return periodicSaveName("./", _time, _genData.min, _genData.max);
   }
 
   static stdfs::path periodicSaveName(const stdfs::path &folder,
@@ -230,22 +258,44 @@ public:
     return std::chrono::duration_cast<D>(now() - start).count();
   }
 
-  static void swap (Simulation &lhs, Simulation &rhs) {
+  friend void swap (Simulation &lhs, Simulation &rhs) {
     using std::swap;
 
-    swap(lhs._gidManager, rhs._gidManager);
-    swap(lhs._critters, rhs._critters);
+#define SWAP(X) swap(lhs.X, rhs.X)
 
-    swap(lhs._nextFoodletID, rhs._nextFoodletID);
-    swap(lhs._foodlets, rhs._foodlets);
+    SWAP(_gidManager);
+    SWAP(_critters);
 
-    swap(lhs._environment, rhs._environment);
+    SWAP(_nextFoodletID);
+    SWAP(_foodlets);
 
-    swap(lhs._startTime, rhs._startTime);
-    swap(lhs._startTime, rhs._time);
-    swap(lhs._startTime, rhs._endTime);
+    SWAP(_environment);
+
+    SWAP(_time);
+    SWAP(_genData);
+
+    SWAP(_workPath);
+    SWAP(_statsLogger);
+
+    SWAP(_competitionLogger);
+    SWAP(_populations);
+
+    SWAP(_systemExpectedEnergy);
+
+    SWAP(_timeMs);
+    SWAP(_reproductions);
+    SWAP(_autopsies);
+    SWAP(_competitionStats);
+
+    SWAP(_aborted);
+
+#undef SWAP
   }
 
+#ifndef NDEBUG
+  void detectBudgetFluctuations (float threshold = config::Simulation::epsilonE);
+#else
+#endif
 protected:
   struct Stats {
     uint ncritters = 0, ncorpses = 0, nplants = 0;
@@ -277,11 +327,6 @@ private:
 
   // Compensate for variations in total energy
   void correctFloatingErrors (void);
-
-#ifndef NDEBUG
-  void detectBudgetFluctuations (float threshold = config::Simulation::epsilonE);
-#else
-#endif
 };
 
 } // end of namespace simu

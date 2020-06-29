@@ -1,6 +1,7 @@
-#include "critter.h"
+﻿#include "critter.h"
 #include "foodlet.h"
 #include "environment.h"
+#include "box2dutils.h"
 
 #include "../hyperneat/phenotype.h"
 
@@ -113,8 +114,19 @@ P2D pointAt (int t, const P2D &p0, const P2D &c0, const P2D &c1, const P2D &p1){
   }
 }
 
+// =============================================================================
+// == Top-level methods
+
+Critter::Critter (const Genome &g, b2Body *b) : _genotype(g), _body(*b) {
+  _objectUserData.type = BodyType::CRITTER;
+  _objectUserData.ptr.critter = this;
+  _body.SetUserData(&_objectUserData);
+
+  brainDead = false;
+}
+
 Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
-  : _genotype(g), _size(MIN_SIZE), _body(*body) {
+  : Critter(g, body) {
 
   static const decimal initEnergyRatio =
     1 + config::Simulation::healthToEnergyRatio();
@@ -128,7 +140,8 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
 
   if (age == 0) {
     _efficiency = 0;
-    _nextGrowthStep = nextGrowthStepAt(0);
+    _nextGrowthStep = nextGrowthStepAt(0);    
+    _size = MIN_SIZE;
 
   } else {
     _efficiency = efficiency(_age, matureAt(), _ec0Coeff, oldAt(), _ec1Coeff);
@@ -191,12 +204,6 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
 //                << splineMaxHealth(i) << "\n";
 //  std::cerr << std::endl;
   generateVisionRays();
-
-  _objectUserData.type = BodyType::CRITTER;
-  _objectUserData.ptr.critter = this;
-  _body.SetUserData(&_objectUserData);
-
-  brainDead = false;
 
   auto substrate = substrateFor(_raysEnd, _genotype.connectivity);
   _genotype.connectivity.BuildHyperNEATPhenotype(_brain, substrate);
@@ -266,7 +273,10 @@ void Critter::performVision(const Environment &env) {
     b2Fixture *closestContact;
     b2Body *self;
 
-    CritterVisionCallback (b2Body *self) : self(self) { assert(self); }
+    CritterVisionCallback (b2Body *self) : self(self) {
+      assert(self);
+      reset();
+    }
 
     void reset (void) {
       closestFraction = 1;
@@ -357,7 +367,9 @@ void Critter::neuralStep(Environment &env) {  ERR
     _neuralOutputs = _brain.Output();
 
     // Collect outputs
+#ifndef NDEBUG
     for (double &v: _neuralOutputs)  assert(0 <= v && v <= 1);
+#endif
     _motors[Motor::LEFT] = 2*_neuralOutputs[0]-1;
     _motors[Motor::RIGHT] = 2*_neuralOutputs[1]-1;
     _clockSpeed = clockSpeed(_neuralOutputs[2]);
@@ -605,12 +617,15 @@ void Critter::feed (Foodlet *f, float dt) {
   E = std::min(E, f->energy());
   E = std::min(E, storableEnergy());
 
-  if (debugMetabolism > 1)
-    std::cerr << "Transfering " << E << " = min(" << f->energy() << ", "
-              << storableEnergy() << ", " << dE << " * " << _clockSpeed
-              << " * " << _efficiency << " * " << dt << ") from " << f->id()
-              << " to " << CID(this) << " (" << f->energy()
-              << " remaining)" << std::endl;
+  if (debugMetabolism > 1) {
+    std::ostringstream oss;
+    oss << "Transfering " << E << " = min(" << f->energy() << ", "
+        << storableEnergy() << ", " << dE << " * " << _clockSpeed
+        << " * " << _efficiency << " * " << dt << ") from " << f->id() << "@"
+        << f << " to " << CID(this) << "@" << this << " (" << f->energy()
+        << " remaining)";
+    std::cerr << oss.str() << std::endl;
+  }
 
   _feedingSources[int(f->type())-1] += E;
   f->consumed(E);
@@ -983,7 +998,7 @@ void Critter::updateObjects(void) {
   if (_b2Body)  delFixture(_b2Body);
   _b2Body = addBodyFixture();
 
-  b2MassData massData;  // Wastefull but doesn't seem to be a way around
+  b2MassData massData;  // Wasteful but doesn't seem to be a way around
   _b2Body->GetMassData(&massData);
 //  get(_b2Body)->centerOfMass = massData.center;
   _masses[0] = massData.mass;
@@ -1322,5 +1337,135 @@ void Critter::saveBrain (const std::string &prefix) const {
   std::ofstream ann_ofs (ann_f);
   genotype::HyperNEAT::phenotypeToDat(ann_ofs, _brain);
 }
+
+Critter* Critter::clone(const Critter *c, b2Body *b) {
+  Critter *this_c = new Critter (c->genotype(), b);
+
+  const auto cloneFixtureData =
+      [] (Critter *newC, const Critter *oldC, b2Fixture *oldFixture) {
+    const FixtureData &d = oldC->_b2FixturesUserData.at(oldFixture);
+    const Color &c = (d.type == FixtureType::BODY ? newC->currentBodyColor()
+                                                  : newC->splineColor(d.sindex));
+    return FixtureData (d.type, c, d.sindex, d.sside, d.aindex);
+  };
+
+  assert(get(b) == &this_c->_objectUserData);
+  assert(get(&this_c->_body) == &this_c->_objectUserData);
+
+#define COPY(X) this_c->X = c->X
+
+  COPY(_visionRange);
+  COPY(_size);
+
+  COPY(_objectUserData);
+  COPY(_currentBodyColor);
+
+  COPY(_splinesData);
+
+  {
+    this_c->_b2Body = Box2DUtils::clone(c->_b2Body, b);
+    FixtureData d_ = cloneFixtureData(this_c, c, c->_b2Body);
+    auto pair = this_c->_b2FixturesUserData.emplace(this_c->_b2Body, d_);
+    this_c->_b2Body->SetUserData(&pair.first->second);
+  }
+
+  for (uint i=0; i<c->_b2Artifacts.size(); i++) {
+    for (b2Fixture *f: c->_b2Artifacts[i]) {
+      b2Fixture *f_ = Box2DUtils::clone(f, b);
+      this_c->_b2Artifacts[i].push_back(f_);
+      FixtureData d_ = cloneFixtureData(this_c, c, f);
+      auto pair = this_c->_b2FixturesUserData.emplace(f_, d_);
+      f_->SetUserData(&pair.first->second);
+    }
+  }
+  COPY(_masses);
+
+  COPY(_retina);
+  COPY(_raysStart);
+  COPY(_raysEnd);
+  COPY(_raysFraction);
+
+  COPY(_motors);
+  COPY(_clockSpeed);
+  COPY(_reproduction);
+
+  COPY(_brain);
+
+  COPY(_age);
+  COPY(_efficiency);
+  COPY(_ec0Coeff);
+  COPY(_ec1Coeff);
+  COPY(_nextGrowthStep);
+  COPY(_energy);
+
+  COPY(_reproductionReserve);
+  if (c->_reproductionSensor) {
+    this_c->_reproductionSensor = Box2DUtils::clone(c->_reproductionSensor, b);
+    auto pair = this_c->_b2FixturesUserData.emplace(this_c->_reproductionSensor,
+                                                    _reproUserData);
+    this_c->_reproductionSensor->SetUserData(&pair.first->second);
+  } else
+    this_c->_reproductionSensor = nullptr;
+
+  COPY(_currHealth);
+  COPY(_destroyed);
+
+  COPY(_feedingSources);
+  COPY(_neuralOutputs);
+
+  COPY(userIndex);
+
+#undef COPY
+  assert(this_c->totalEnergy() == c->totalEnergy());
+
+  this_c->_objectUserData.ptr.critter = this_c;
+
+  return this_c;
+}
+
+// =============================================================================
+
+#ifndef NDEBUG
+void assertEqual (const Critter &lhs, const Critter &rhs, bool deepcopy) {
+  using utils::assertEqual;
+#define ASRT(X) assertEqual(lhs.X, rhs.X, deepcopy)
+  ASRT(_genotype);
+  ASRT(_visionRange);
+  ASRT(_size);
+  ASRT(_body);
+  ASRT(_objectUserData);
+  ASRT(_currentBodyColor);
+  ASRT(_splinesData);
+  ASRT(_b2Body);
+  ASRT(_b2Artifacts);
+  ASRT(_b2FixturesUserData);
+  ASRT(_masses);
+  ASRT(_retina);
+  ASRT(_raysStart);
+  ASRT(_raysEnd);
+  ASRT(_raysFraction);
+  ASRT(_motors);
+  ASRT(_clockSpeed);
+  ASRT(_reproduction);
+  ASRT(_brain);
+  ASRT(_age);
+  ASRT(_efficiency);
+  ASRT(_ec0Coeff);
+  ASRT(_ec1Coeff);
+  ASRT(_nextGrowthStep);
+  ASRT(_energy);
+  ASRT(_reproductionReserve);
+  ASRT(_reproductionSensor);
+  ASRT(_currHealth);
+  ASRT(_feedingSources);
+  ASRT(_neuralOutputs);
+  ASRT(collisionObjects);
+  ASRT(brainDead);
+  ASRT(userIndex);
+
+  assertEqual(lhs._destroyed.to_ulong(), rhs._destroyed.to_ulong(), false);
+#undef ASRT
+}
+#endif
 
 } // end of namespace simu

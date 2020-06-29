@@ -141,7 +141,13 @@ public:
     return _dice;
   }
 
+  void mutateController (rng::AbstractDice &dice);
+
   static decimal dt(void);
+
+  static Environment* clone (const Environment &e);
+  friend void assertEqual (const Environment &lhs, const Environment &rhs,
+                           bool deepcopy);
 
   static void save (nlohmann::json &j, const Environment &e);
   static void load (const nlohmann::json &j, std::unique_ptr<Environment> &e);

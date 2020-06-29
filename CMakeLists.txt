@@ -14,6 +14,20 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
 
 
+option(WITH_DEBUG_INFO "Sets whether to maximize debug data collection" OFF)
+message("> With debug info " ${WITH_DEBUG_INFO})
+if(WITH_DEBUG_INFO)
+    add_definitions(-DWITH_DEBUG_INFO)
+
+    # Enable small memory error detector (fuse=gold fixes linker errors)
+#    set(ASAN "-fsanitize=thread")
+    set(ASAN "-fsanitize=address -fsanitize=undefined")
+    string(APPEND CMAKE_CXX_FLAGS " -g ${ASAN} -fno-omit-frame-pointer")
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        string(APPEND CMAKE_CXX_FLAGS " -fuse-ld=gold")
+    endif()
+endif()
+
 ################################################################################
 ## Multi-configuration installation path
 ################################################################################
@@ -81,24 +95,12 @@ set(SIMU_SRC
     "environment.cpp"
     "simulation.h"
     "simulation.cpp"
+    "box2dutils.h"
+    "box2dutils.cpp"
     "config.h"
     "config.cpp"
     "time.h"
     "time.cpp"
-    "ssga.h"
-    "ssga.cpp"
-#    "types.h"
-#    "types.cpp"
-#    "simulation.h"
-#    "simulation.cpp"
-#    "plant.h"
-#    "plant.cpp"
-#    "organ.h"
-#    "organ.cpp"
-#    "phylogenystats.hpp"
-#    "physicstypes.hpp"
-#    "tiniestphysicsengine.h"
-#    "tiniestphysicsengine.cpp"
 )
 PREPEND(SIMU_SRC "src/simu" ${SIMU_SRC})
 
@@ -190,7 +192,8 @@ if (OPENMP_FOUND)
     timelines
     $<TARGET_OBJECTS:SIMU_OBJS>
     "src/timelines.cpp")
-  target_link_libraries(timelines ${APOGeT_LIBRARIES} OpenMP::OpenMP_CXX)
+  target_link_libraries(timelines ${SIMU_LIBS} ${APOGeT_LIBRARIES}
+                        OpenMP::OpenMP_CXX)
 endif()
 
 #add_executable(
@@ -377,20 +380,6 @@ endif()
 #if(CLUSTER_BUILD)
 #    add_definitions(-DCLUSTER_BUILD)
 #endif()
-
-option(WITH_DEBUG_INFO "Sets whether to maximize debug data collection" OFF)
-message("> With debug info " ${WITH_DEBUG_INFO})
-if(WITH_DEBUG_INFO)
-    add_definitions(-DWITH_DEBUG_INFO)
-
-    # Enable small memory error detector (fuse=gold fixes linker errors)
-#    set(ASAN "-fsanitize=thread")
-    set(ASAN "-fsanitize=address -fsanitize=undefined")
-    string(APPEND CMAKE_CXX_FLAGS " -g ${ASAN} -fno-omit-frame-pointer")
-    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        string(APPEND CMAKE_CXX_FLAGS " -fuse-ld=gold")
-    endif()
-endif()
 
 #option(UPDATE_DEPENDENCIES "Whether or not to keep dependency data up-to-date
 #                            (implies extra compilation time)" ON)

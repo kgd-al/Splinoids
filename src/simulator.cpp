@@ -256,6 +256,7 @@ int main(int argc, char *argv[]) {
   simu::Simulation::printStaticStats();
 
   const uint years = 1000;
+  s.setGenerationGoal(generations, simu::Simulation::GGoalModifier::SET);
 
   auto start = simu::Simulation::now();
   std::cout << "Staring simulation for a max of " << generations
@@ -263,7 +264,6 @@ int main(int argc, char *argv[]) {
 
   uint saveEveryGen = 1, saveNextGen = 1;
   while (!s.finished()
-         && s.minGeneration() <= generations
          && s.currTime().year() < years
          && s.competitionStats().survivingPopulations() == cGenomes.size()) {
     if (aborted)  s.abort();

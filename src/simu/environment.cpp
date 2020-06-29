@@ -3,6 +3,7 @@
 #include "critter.h"
 #include "foodlet.h"
 #include "config.h"
+#include "box2dutils.h"
 
 namespace simu {
 
@@ -474,6 +475,11 @@ void Environment::maybeTeleport(Critter *c) {
 //              << p1 << std::endl;
 }
 
+void Environment::mutateController (rng::AbstractDice &dice) {
+  using T = rng::AbstractDice::Seed_t;
+  _dice.reset(dice(T(0), std::numeric_limits<T>::max()));
+}
+
 decimal Environment::dt (void) {
   static const decimal DT = 1.f / config::Simulation::ticksPerSecond();
   return DT;
@@ -488,6 +494,40 @@ void save (nlohmann::json &j, const rng::FastDice &d) {
 void load (const nlohmann::json &j, rng::FastDice &d) {
   std::istringstream iss (j.get<std::string>());
   deserialize(iss, d);
+}
+
+Environment *Environment::clone(const Environment &e) {
+  Environment *this_e = new Environment(e._genome);
+
+  assert(this_e->_feedingEvents.empty());
+  assert(this_e->_fightingEvents.empty());
+  assert(this_e->_matingEvents.empty());
+  assert(this_e->_edgeCritters.empty());
+
+  this_e->_energyReserve = e._energyReserve;
+
+  this_e->_dice = e._dice;
+
+  return this_e;
+}
+
+void assertEqual (const Environment &lhs, const Environment &rhs,
+                  bool deepcopy) {
+  using utils::assertEqual;
+
+#define ASRT(X) assertEqual(lhs.X, rhs.X, deepcopy)
+  ASRT(_genome);
+//  ASRT(_physics);
+//  ASRT(_cmonitor);
+  ASRT(_edges);
+  ASRT(_edgesUserData);
+//  ASRT(_feedingEvents);
+//  ASRT(_fightingEvents);
+//  ASRT(_matingEvents);
+//  ASRT(_edgeCritters);
+  ASRT(_energyReserve);
+  ASRT(_dice);
+#undef ASRT
 }
 
 void Environment::save (nlohmann::json &j, const Environment &e) {
