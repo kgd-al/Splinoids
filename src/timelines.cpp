@@ -47,62 +47,23 @@ struct EDEnSParameters {
 
 template <typename ...ARGS>
 std::string cpp_printf(const std::string &format, ARGS... args) {
-//  auto format = "your %x format %d string %s";
+//  auto size = std::snprintf(nullptr, 0, format.c_str(), args...) + 1;
+//  char *buffer = new char [size];
+//  std::snprintf(buffer, size, format.c_str(), args...);
+//  std::string s (buffer);
+//  delete[] buffer;
+//  return s;
   auto size = std::snprintf(nullptr, 0, format.c_str(), args...) + 1;
-//  std::cerr << "Format " << format << " returns a size of " << size << std::endl;
-  char *buffer = new char [size];
-  std::snprintf(buffer, size, format.c_str(), args...);
-  std::string s (buffer);
-  delete[] buffer;
-  return s;
+  std::string result (size, '\0');
+  std::snprintf(&result[0], size, format.c_str(), args...);
+  return result;
 }
-
-struct Format {
-  int width, precision;
-
-  using Flags = std::ios_base::fmtflags;
-  Flags flags;
-
-  Format (int w, int p, Flags f = Flags())
-    : width(w), precision(p), flags(f) {}
-
-  static Format string (int width) {
-    return Format (width, 0);
-  }
-
-  static Format integer (int width) {
-    return Format (width, 0, std::ios_base::fixed);
-  }
-
-  static Format decimal (int precision, bool neg = false) {
-    return Format (5+precision+neg, precision,
-                   std::ios_base::showpoint | ~std::ios_base::floatfield);
-  }
-
-  static Format save (std::ostream &os) {
-    return Format (0, os.precision(), os.flags());
-  }
-
-  template <typename T>
-  std::ostream& operator() (std::ostream &os, T v) const {
-    auto f = os.flags();
-    auto p = os.precision();
-    os << *this << v;
-    os.flags(f);
-    os.precision(p);
-    return os;
-  }
-
-  friend std::ostream& operator<< (std::ostream &os, const Format &f) {
-    os.setf(f.flags);
-    return os << std::setprecision(f.precision) << std::setw(f.width);
-  }
-};
 
 using Simulation = simu::Simulation;
 struct Alternative {
   uint index;
 
+  static const int fitnessLowerBound = -10;
   struct FitnessData {
     static std::array<float, 3> weights;
 
@@ -115,35 +76,35 @@ struct Alternative {
       means.fill(0);
       variances.fill(0);
       deviations.fill(0);
-      value = -1;
+      value = -fitnessLowerBound-1;
     }
 
-    void update (const std::set<simu::Critter*> &pop, uint initSize) {
+    void update (const std::set<simu::Critter*> &pop, uint minSize) {
       zero();
 
+      std::array<float, 2> plants {0}, corpses {0};
       for (const simu::Critter *c: pop) {
+        if (std::isnan(c->carnivorousBehavior())) continue;
         uint i = c->userIndex;
-        float cb = c->carnivorousBehavior();
-        if (std::isnan(cb)) continue;
+        const auto& fs = c->feedingSources();
+        plants[i] += fs[simu::BodyType::PLANT];
+        corpses[i] += fs[simu::BodyType::CORPSE];
         counts[i]++;
-        means[i] += cb;
+//        std::cerr << simu::CID(c)
+//                  << cpp_printf(" (%d, %03d) %g %g %g%%\n",
+//                                i, counts[i],
+//                                fs[simu::BodyType::PLANT],
+//                                fs[simu::BodyType::CORPSE],
+//          100 * fs[simu::BodyType::CORPSE] /
+//            (  fs[simu::BodyType::PLANT]
+//             + fs[simu::BodyType::CORPSE]));
+      }
+      for (uint i=0; i<2; i++) {
+        means[i] = corpses[i] / ((corpses[i]+plants[i]) * float(counts[i]));
+//        std::cerr << cpp_printf("Mean[%d] = %g = %g / (%g + %g)\n",
+//                                i, means[i], corpses[i], corpses[i], plants[i]);
       }
 
-      if (counts[0] == 0 && counts[1] == 0) {
-        value = -20;
-        return;
-      }
-
-      if (counts[0] == 0 || counts[1] == 0) {
-        value = -10;
-        return;
-      }
-
-      float penalty = 1;
-      if (counts[0] < .25 * initSize) penalty *= 2;
-      if (counts[1] < .25 * initSize) penalty *= 2;
-
-      for (uint i=0; i<2; i++)  means[i] /= counts[i];
 
       for (const simu::Critter *c: pop) {
         uint i = c->userIndex;
@@ -153,14 +114,28 @@ struct Alternative {
       }
 
       for (uint i=0; i<2; i++) {
-        variances[i] /= counts[i];
+        variances[i] /= float(counts[i]);
         deviations[i] = std::sqrt(variances[i]);
       }
 
-      value = weights[0] * std::fabs(means[0] - means[1])   // [0,1]
-            - weights[1] * deviations[0]                    // [0,.5]
-            - weights[2] * deviations[1];                   // [0,.5]
-      value /= penalty;
+      // Compute fitness
+      if (!std::isnan(means[0]) && !std::isnan(means[1]))
+        value = std::max(means[0], means[1]);
+      else if (std::isnan(means[0]) && std::isnan(means[1]))
+        value = fitnessLowerBound;
+      else if (std::isnan(means[0]))
+        value = means[1];
+      else if (std::isnan(means[1]))
+        value = means[0];
+
+//      value = weights[0] * std::fabs(means[0] - means[1])   // [0,1]
+//            - weights[1] * deviations[0]                    // [0,.5]
+//            - weights[2] * deviations[1];                   // [0,.5]
+
+      // Apply penalties
+      for (uint i=0; i<2; i++)
+        if (counts[i] < minSize)
+          value -= 2 - float(counts[i]) / minSize;
     }
 
     float operator() (void) const {
@@ -169,13 +144,8 @@ struct Alternative {
 
     struct FHeader {
       friend std::ostream& operator<< (std::ostream &os, const FHeader&) {
-//        return os << "C0 C1 M0 M1 D0 D1 F";
-        return os << cpp_printf(" %3s %5s %5s %3s %5s %5s %5s",
+        return os << cpp_printf(" %3s %7s %7s %3s %7s %7s %10s",
                                 "C0", "M0", "D0", "C1", "M1", "D1", "F");
-//        for (uint i=0; i<2; i++)
-//          os << "C" << i << " M" << i << " D" << i;
-//        os << "F";
-//        return os;
       }
     };
     static const FHeader header (void) {
@@ -183,31 +153,15 @@ struct Alternative {
     }
 
     friend std::ostream& operator<< (std::ostream &os, const FitnessData &d) {
-//      os
-//                << d.counts[0] << " " << d.counts[1] << " "
-//                << d.means[0] << " " << d.means[1] << " "
-//                << d.deviations[0] << " " << d.deviations[1] << " "
-//                << d.value << "\n";
-
-//      static const Format dformat = Format::integer(3);
-//      static const Format fformat = Format::decimal(3);
-
-//      Format oldos = Format::save(os);
-////      os << ">      |";
-//      for (uint i=0; i<2; i++)
-//        os << " " << dformat << d.counts[i] << " " << fformat << d.means[i]
-//           << " " << d.deviations[i];
-//      os << " " << d.value;
-//      os << oldos;
-//      return os;
-
       for (uint i=0; i<2; i++)
-        os << cpp_printf(" %03d %.3f %.3f", d.counts[i], d.means[i], d.deviations[i]);
-      os << cpp_printf(" %.3f", d.value);
+        os << cpp_printf(" %03d %.1e %.1e", d.counts[i],
+                         d.means[i], d.deviations[i]);
+      os << cpp_printf(" %+.3e", d.value);
       return os;
     }
 
   } fitness;
+  std::map<uint, FitnessData> fitnessHistory;
 
   Simulation simulation;
 
@@ -215,8 +169,13 @@ struct Alternative {
     fitness.zero();
   }
 
-  void updateFitness (uint initPopSize) {
-    fitness.update(simulation.critters(), initPopSize);
+  void clearFitnessHistory (void) {
+    fitnessHistory.clear();
+  }
+
+  void updateFitness (uint minPopSize) {
+    fitness.update(simulation.critters(), minPopSize);
+    fitnessHistory[simulation.minGeneration()] = fitness;
   }
 
   friend bool operator< (const Alternative &lhs, const Alternative &rhs) {
@@ -234,67 +193,6 @@ uint digits (uint number) {
 
 
 int main(int argc, char *argv[]) {
-//  int a = 0, b = 0;
-
-//#define TRY(X) \
-//  try { \
-//    X; \
-//    std::cerr << "Passed: " << #X << "\n"; \
-//  } catch (std::exception &e) { \
-//    std::cerr << "Failed: " << #X << " with " << e.what() << "\n"; \
-//  }
-
-//  TRY(utils::assertEqual(a, b, true));
-//  TRY(utils::assertEqual(a, b, false));
-//  TRY(utils::assertEqual(a, a, false));
-//  TRY(utils::assertDeepcopy(a, b));
-
-//  TRY(utils::assertEqual(a, a, true));
-//  TRY(utils::assertDeepcopy(a, a));
-//  exit(42);
-
-
-  {
-    rng::FastDice dice (0);
-
-
-    static const Format hformat = Format::string(3);
-    static const Format dformat = Format::integer(3);
-    static const Format fformat = Format::decimal(3);
-
-    for (uint i=0; i<10; i++)
-      std::cout << "H" << Format::integer(2) << i << " ";
-    std::cout << "\n";
-
-    for (uint i=0; i<10; i++) {
-      std::cout << hformat << string(dice(1,3), 'A') << " "
-                << string(dice(1,3), 'B');
-      for (uint j=2; j<5; j++)
-        std::cout << " " << fformat << dice(-9.f, 9.f);
-      std::cout << " " << dformat << dice(-10, 10);
-      for (uint j=7; j<10; j++)
-        std::cout << " " << fformat << dice(-10.f, 10.f);
-      std::cout << "\n";
-    }
-
-    for (uint i=0; i<10; i++)
-      std::cout << cpp_printf("H%02d ",  i);
-    std::cout << "\n";
-
-    for (uint i=0; i<10; i++) {
-      string sA (dice(1,3), 'A');
-      string sB (dice(1,3), 'B');
-      std::cout << cpp_printf("%3s %3s %6.3f %6.3f %03ud %+03d %7.3f %7.3f %7.3f\n",
-                              sA.c_str(), sB.c_str(),
-                              dice(-9.f, 9.f), dice(-9.f, 9.f),
-                              dice(0u, 10u), dice(-10, 10),
-                              dice(-10.f, 10.f), dice(-10.f, 10.f), dice(-10.f, 10.f));
-    }
-
-//    exit (42);
-  }
-
-
   using CGenome = genotype::Critter;
   using EGenome = genotype::Environment;
 
@@ -327,8 +225,7 @@ int main(int argc, char *argv[]) {
   EDEnSParameters params {};
   int parallel = -1;
 
-  decltype(Alternative::FitnessData::weights) fitnessWeights;
-  fitnessWeights.fill(1);
+  std::string fitnessWeightsArg;
 
   cxxopts::Options options("Splinoids (headless)",
                            "2D simulation of critters in a changing environment");
@@ -378,8 +275,8 @@ int main(int argc, char *argv[]) {
     ("edens-seed", "Seed for EDEnS-related rolls",
      cxxopts::value(params.edensSeed))
 
-//    ("fitness-weights", "Weights",
-//     cxxopts::value(fitnessWeights))
+    ("fitness-weights", "Weights as a single space-delimited argument",
+     cxxopts::value(fitnessWeightsArg))
     ;
 
   auto result = options.parse(argc, argv);
@@ -566,6 +463,17 @@ int main(int argc, char *argv[]) {
             << " epochs of " << params.epochLength << " generations each using "
             << parallel << " cores" << std::endl;
 
+  if (!fitnessWeightsArg.empty()) {
+    std::istringstream iss (fitnessWeightsArg);
+    auto &w = Alternative::FitnessData::weights;
+    iss >> w[0] >> w[1] >> w[2];
+    for (float f: w)
+      if (f < 0 || 10 < f)
+        utils::doThrow<std::invalid_argument>(
+          "Fitness weights '", fitnessWeightsArg, "' are invalid: error on ",
+          f);
+  }
+
   rng::FastDice dice (params.edensSeed);
 
   Population alternatives;
@@ -584,6 +492,7 @@ int main(int argc, char *argv[]) {
   // ===========================================================================
   // == EDEnS
 
+  uint minPopSize = .25 * idata.nCritters;
   do {
     epochHeader(params.currEpoch);
 
@@ -604,12 +513,28 @@ int main(int argc, char *argv[]) {
 
     // Execute alternative simulations in parallel
     #pragma omp parallel for schedule(dynamic)
-    for (uint a=0; a<params.branching; a++) {
-      Simulation &s = alternatives[a].simulation;
+    for (uint ia=0; ia<params.branching; ia++) {
+      Alternative &a = alternatives[ia];
+      Simulation &s = a.simulation;
 
-      while (!s.finished() && !aborted) s.step();
+      a.clearFitnessHistory();
 
-      alternatives[a].updateFitness(idata.nCritters);
+      uint minGen = s.minGeneration();
+      while (!s.finished() && !aborted) {
+        s.step();
+        if (minGen < s.minGeneration()) {
+          minGen = s.minGeneration();
+          a.updateFitness(minPopSize);
+          s.save();
+        }
+      }
+
+      a.updateFitness(minPopSize);
+
+      std::ofstream ofs (s.workPath() / "fitnesses.dat");
+      ofs << "G" << Alternative::FitnessData::header() << "\n";
+      for (const auto &p: a.fitnessHistory)
+        ofs << p.first << p.second << "\n";
     }
 
     for (uint i=0; i<aindices.size(); i++)  aindices[i] = i;
@@ -639,7 +564,8 @@ int main(int argc, char *argv[]) {
                 << "\n";
     }
 
-    if (reality->simulation.extinct()) {
+    if (reality->simulation.extinct()
+        || reality->fitness() < Alternative::fitnessLowerBound) {
       reality = nullptr;
       break;
     }

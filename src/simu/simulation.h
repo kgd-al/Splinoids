@@ -219,7 +219,7 @@ public:
   void clone (const Simulation &s);
 
   stdfs::path periodicSaveName (void) const {
-    return periodicSaveName("./", _time, _genData.min, _genData.max);
+    return periodicSaveName(_workPath, _time, _genData.min, _genData.max);
   }
 
   static stdfs::path periodicSaveName(const stdfs::path &folder,
@@ -238,7 +238,7 @@ public:
                                const nlohmann::json &jfoodlets,
                                bool updateTree);
 
-  void save (stdfs::path file) const;
+  void save (stdfs::path file = "") const;
   static void load (const stdfs::path &file, Simulation &s,
                     const std::string &constraints, const std::string &fields);
 

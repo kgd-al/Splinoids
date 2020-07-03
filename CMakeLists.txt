@@ -101,6 +101,8 @@ set(SIMU_SRC
     "config.cpp"
     "time.h"
     "time.cpp"
+
+    "../enumarray.hpp"
 )
 PREPEND(SIMU_SRC "src/simu" ${SIMU_SRC})
 

@@ -10,6 +10,8 @@
 
 #include "../../MultiNEAT/src/NeuralNetwork.h"
 
+#include "../enumarray.hpp"
+
 DEFINE_PRETTY_ENUMERATION(Motor, LEFT = -1, RIGHT = 1)
 
 namespace simu {
@@ -179,7 +181,10 @@ private:
   std::bitset<2*SPLINES_COUNT> _destroyed;
 
   // To monitor feeding behavior
-  std::array<float, 2> _feedingSources;
+  using FeedingSources = utils::enumarray<float, BodyType,
+                                                  BodyType::PLANT,
+                                                  BodyType::CORPSE>;
+  FeedingSources _feedingSources;
 
   // To monitor behavior
   std::vector<double> _neuralOutputs;
@@ -460,10 +465,14 @@ public:
     return _brain;
   }
 
+  const auto& feedingSources (void) const {
+    return _feedingSources;
+  }
+
   float carnivorousBehavior (void) const {
     float total = 0;
     for (float f: _feedingSources)  total += f;
-    return _feedingSources[int(BodyType::CORPSE)-1] / total;
+    return _feedingSources[BodyType::CORPSE] / total;
   }
 
   bool applyHealthDamage(const FixtureData &d, float amount, Environment &env);

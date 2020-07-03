@@ -246,6 +246,8 @@ void Simulation::init(const Environment::Genome &egenome,
     uint bindex = i%_populations;
     auto cg = cgenomes[bindex].clone(_gidManager);
     cg.cdata.sex = (i%2 ? Critter::Sex::MALE : Critter::Sex::FEMALE);
+    cg.gdata.generation = 0;
+
     float a = dice(0., 2*M_PI);
     float x = dice(-C, C);
     float y = dice(-C, C);
@@ -260,14 +262,6 @@ void Simulation::init(const Environment::Genome &egenome,
 
     Critter *c = addCritter(cg, x, y, a, energyPerCritter);
     c->userIndex = bindex;
-
-    if (i == 0) {
-      _genData.min = cg.genealogy().generation;
-      _genData.max = cg.genealogy().generation;
-    } else {
-      _genData.min = std::min(_genData.min, cg.genealogy().generation);
-      _genData.max = std::max(_genData.max, cg.genealogy().generation);
-    }
   }
 
   _nextFoodletID = 0;
@@ -886,6 +880,7 @@ std::string field (SimuFields f) {
 
 void Simulation::save (stdfs::path file) const {
   auto startTime = clock::now();
+  if (file.empty()) file = periodicSaveName();
 
   nlohmann::json jconf, jenv, jcrit, jfood;//, jt;
   config::Simulation::serialize(jconf);

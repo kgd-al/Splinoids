@@ -627,7 +627,7 @@ void Critter::feed (Foodlet *f, float dt) {
     std::cerr << oss.str() << std::endl;
   }
 
-  _feedingSources[int(f->type())-1] += E;
+  _feedingSources[f->type()] += E;
   f->consumed(E);
 
   assert(0 <= E && E <= storableEnergy());
@@ -1425,7 +1425,16 @@ Critter* Critter::clone(const Critter *c, b2Body *b) {
 
 // =============================================================================
 
+
 #ifndef NDEBUG
+template <typename V, typename E, E ...INDICES>
+void assertEqual (const utils::enumarray<V, E, INDICES...> &lhs,
+                  const utils::enumarray<V, E, INDICES...> &rhs,
+                  bool deepcopy) {
+  using utils::assertEqual;
+  assertEqual(lhs._buffer, rhs._buffer, deepcopy);
+}
+
 void assertEqual (const Critter &lhs, const Critter &rhs, bool deepcopy) {
   using utils::assertEqual;
 #define ASRT(X) assertEqual(lhs.X, rhs.X, deepcopy)
