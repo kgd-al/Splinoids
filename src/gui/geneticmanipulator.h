@@ -83,6 +83,10 @@ public:
 
   void keyReleaseEvent(QKeyEvent *e) override;
 
+  void toggleShow (void) {
+    setVisible(!isVisible());
+  }
+
   void toggleReadOnly (void) {
     _readonly = !_readonly;
     setReadOnly(_readonly);

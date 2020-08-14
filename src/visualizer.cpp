@@ -48,6 +48,7 @@ int main(int argc, char *argv[]) {
   idata.cRange = .25;
   idata.pRange = 1;
   idata.seed = -1;
+  idata.cAge = 0;
 
   int startspeed = 1;
 
@@ -87,8 +88,10 @@ int main(int argc, char *argv[]) {
      cxxopts::value(idata.pRange))
     ("i-crange", "Region in which initial splinoids are placed",
      cxxopts::value(idata.cRange))
-    ("sratio", "Initial fraction of energy devoted to the splinoids",
+    ("i-sratio", "Initial fraction of energy devoted to the splinoids",
      cxxopts::value(idata.cRatio))
+    ("i-age", "Initial age of splinoids population",
+     cxxopts::value(idata.cAge))
 
     ("start", "Whether to start running immendiatly after initialisation"
               " (and optionally at which speed > 1)",

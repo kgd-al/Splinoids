@@ -141,7 +141,7 @@ public:
     return _dice;
   }
 
-  void mutateController (rng::AbstractDice &dice);
+  void mutateController (rng::AbstractDice &dice, float r);
 
   static decimal dt(void);
 

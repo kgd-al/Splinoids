@@ -6,9 +6,12 @@
 #include <QSpinBox>
 #include <QFormLayout>
 #include <QSignalMapper>
+#include <QKeyEvent>
+#include <QMouseEvent>
 
 #include "kgd/external/cxxopts.hpp"
 
+#include "gui/geneticmanipulator.h"
 #include "misc/watchmaker_classes.h"
 
 #include <QDebug>
@@ -28,6 +31,40 @@ long maybeSeed(const std::string& s) {
   long l = strtol(s.c_str(), &p, 10);
   return p? l : -2;
 }
+
+struct EventManager : public QObject {
+  gui::GeneticManipulator &manip;
+
+  EventManager (gui::GeneticManipulator &m) : manip(m) {}
+
+  bool eventFilter (QObject *watched, QEvent *event) {
+//    QDebug q = qDebug();
+//    q << watched << event;
+
+    switch (event->type()) {
+    case QEvent::KeyRelease: {
+      QKeyEvent *ke = static_cast<QKeyEvent*>(event);
+      if (ke->key() == Qt::Key_C) {
+        manip.toggleShow();
+        return true;
+      }
+      break;
+    }
+    case QEvent::MouseButtonRelease: {
+      QMouseEvent *me = static_cast<QMouseEvent*>(event);
+      SplinoidButton *b = dynamic_cast<SplinoidButton*>(watched);
+      if (b && me->button() == Qt::RightButton) {
+        manip.setSubject(b->critter);
+        manip.show();
+        return true;
+      }
+      break;
+    }
+    default: break;
+    }
+    return false;
+  }
+};
 
 int main(int argc, char *argv[]) {  
   // To prevent missing linkages
@@ -103,6 +140,12 @@ int main(int argc, char *argv[]) {
   QMainWindow w;
   w.setWindowTitle("Splinoids (watchmaker)");
 
+  gui::GeneticManipulator *manip = new gui::GeneticManipulator (&w);
+
+  EventManager manager (*manip);
+  w.installEventFilter(&manager);
+  manip->installEventFilter(&manager);
+
   // ===========================================================================
   // == Simulation setup
 
@@ -130,6 +173,7 @@ int main(int argc, char *argv[]) {
     const Genome base = sender->critter->object().genotype();
 
     buttons[mid][mid]->setGenome(s, base);
+    manip->setSubject(buttons[mid][mid]->female->critter);
 
     uint mutations = mutationsCount->value();
     for (uint i=0; i<N; i++) {
@@ -157,11 +201,13 @@ int main(int argc, char *argv[]) {
         mapper.setMapping(b, b);
         QObject::connect(b, &SplinoidButton::clicked,
                          &mapper, qOverload<>(&QSignalMapper::map));
+        b->installEventFilter(&manager);
       }
     }
   }
 
   buttons[mid][mid]->setGenome(s, genome);
+  manip->setSubject(buttons[mid][mid]->female->critter);
 
   QWidget *bholder = new QWidget;
   auto *rlayout = new QFormLayout;
@@ -176,6 +222,8 @@ int main(int argc, char *argv[]) {
   w.setCentralWidget(vsplitter);
 
   w.show();
+  buttons[mid][mid]->female->setFocus();
+
   auto ret = a.exec();
 
   return ret;

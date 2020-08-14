@@ -260,7 +260,7 @@ void Simulation::init(const Environment::Genome &egenome,
 //    if (i == 1) x = 47, y = 50-sqrt(2), a = M_PI/2;
 //    if (i == 2) x = 50-sqrt(2), y = 47, a = 0;
 
-    Critter *c = addCritter(cg, x, y, a, energyPerCritter);
+    Critter *c = addCritter(cg, x, y, a, energyPerCritter, data.cAge);
     c->userIndex = bindex;
   }
 
@@ -342,11 +342,11 @@ Critter* Simulation::addCritter (const CGenome &genome,
     e * .5 *(1 - config::Simulation::healthToEnergyRatio());
   decimal e_ = e - dissipatedEnergy;
 
-  /// ERROR This should not happen for reproduction...
   _environment->modifyEnergyReserve(-e_);
 
   Critter *c = new Critter (genome, body, e_, age);
   _critters.insert(c);
+
 
 #ifndef NDEBUG
   decimal e__ = c->totalEnergy();
@@ -365,6 +365,11 @@ Critter* Simulation::addCritter (const CGenome &genome,
               << c->pos() << std::endl;
 
 //  if (_ssga.watching()) _ssga.registerBirth(c);
+
+  if (age > 0) {
+    e_ = c->setAtMaxHealth();
+    _environment->modifyEnergyReserve(-e_);
+  }
 
   return c;
 }
@@ -615,15 +620,22 @@ void Simulation::plantRenewal(float bounds) {
                     MR = config::Simulation::plantMaxRadius();
   static const auto minE = Foodlet::maxStorage(BodyType::PLANT, mR);
 
+  const decimal mvp = _environment->genotype().maxVegetalPortion
+                    * _systemExpectedEnergy;
+  decimal vp = 0;
+  for (const Foodlet *f: _foodlets) if (f->isPlant()) vp += f->energy();
+
   // Maybe pop-up a new plant
   auto &dice = _environment->dice();
-  while (_environment->energy() > minE) {
+  while (_environment->energy() > minE && vp < mvp) {
     float r = dice(mR, MR);
-    decimal e = std::min(_environment->energy(),
-                         Foodlet::maxStorage(BodyType::PLANT, r));
+    decimal e = std::min(
+                  std::min(_environment->energy(), mvp-vp),
+                  Foodlet::maxStorage(BodyType::PLANT, r));
     float E = (bounds > 0 ? bounds : _environment->extent()) - r;
     addFoodlet(BodyType::PLANT, dice(-E, E), dice(-E, E), r, e);
 
+    vp += e;
     assert(_environment->energy() >= 0);
   }
 }

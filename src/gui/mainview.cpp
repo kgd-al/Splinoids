@@ -8,6 +8,7 @@
 #include "kgd/apt/visu/graphicsviewzoom.h"
 
 #include "mainview.h"
+#include "actionsbuilder.hpp"
 
 #include "geneticmanipulator.h"
 #include "../visu/config.h"
@@ -17,68 +18,13 @@ namespace gui {
 // =============================================================================
 // == Actions managment
 
-namespace details {
-
-struct BoolAction : public QAction {
-  bool &value;
-  BoolAction (const QString &name, QWidget *parent, bool &v)
-    : QAction(name, parent), value(v) {
-
-    setCheckable(true);
-    setChecked(value);
-
-    connect(this, &QAction::triggered, this, &BoolAction::toggle);
-  }
-
-  void toggle (void) {
-    value = !value;
-  }
-};
-
-template <typename T>
-struct EnumAction : public QAction {
-  T &value;
-  QString details;
-
-  using Incrementer = std::function<T(T)>;
-  const Incrementer incrementer;
-
-  using Formatter = std::function<std::ostream&(std::ostream&, const T&)>;
-  const Formatter formatter;
-
-  EnumAction (const QString &name, const QString &details, QWidget *parent,
-              T &v, Incrementer i, Formatter f)
-    : QAction(name, parent),
-      value(v), details(details), incrementer(i), formatter(f) {
-
-    connect(this, &QAction::triggered, this, &EnumAction::next);
-    updateStatus();
-  }
-
-  void next (void) {
-    value = incrementer(value);
-    updateStatus();
-  }
-
-  void updateStatus (void) {
-    std::ostringstream oss;
-    oss << details.toStdString()
-        << "; Current status for " << text().toStdString() << ": ";
-    formatter(oss, value);
-    oss << ")";
-    setStatusTip(QString::fromStdString(oss.str()));
-  }
-};
-
-} // end of namespace details
-
 template <typename F>
 void MainView::addBoolAction (QMenu *m, const QString &iname,
                               const QString &name, const QString &details,
                               QKeySequence k, F f, bool &v) {
 
   addAction(m,
-            new details::BoolAction (name, this, v),
+            new helpers::BoolAction (name, this, v),
             iname, details, k, f);
 }
 
@@ -99,7 +45,7 @@ void MainView::addEnumAction (QMenu *m, const QString &iname,
                               const Inc<T> &next, const Fmt<T> &format) {
 
   addAction(m,
-            new details::EnumAction<T>(name, details, this, v, next, format),
+            new helpers::EnumAction<T>(name, details, this, v, next, format),
             iname, details, k, f);
 }
 

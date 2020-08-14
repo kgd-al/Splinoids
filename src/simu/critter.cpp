@@ -209,6 +209,8 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
   _genotype.connectivity.BuildHyperNEATPhenotype(_brain, substrate);
 
   _feedingSources.fill(0);
+
+  userIndex = 0;
 }
 
 
@@ -483,6 +485,7 @@ void Critter::regeneration (Environment &env) {
   decimal mh = 0;
   for (uint i=0; i<2*SPLINES_COUNT+1; i++) {
     mhA[i] = _masses[i] - _currHealth[i];
+    utils::iclip_min(0., mhA[i]);
     assert(mhA[i] >= 0);
     mh += mhA[i];
   }
@@ -637,6 +640,26 @@ void Critter::feed (Foodlet *f, float dt) {
 #undef ERR
 
 // =============================================================================
+// == Helper routines
+
+decimal Critter::setAtMaxHealth (void) {
+  decimal requiredEnergy = 0;
+
+  for (uint i=0; i<2*SPLINES_COUNT+1; i++) {
+    const auto H = _masses[i];
+    if (H > 0) {
+      auto &h = _currHealth[i];
+      auto diff = H - h;
+      if (i == 0) diff *= config::Simulation::healthToEnergyRatio();
+      requiredEnergy += diff;
+      h = H;
+    }
+  }
+
+  return requiredEnergy;
+}
+
+// =============================================================================
 // == Internal shape-defining routines
 
 
@@ -669,7 +692,10 @@ void Critter::generateSplinesData (float r, float e, const Genome &g,
     sd.ar0 = d[S::SA] - W0_RANGE * d[S::W0];
     sd.pr0 = fromPolar(sd.ar0, r);
 
-    sd.p1 = fromPolar(d[S::SA] + d[S::EA], w * (r + d[S::EL]));
+    // First version produces less internal artifacts
+    sd.p1 = fromPolar(d[S::SA] + d[S::EA], r + w * d[S::EL]);
+//    sd.p1 = p0 + fromPolar(d[S::EA], w * d[S::EL]);
+
     P2D v = sd.p1 - p0;
     P2D t (-v.y, v.x);
 
@@ -691,7 +717,7 @@ void Critter::generateSplinesData (float r, float e, const Genome &g,
 
 #undef SET
 
-// Taken straight from b2_polygon.cpp
+// Taken straight from b2_polygon_shape.cpp (combines multiple functions)
 // Modified to return bool instead of asserting
 bool box2dValidPolygon(const b2Vec2* vertices, int32 count) {
   b2Assert(3 <= count && count <= b2_maxPolygonVertices);
@@ -801,27 +827,33 @@ bool box2dValidPolygon(const b2Vec2* vertices, int32 count) {
     return false;
   }
 
-//  m_count = m;
+  // ===================================
+  // Check that polygon is large enough
+  int vs_count = m;
+  b2Vec2 c; c.Set(0.0f, 0.0f);
+  float area = 0.0f;
+  b2Vec2 pRef(0.0f, 0.0f);
+  const float inv3 = 1.0f / 3.0f;
+  for (int32 i = 0; i < vs_count; ++i) {
+    // Triangle vertices.
+    b2Vec2 p1 = pRef;
+    b2Vec2 p2 = ps[hull[i]];
+    b2Vec2 p3 = i + 1 < vs_count ? ps[hull[i+1]] : ps[hull[0]];
 
-//  // Copy vertices.
-//  for (int32 i = 0; i < m; ++i)
-//  {
-//    m_vertices[i] = ps[hull[i]];
-//  }
+    b2Vec2 e1 = p2 - p1;
+    b2Vec2 e2 = p3 - p1;
 
-//  // Compute normals. Ensure the edges have non-zero length.
-//  for (int32 i = 0; i < m; ++i)
-//  {
-//    int32 i1 = i;
-//    int32 i2 = i + 1 < m ? i + 1 : 0;
-//    b2Vec2 edge = m_vertices[i2] - m_vertices[i1];
-//    b2Assert(edge.LengthSquared() > b2_epsilon * b2_epsilon);
-//    m_normals[i] = b2Cross(edge, 1.0f);
-//    m_normals[i].Normalize();
-//  }
+    float D = b2Cross(e1, e2);
 
-//  // Compute the polygon centroid.
-//  m_centroid = ComputeCentroid(m_vertices, m);
+    float triangleArea = 0.5f * D;
+    area += triangleArea;
+
+    // Area weighted centroid
+    c += triangleArea * inv3 * (p1 + p2 + p3);
+  }
+
+  // Centroid
+  if (area <= b2_epsilon) return false;
 
   return true;
 }
@@ -1313,7 +1345,7 @@ nlohmann::json Critter::save (const Critter &c) {
   simu::save(jb, c._brain);
   return nlohmann::json {
     c._genotype, jb, c._energy, c._age, c._reproductionReserve,
-    c._currHealth, c._destroyed.to_string()
+    c._currHealth, c._destroyed.to_string(), c.userIndex
   };
 }
 
@@ -1324,6 +1356,7 @@ Critter* Critter::load (const nlohmann::json &j, b2Body *body) {
   c->_reproductionReserve = j[4];
   c->_currHealth = j[5];
   c->_destroyed = decltype(c->_destroyed)(j[6].get<std::string>());
+  c->userIndex = j[7];
 
   return c;
 }

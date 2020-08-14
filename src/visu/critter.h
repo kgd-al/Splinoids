@@ -99,6 +99,8 @@ public:
   void doPaint (QPainter *painter) const;
 
   void saveGenotype (const QString &filename) const;
+
+  QPixmap renderPhenotype (void) const;
   void printPhenotype (const QString &filename) const;
 
 signals:

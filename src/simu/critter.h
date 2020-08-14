@@ -453,6 +453,8 @@ public:
     return _currHealth;
   }
 
+  decimal setAtMaxHealth (void);
+
   auto activeSpline (uint i, Side s) const {
     return splineMaxHealth(i, s) > 0;
   }

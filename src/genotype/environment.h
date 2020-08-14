@@ -10,10 +10,13 @@ class Environment : public EDNA<Environment> {
 public:
   int size;
   int taurus;
+
+  float maxVegetalPortion;
 };
 
 DECLARE_GENOME_FIELD(Environment, int, size)
 DECLARE_GENOME_FIELD(Environment, int, taurus)
+DECLARE_GENOME_FIELD(Environment, float, maxVegetalPortion)
 
 } // end of namespace genotype
 
@@ -23,6 +26,7 @@ template <>
 struct EDNA_CONFIG_FILE(Environment) {
   DECLARE_PARAMETER(Bounds<int>, sizeBounds)
   DECLARE_PARAMETER(Bounds<int>, taurusBounds)
+  DECLARE_PARAMETER(Bounds<float>, maxVegetalPortionBounds)
 
   DECLARE_PARAMETER(MutationRates, mutationRates)
   DECLARE_PARAMETER(DistanceWeights, distanceWeights)

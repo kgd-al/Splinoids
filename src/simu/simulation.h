@@ -87,6 +87,7 @@ public:
     float cRatio;   // Portion of initial energe alloted to critters
 
     uint nCritters; // Initial number of critters
+    float cAge;     // Initial critter age [0,1]
 
     float cRange;   // Critters initial coordinates are in [-range,range]^2
     float pRange;   // Plants initial coordinates are in [-range,range]^2
@@ -94,8 +95,8 @@ public:
     int seed;
 
     InitData (void) : ienergy(1000), cRatio(.5),
-                      nCritters(ienergy*cRatio/2),
-                      cRange (10), pRange(20), seed(-1) {}
+                      nCritters(ienergy*cRatio/2), cAge(0),
+                      cRange(10), pRange(20), seed(-1) {}
   };
 
   using CGenome = Critter::Genome;
@@ -212,8 +213,8 @@ public:
 
   decimal totalEnergy(void) const;
 
-  void mutateEnvController (rng::AbstractDice &dice) {
-    _environment->mutateController(dice);
+  void mutateEnvController (rng::AbstractDice &dice, float r) {
+    _environment->mutateController(dice, r);
   }
 
   void clone (const Simulation &s);

@@ -279,6 +279,7 @@ if (NOT CLUSTER_BUILD)
     set(GUI_SRC
         "mainview.h"
         "mainview.cpp"
+        "actionsbuilder.hpp"
         "geneticmanipulator.h"
         "geneticmanipulator.cpp"
         "statsview.h"

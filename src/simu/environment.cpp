@@ -475,9 +475,23 @@ void Environment::maybeTeleport(Critter *c) {
 //              << p1 << std::endl;
 }
 
-void Environment::mutateController (rng::AbstractDice &dice) {
+void Environment::mutateController (rng::AbstractDice &dice, float r) {
   using T = rng::AbstractDice::Seed_t;
   _dice.reset(dice(T(0), std::numeric_limits<T>::max()));
+
+//  using Config = genotype::Environment::config_t;
+//  static const auto &bounds = Config::maxVegetalPortionBounds();
+//  using MO = std::remove_cv_t<std::remove_reference_t<decltype(bounds)>>::Operators;
+
+  const float max = .2, mmax = .025;
+  const float min = .0;
+//  float er = (1 - r) * (max - min) + min;
+//  _genome.maxVegetalPortion = std::min(_genome.maxVegetalPortion, er);
+//  MO::mutate(_genome.maxVegetalPortion, bounds.min, bounds.max, dice);
+
+  static const float inertia = 0;
+  _genome.maxVegetalPortion = (1-inertia) * dice(0.f, (1-r)*(max-mmax)+mmax)
+                            + inertia * _genome.maxVegetalPortion;
 }
 
 decimal Environment::dt (void) {

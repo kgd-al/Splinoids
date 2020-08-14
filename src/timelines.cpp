@@ -496,17 +496,22 @@ int main(int argc, char *argv[]) {
   do {
     epochHeader(params.currEpoch);
 
+    float r = float(params.currEpoch) / (float(params.epochsCount)-1.f);
+
     // Populate next epoch from current best alternative
     #pragma omp parallel for schedule(dynamic)
     for (uint a=0; a<params.branching; a++) {
       Simulation &s = alternatives[a].simulation;
       if (winner != a)  s.clone(reality->simulation);
-      if (a > 0) s.mutateEnvController(dice);
+      if (a > 0) s.mutateEnvController(dice, r);
 
       // Prepare data folder and set durations
       s.setWorkPath(alternativeDataFolder(params.currEpoch, a),
                     Simulation::Overwrite::ABORT);
       s.setGenerationGoal(params.epochLength, Simulation::GGoalModifier::ADD);
+
+      std::ofstream ofs (s.workPath() / "env.dat");
+      ofs << s.environment().genotype().maxVegetalPortion << "\n";
     }
 
     // Join here to ensure all copies have been made
@@ -603,5 +608,5 @@ int main(int argc, char *argv[]) {
   std::cout << mseconds << "ms" << std::endl;
 
 //  s.destroy();
-  return 0;
+  return aborted;
 }

@@ -515,18 +515,26 @@ void Critter::printPhenotype (const QString &filename) const {
     qDebug() << "Unmanaged extension for filename" << filename;
 }
 
-void Critter::printPhenotypePng (const QString &filename) const {
+QPixmap Critter::renderPhenotype(void) const {
   static const float Z = config::Visualisation::viewZoom();
   const QRectF &r = _minimalBoundingRect;
   float W = r.height() * Z, H = r.width() * Z;
+
   QPixmap pixmap (W, H);
   pixmap.fill(Qt::transparent);
+
   QPainter painter (&pixmap);
   painter.setRenderHint(QPainter::Antialiasing, true);
   painter.translate(.5*r.height()*Z, r.right()*Z);
   painter.rotate(-90);
   painter.scale(Z, Z);
   doPaint(&painter);
+
+  return pixmap;
+}
+
+void Critter::printPhenotypePng (const QString &filename) const {
+  QPixmap pixmap = renderPhenotype();
   qDebug() << "Critter bounding rects are:";
   qDebug() << "\tminimal: " << _minimalBoundingRect;
   qDebug() << "Pixmap size is" << pixmap.size();
