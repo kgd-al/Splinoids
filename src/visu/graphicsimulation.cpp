@@ -3,9 +3,14 @@
 #include "b2debugdrawer.h"
 #include "../gui/statsview.h"
 
+#include <QPainter>
+
 #include <QDebug>
 
 namespace visu {
+
+GraphicSimulation::GraphicSimulation(void)
+  : GraphicSimulation(nullptr, nullptr) {}
 
 GraphicSimulation::GraphicSimulation(QStatusBar *sbar, gui::StatsView *stats)
   : _scene (new QGraphicsScene), _sbar(sbar), _stats(stats),
@@ -90,6 +95,8 @@ void GraphicSimulation::step (void) {
 }
 
 void GraphicSimulation::processStats(const Stats &s) const {
+  if (!_stats)  return;
+
   _stats->update("Critters", s.ncritters, 0);
   _stats->update("Plants", s.nplants, 0);
   _stats->update("Corpses", s.ncorpses, 0);
@@ -185,6 +192,22 @@ void GraphicSimulation::delFoodlet(simu::Foodlet *foodlet) {
 
   delete vfoodlet;
   Simulation::delFoodlet(foodlet);
+}
+
+QPixmap GraphicSimulation::render (void) const {
+  static const float Z = config::Visualisation::viewZoom();
+  QRectF r = _scene->sceneRect();
+  QPixmap p (r.width() * Z, r.height() * Z);
+  QPainter painter (&p);
+  painter.setRenderHint(QPainter::Antialiasing, true);
+
+  _scene->render(&painter);
+
+  return p;
+}
+
+void GraphicSimulation::render (const QString &filename) const {
+  render().save(filename);
 }
 
 void GraphicSimulation::load (const std::string &file, GraphicSimulation &s,

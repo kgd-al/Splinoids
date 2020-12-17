@@ -370,6 +370,25 @@ if (NOT CLUSTER_BUILD)
 
 endif()
 
+################################################################################
+## Target (tester may be with gui)
+################################################################################
+if (CLUSTER_BUILD)
+    add_executable(
+        tester
+        $<TARGET_OBJECTS:SIMU_OBJS>
+        "src/tests/tester.cpp")
+    target_link_libraries(tester ${SIMU_LIBS} ${APOGeT_LIBRARIES})
+else()
+    add_executable(
+        tester
+        $<TARGET_OBJECTS:SIMU_OBJS>
+        $<TARGET_OBJECTS:VISU_OBJS>
+        "src/tests/tester.cpp")
+    target_link_libraries(tester ${SIMU_LIBS} ${APOGeT_LIBRARIES}
+                                 ${APOGeT_GUI_LIBRARIES}
+                                 ${QT_LIBS} ${MultiNEAT_LIBS})
+endif()
 
 #################################################################################
 ### Additional flags
@@ -378,11 +397,12 @@ endif()
 
 #message("")
 
-#option(CLUSTER_BUILD "Whether or not building on a cluster (i-e no gui and local linkage)" ON)
-#message("> Cluster building mode is " ${CLUSTER_BUILD})
-#if(CLUSTER_BUILD)
-#    add_definitions(-DCLUSTER_BUILD)
-#endif()
+option(CLUSTER_BUILD "Whether or not building on a cluster
+                      (i-e no gui and local linkage)" ON)
+message("> Cluster building mode is " ${CLUSTER_BUILD})
+if(CLUSTER_BUILD)
+    add_definitions(-DCLUSTER_BUILD)
+endif()
 
 #option(UPDATE_DEPENDENCIES "Whether or not to keep dependency data up-to-date
 #                            (implies extra compilation time)" ON)

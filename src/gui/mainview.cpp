@@ -131,6 +131,11 @@ void MainView::buildActions(void) {
         config::Visualisation::brainDeadSelection();
   }, config::Visualisation::brainDeadSelection.ref());
 
+  addAction(mVisu, "print", "Print", "",
+            Qt::ControlModifier + Qt::Key_P, [this] {
+    _simu.render("foo.png");
+  });
+
   QMenu *mGui = _mbar->addMenu("GUI");
 
   QString sd = "Sploinoid data";
@@ -156,6 +161,12 @@ void MainView::buildActions(void) {
   addBoolAction(mDraw, "", "Opaque bodies", "",
                 Qt::Key_O, [this] { scene()->update(); },
                 config::Visualisation::opaqueBodies.ref());
+
+#ifndef NDEBUG
+  addBoolAction(mDraw, "", "Ghost mode", "",
+                Qt::AltModifier + Qt::Key_O, [this] { scene()->update(); },
+  config::Visualisation::ghostMode.ref());
+#endif
 
   addEnumAction(mDraw, "", "Vision",
                 "1: draw vision cone; 2: draw rays; 3: both; 0: none",
@@ -211,10 +222,16 @@ void MainView::buildActions(void) {
       config::Visualisation::debugDraw.flip(i);
       scene()->update();
     });
+    addAction(smSplinesI, "", "S" + QString::number(i) + "Spline", "",
+              Qt::ShiftModifier + Qt::KeypadModifier + (Qt::Key_1+i),
+              [this, i] {
+      config::Visualisation::debugDraw.flip(i + visu::Critter::SPLINES_COUNT);
+      scene()->update();
+    });
     addAction(smSplinesI, "", "S" + QString::number(i) + "Edges", "",
               Qt::ControlModifier + Qt::KeypadModifier + (Qt::Key_1+i),
               [this, i] {
-      config::Visualisation::debugDraw.flip(i + visu::Critter::SPLINES_COUNT);
+      config::Visualisation::debugDraw.flip(i + 2*visu::Critter::SPLINES_COUNT);
       scene()->update();
     });
   }

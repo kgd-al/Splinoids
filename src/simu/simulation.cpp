@@ -7,6 +7,7 @@
 #include "box2dutils.h"
 
 namespace simu {
+using json = nlohmann::json;
 
 static constexpr bool debugShowStepHeader = false;
 static constexpr int debugEntropy = 0;
@@ -99,13 +100,16 @@ void Simulation::printStaticStats (void) {
 }
 
 Simulation::Simulation(void)
-  : _environment(nullptr), _printedHeader(false), _workPath("."), _timeMs() {}
+  : _environment(nullptr), _printedHeader(false), _workPath("."),
+    _timeMs(), _aborted(false) {}
 
 Simulation::~Simulation (void) {
   clear();
 }
 
 bool Simulation::setWorkPath (const stdfs::path &path, Overwrite o) {
+  static const auto &verb = config::Simulation::verbosity();
+
   if (stdfs::exists(path) && !stdfs::is_empty(path)) {
     if (o == UNSPECIFIED) {
       std::cerr << "WARNING: data folder '" << path << "' is not empty."
@@ -119,7 +123,8 @@ bool Simulation::setWorkPath (const stdfs::path &path, Overwrite o) {
                             << std::endl;
                   break;
 
-    case PURGE: std::cerr << "Purging contents from " << path << std::endl;
+    case PURGE: if (verb)
+                  std::cerr << "Purging contents from " << path << std::endl;
                 stdfs::remove_all(path);
                 break;
 
@@ -134,16 +139,13 @@ bool Simulation::setWorkPath (const stdfs::path &path, Overwrite o) {
   if (_aborted) return false;
 
   if (!stdfs::exists(path)) {
-    if (config::Simulation::verbosity() > 1)
-      std::cout << "Creating data folder " << path << std::endl;
+    if (verb > 1) std::cout << "Creating data folder " << path << std::endl;
     stdfs::create_directories(path);
   }
 
-  if (config::Simulation::verbosity() > 1)
-    std::cout << "Changed working directory from " << _workPath;
+  if (verb > 1) std::cout << "Changed working directory from " << _workPath;
   _workPath = path;
-  if (config::Simulation::verbosity() > 1)
-    std::cout << " to " << _workPath << std::endl;
+  if (verb > 1) std::cout << " to " << _workPath << std::endl;
 
   stdfs::path statsPath = localFilePath("global.dat");
   if (_statsLogger.is_open()) _statsLogger.close();
@@ -183,6 +185,18 @@ bool Simulation::setWorkPath (const stdfs::path &path, Overwrite o) {
 void Simulation::init(const Environment::Genome &egenome,
                       std::vector<Critter::Genome> cgenomes,
                       const InitData &data) {
+
+//  // Parse scenario settings
+//  json scenarioData;
+//  if (stdfs::exists(data)) {
+//    std::cout << "Parsing contents of " << data << " for scenario"
+//                                                               " data\n";
+//    scenarioData = json::parse(utils::readAll(data));
+
+//  } else
+//    scenarioData = json::parse(data);
+
+//  InitData data;
 
   _aborted = false;
   _genData.min = 0;
@@ -244,8 +258,9 @@ void Simulation::init(const Environment::Genome &egenome,
   auto &dice = _environment->dice();
   for (uint i=0; i<data.nCritters; i++) {
     uint bindex = i%_populations;
+    uint psize = i/_populations;
     auto cg = cgenomes[bindex].clone(_gidManager);
-    cg.cdata.sex = (i%2 ? Critter::Sex::MALE : Critter::Sex::FEMALE);
+    cg.cdata.sex = (psize%2 ? Critter::Sex::MALE : Critter::Sex::FEMALE);
     cg.gdata.generation = 0;
 
     float a = dice(0., 2*M_PI);
@@ -366,8 +381,8 @@ Critter* Simulation::addCritter (const CGenome &genome,
 
 //  if (_ssga.watching()) _ssga.registerBirth(c);
 
-  if (age > 0) {
-    e_ = c->setAtMaxHealth();
+  if (age > 0) { /// WARNING this is quite ugly... (but it works)
+    e_ = c->maxOutHealthAndEnergy();
     _environment->modifyEnergyReserve(-e_);
   }
 
@@ -843,7 +858,6 @@ bool load (const std::string &file, std::vector<uint8_t> &bytes) {
   return true;
 }
 
-using json = nlohmann::json;
 void Simulation::serializePopulations (json &jcritters, json &jfoodlets) const {
   for (const auto &f: _foodlets)
     jfoodlets.push_back({

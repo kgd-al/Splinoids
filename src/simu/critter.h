@@ -449,11 +449,15 @@ public:
     return bodyHealth() / bodyMaxHealth();
   }
 
+  auto splineHealthness (uint i, Side s) const {
+    return splineHealth(i, s) / splineMaxHealth(i, s);
+  }
+
   const auto& healthArray (void) const {
     return _currHealth;
   }
 
-  decimal setAtMaxHealth (void);
+  decimal maxOutHealthAndEnergy (void);
 
   auto activeSpline (uint i, Side s) const {
     return splineMaxHealth(i, s) > 0;

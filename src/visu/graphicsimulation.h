@@ -33,7 +33,12 @@ protected:
   uint _gstepTimeMs;
 
 public:
-  GraphicSimulation(QStatusBar *sbar, gui::StatsView *stats);
+  // For use in gui-less environments (but still with rendering)
+  GraphicSimulation (void);
+
+  // For regular use (gui-embedded)
+  GraphicSimulation (QStatusBar *sbar, gui::StatsView *stats);
+
   ~GraphicSimulation(void);
 
   auto scene (void) {
@@ -108,6 +113,9 @@ public:
   void setSelection (visu::Critter *c) {
     _selection = c;
   }
+
+  QPixmap render (void) const;
+  void render (const QString &filename) const;
 
   static void load (const std::string &file, GraphicSimulation &s,
                     const std::string &constraints,

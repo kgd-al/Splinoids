@@ -642,7 +642,7 @@ void Critter::feed (Foodlet *f, float dt) {
 // =============================================================================
 // == Helper routines
 
-decimal Critter::setAtMaxHealth (void) {
+decimal Critter::maxOutHealthAndEnergy (void) {
   decimal requiredEnergy = 0;
 
   for (uint i=0; i<2*SPLINES_COUNT+1; i++) {
@@ -655,6 +655,9 @@ decimal Critter::setAtMaxHealth (void) {
       h = H;
     }
   }
+
+  requiredEnergy += (maxUsableEnergy() - usableEnergy());
+  _energy = maxUsableEnergy();
 
   return requiredEnergy;
 }

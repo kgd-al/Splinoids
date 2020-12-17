@@ -303,35 +303,37 @@ void Critter::doPaint (QPainter *painter) const {
 //        pen.setStyle(Qt::SolidLine);
 //        painter->setPen(pen);
 
-        if (config::Visualisation::opaqueBodies())
-          painter->fillPath(_body, bodyColor());
+        if (!config::Visualisation::ghostMode()) {
+          if (config::Visualisation::opaqueBodies())
+            painter->fillPath(_body, bodyColor());
 
-        if (!config::Visualisation::drawInnerEdges())
-          for (uint i=0; i<SPLINES_COUNT; i++)
-            doSymmetrical(painter, [this, i] (QPainter *p, Side s) {
-              if (shouldDrawSpline(i, s))
-                p->drawPath(_artifacts[i]);
-            });
-
-        if (config::Visualisation::opaqueBodies())
-          for (uint i=0; i<SPLINES_COUNT; i++)
-            doSymmetrical(painter, [this, i] (QPainter *p, Side s) {
-              if (shouldDrawSpline(i, s))
-                  p->fillPath(_artifacts[i], splineColor(i, s));
-            });
-
-        if (config::Visualisation::drawInnerEdges())
-          doSymmetrical(painter, [this] (QPainter *p, Side s) {
+          if (!config::Visualisation::drawInnerEdges())
             for (uint i=0; i<SPLINES_COUNT; i++)
-              if (shouldDrawSpline(i, s))
-                p->drawPath(_artifacts[i]);
-          });
+              doSymmetrical(painter, [this, i] (QPainter *p, Side s) {
+                if (shouldDrawSpline(i, s))
+                  p->drawPath(_artifacts[i]);
+              });
 
-        if (!config::Visualisation::opaqueBodies()) {
-          pen.setWidthF(0);
-          pen.setColor(Qt::black);
-          painter->setPen(pen);
-          painter->drawPath(_body);
+          if (config::Visualisation::opaqueBodies())
+            for (uint i=0; i<SPLINES_COUNT; i++)
+              doSymmetrical(painter, [this, i] (QPainter *p, Side s) {
+                if (shouldDrawSpline(i, s))
+                    p->fillPath(_artifacts[i], splineColor(i, s));
+              });
+
+          if (config::Visualisation::drawInnerEdges())
+            doSymmetrical(painter, [this] (QPainter *p, Side s) {
+              for (uint i=0; i<SPLINES_COUNT; i++)
+                if (shouldDrawSpline(i, s))
+                  p->drawPath(_artifacts[i]);
+            });
+
+          if (!config::Visualisation::opaqueBodies()) {
+            pen.setWidthF(0);
+            pen.setColor(Qt::black);
+            painter->setPen(pen);
+            painter->drawPath(_body);
+          }
         }
 
       painter->restore();
@@ -401,7 +403,7 @@ void Critter::debugDrawAbove (QPainter *painter) const {
       for (uint i=0; i<SPLINES_COUNT; i++) {
         const auto &s = _critter.splinesData()[i];
 
-        if (d.test(i+SPLINES_COUNT)) {
+        if (d.test(i+2*SPLINES_COUNT)) {  // Draw edges
           pen.setStyle(Qt::DashLine);  pen.setColor(Qt::gray);  painter->setPen(pen);
           painter->drawPolyline(QPolygonF({
             toQt(s.pl0), toQt(s.cl0), toQt(s.cl1),
@@ -410,7 +412,23 @@ void Critter::debugDrawAbove (QPainter *painter) const {
           }));
         }
 
-        if (d.test(i)) {
+        if (d.test(i+SPLINES_COUNT)) {  // Draw central spline
+          pen.setStyle(Qt::DashLine);  pen.setColor(Qt::gray);  painter->setPen(pen);
+          QPainterPath p; // central
+          p.moveTo(toQt(s.p0));
+          p.cubicTo(toQt(s.c0), toQt(s.c1), toQt(s.p1));
+          painter->drawPath(p);
+          p = QPainterPath(); // left
+          p.moveTo(toQt(s.pl0));
+          p.cubicTo(toQt(s.cl0), toQt(s.cl1), toQt(s.p1));
+          painter->drawPath(p);
+          p = QPainterPath(); // right
+          p.moveTo(toQt(s.pr0));
+          p.cubicTo(toQt(s.cr0), toQt(s.cr1), toQt(s.p1));
+          painter->drawPath(p);
+        }
+
+        if (d.test(i)) {  // Draw control points
           pen.setStyle(Qt::SolidLine);  pen.setColor(Qt::black);  painter->setPen(pen);
           painter->drawLine(toQt(s.p0), toQt(s.p1));
           pen.setStyle(Qt::DashLine);  painter->setPen(pen);

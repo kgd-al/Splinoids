@@ -53,10 +53,11 @@ int main(int argc, char *argv[]) {
   int startspeed = 1;
 
   int taurus = -1;
-  std::string eGenomeArg = "-1", cGenomeArg = "-1";
+  std::string eGenomeArg = "-1";
+  std::vector<std::string> cGenomeArgs;
 
   genotype::Environment eGenome;
-  genotype::Critter cGenome;
+  std::vector<genotype::Critter> cGenomes;
   uint cGenomeMutations = 0;
 
   std::string loadSaveFile, loadConstraints, loadFields;
@@ -99,8 +100,9 @@ int main(int argc, char *argv[]) {
 
     ("env-genome", "Environment's genome or a random seed",
      cxxopts::value(eGenomeArg))
-    ("spln-genome", "Splinoid genome to start from or a random seed",
-     cxxopts::value(cGenomeArg))
+    ("spln-genome", "Splinoid genome to start from or a random seed. Use "
+                    "multiple times to define multiple sub-populations",
+     cxxopts::value(cGenomeArgs))
     ("spln-mutations", "Additional mutations applied to the original genome",
      cxxopts::value(cGenomeMutations))
 
@@ -212,28 +214,37 @@ int main(int argc, char *argv[]) {
     if (taurus != -1) eGenome.taurus = taurus;
     eGenome.toFile("last", 2);
 
-    long cGenomeSeed = maybeSeed(cGenomeArg);
-    if (cGenomeSeed < -1) {
-      std::cout << "Reading splinoid genome from input file '"
-                << cGenomeArg << "'" << std::endl;
-      cGenome = CGenome::fromFile(cGenomeArg);
 
-    } else {
-      rng::FastDice dice;
-      if (cGenomeSeed >= 0) dice.reset(cGenomeSeed);
-      std::cout << "Generating splinoid genome from rng seed "
-                << dice.getSeed() << std::endl;
-      cGenome = CGenome::random(dice);
-      for (uint i=0; i<cGenomeMutations; i++) cGenome.mutate(dice);
+    if (cGenomeArgs.empty())  cGenomeArgs.push_back("-1");
+    for (const auto arg: cGenomeArgs) {
+      long cGenomeSeed = maybeSeed(arg);
+      if (cGenomeSeed < -1) {
+        std::cout << "Reading splinoid genome from input file '"
+                  << arg << "'" << std::endl;
+        cGenomes.push_back(CGenome::fromFile(arg));
+
+      } else {
+        rng::FastDice dice;
+        if (cGenomeSeed >= 0) dice.reset(cGenomeSeed);
+        std::cout << "Generating splinoid genome from rng seed "
+                  << dice.getSeed() << std::endl;
+        CGenome g = CGenome::random(dice);
+        for (uint i=0; i<cGenomeMutations; i++) g.mutate(dice);
+        cGenomes.push_back(g);
+      }
     }
 
-    cGenome.toFile("last", 2);
+//      cGenome.toFile("last", 2);
 
     std::cout << "Environment:\n" << eGenome
-              << "\nSplinoid:\n" << cGenome
-              << std::endl;
+              << "\nSplinoid";
+    if (cGenomes.size() > 1) std::cout << "s";
+    std::cout << ":\n";
+    for (const CGenome &g: cGenomes)
+      std::cout << g;
+    std::cout << std::endl;
 
-    s.init(eGenome, {cGenome}, idata);
+    s.init(eGenome, cGenomes, idata);
 
   } else {
     visu::GraphicSimulation::load(loadSaveFile, s, loadConstraints, loadFields);

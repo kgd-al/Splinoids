@@ -94,9 +94,12 @@ public:
 
     int seed;
 
+    nlohmann::json scenario;  // To automatise tests (specifically regressions)
+
     InitData (void) : ienergy(1000), cRatio(.5),
                       nCritters(ienergy*cRatio/2), cAge(0),
-                      cRange(10), pRange(20), seed(-1) {}
+                      cRange(1), pRange(1), seed(-1),
+                      scenario() {}
   };
 
   using CGenome = Critter::Genome;
@@ -188,7 +191,7 @@ public:
 
   void init (const Environment::Genome &egenome,
              std::vector<Critter::Genome> cgenomes,
-             const InitData &data = InitData{});
+             const InitData &data);
 
   virtual void postInit (void) {}
 
@@ -247,7 +250,6 @@ public:
                            bool deepcopy);
 
   static void printStaticStats (void);
-
 
   using clock = std::chrono::steady_clock;
   using time_point = clock::time_point;

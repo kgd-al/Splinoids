@@ -88,12 +88,15 @@ int main(int argc, char *argv[]) {
      cxxopts::value(idata.pRange))
     ("i-crange", "Region in which initial splinoids are placed",
      cxxopts::value(idata.cRange))
-    ("sratio", "Initial fraction of energy devoted to the splinoids",
+    ("i-sratio", "Initial fraction of energy devoted to the splinoids",
      cxxopts::value(idata.cRatio))
+    ("scenario", "Additional actions to be performed (inline json or file)",
+     cxxopts::value(idata.scenario))
 
     ("env-genome", "Environment's genome or a random seed",
      cxxopts::value(eGenomeArg))
-    ("spln-genome", "Splinoid genome to start from or a random seed",
+    ("spln-genome", "Splinoid genome to start from or a random seed. Use "
+                    "multiple times to define multiple sub-populations",
      cxxopts::value(cGenomeArgs))
     ("spln-mutations", "Additional mutations applied to the original genome",
      cxxopts::value(cGenomeMutations))

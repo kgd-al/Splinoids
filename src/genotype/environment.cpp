@@ -4,7 +4,7 @@ using namespace genotype;
 
 #define GENOME Environment
 
-DEFINE_GENOME_FIELD_WITH_BOUNDS(int, size, "", 100, 100)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(int, size, "", 2, 100, 100, 1000)
 DEFINE_GENOME_FIELD_WITH_BOUNDS(int, taurus, "", 0, 1)
 
 DEFINE_GENOME_FIELD_WITH_BOUNDS(float, maxVegetalPortion, "mvp",

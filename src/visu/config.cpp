@@ -31,6 +31,7 @@ DEFINE_PARAMETER(bool, showGrid, true)
 DEFINE_PARAMETER(float, selectionZoomFactor, 8)
 DEFINE_PARAMETER(uint, substepsSpeed, 1)
 
+DEFINE_DEBUG_PARAMETER(bool, ghostMode, false)
 DEFINE_DEBUG_PARAMETER(int, drawFightingDebug, 5)
 
 #ifndef NDEBUG

@@ -392,8 +392,8 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
   /// TODO Improve !
   float n = d.fixtures.size();
 
-  fdd.VA = b2Dot(fdd.vA,  fdd.C_) / n;
-  fdd.VB = b2Dot(fdd.vB, -fdd.C_) / n;
+  fdd.VA = b2Dot(fdd.vA,  fdd.C_);
+  fdd.VB = b2Dot(fdd.vB, -fdd.C_);
 
   if (debugFighting > 1)
     std::cerr << "Fight step of " << CID(cA) << " & " << CID(cB) << "\n"
@@ -422,14 +422,15 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
     float alpha_a = MIN_DENSITY_ALPHA + DENSITY_ALPHA_RANGE *
         (fA->GetDensity() - Critter::MIN_DENSITY) / DENSITY_RANGE;
     float alpha_b = MIN_DENSITY_ALPHA + DENSITY_ALPHA_RANGE *
-        (fA->GetDensity() - Critter::MIN_DENSITY) / DENSITY_RANGE;
+        (fB->GetDensity() - Critter::MIN_DENSITY) / DENSITY_RANGE;
 
     if (alpha_a == 0 && alpha_b == 0) continue;
     float alpha = (alpha_b) / (alpha_a + alpha_b);
 
     float N = dt() * config::Simulation::combatBaselineIntensity() * (
-        cA->body().GetMass() * fdd.VA * fdd.VA * (1-ignoreA)
-      + cB->body().GetMass() * fdd.VB * fdd.VB * (1-ignoreB));
+                  cA->body().GetMass() * fdd.VA * fdd.VA * (1-ignoreA)
+                + cB->body().GetMass() * fdd.VB * fdd.VB * (1-ignoreB)
+              ) / n;
 
     float deA = alpha * .5 * alpha_b * N,
           deB = (1 - alpha) * .5 * alpha_a * N;
@@ -439,7 +440,7 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
                 << CID(cB) << "F" << fdB << "\n"
                 << "\t\trA = " << fA->GetDensity() << "\trB = "
                   << fB->GetDensity() << "\n"
-                << "\t\t N = " << N << "\n"
+                << "\t\tN' = " << N << " / " << n << "\n"
                 << "\t\tdA = " << deA << "\n"
                 << "\t\tdB = " << deB << "\n";
 
