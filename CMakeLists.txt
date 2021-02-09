@@ -54,11 +54,13 @@ endif()
 ## Dependencies
 ################################################################################
 
-find_package(APOGeT REQUIRED)
-include_directories(${APOGeT_INCLUDE_DIRS})
-message("> APOGeT found at " ${APOGeT_DIR})
-message("  > Core libraries " "${APOGeT_LIBRARIES}")
-message("  > Gui libraries " "${APOGeT_GUI_LIBRARIES}")
+find_package(ES-HyperNEAT REQUIRED)
+include_directories(${ES-HyperNEAT_INCLUDE_DIRS})
+message("> ES-HyperNEAT found at " ${ES-HyperNEAT_DIR})
+message("  > Core libraries " "${ES-HyperNEAT_LIBRARIES}")
+list(APPEND SIMU_LIBS ${ES-HyperNEAT_LIBRARIES})
+message("  > Gui libraries " "${ES-HyperNEAT_GUI_LIBRARIES}")
+list(APPEND GUI_LIBS ${ES-HyperNEAT_GUI_LIBRARIES})
 
 ################################################################################
 ## Source files (simulation)
@@ -78,11 +80,6 @@ set(GNTP_SRC
     "critter.cpp"
     "environment.h"
     "environment.cpp"
-#    "grammar.h"
-#    "grammar.cpp"
-#    "plant.h"
-#    "config.h"
-#    "plant.cpp"
 )
 PREPEND(GNTP_SRC "src/genotype" ${GNTP_SRC})
 
@@ -121,28 +118,28 @@ PREPEND(SIMU_SRC "src/simu" ${SIMU_SRC})
 #)
 #PREPEND(S_MISC_SRC "src" ${S_MISC_SRC})
 
-#include_directories(MultiNEAT/src)
-#add_subdirectory(MultiNEAT)
-set(MultiNEAT_LIBS ${Boost_LIBRARIES} ${PYTHON_LIBRARIES})
-set(MultiNEAT_SRC
-    "Genome.h"
-    "Genome.cpp"
-    "Random.h"
-    "Random.cpp"
-    "NeuralNetwork.h"
-    "NeuralNetwork.cpp"
-    "Substrate.h"
-    "Substrate.cpp"
-    "Innovation.h"
-    "Innovation.cpp"
-    "Parameters.h"
-    "Parameters.cpp"
-)
-PREPEND(MultiNEAT_SRC "MultiNEAT/src" ${MultiNEAT_SRC})
-set(MultiNEAT_SRC ${MultiNEAT_SRC}
-    "src/hyperneat/genotype.h" "src/hyperneat/genotype.cpp"
-    "src/hyperneat/phenotype.h" "src/hyperneat/phenotype.cpp")
-add_definitions(-DUSE_BOOST_RANDOM)
+##include_directories(MultiNEAT/src)
+##add_subdirectory(MultiNEAT)
+#set(MultiNEAT_LIBS ${Boost_LIBRARIES} ${PYTHON_LIBRARIES})
+#set(MultiNEAT_SRC
+#    "Genome.h"
+#    "Genome.cpp"
+#    "Random.h"
+#    "Random.cpp"
+#    "NeuralNetwork.h"
+#    "NeuralNetwork.cpp"
+#    "Substrate.h"
+#    "Substrate.cpp"
+#    "Innovation.h"
+#    "Innovation.cpp"
+#    "Parameters.h"
+#    "Parameters.cpp"
+#)
+#PREPEND(MultiNEAT_SRC "MultiNEAT/src" ${MultiNEAT_SRC})
+#set(MultiNEAT_SRC ${MultiNEAT_SRC}
+#    "src/hyperneat/genotype.h" "src/hyperneat/genotype.cpp"
+#    "src/hyperneat/phenotype.h" "src/hyperneat/phenotype.cpp")
+#add_definitions(-DUSE_BOOST_RANDOM)
 
 #set(MultiNEAT_SRC
 #    "genome.h"
