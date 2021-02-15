@@ -3,7 +3,7 @@
 #include "environment.h"
 #include "box2dutils.h"
 
-#include "../hyperneat/phenotype.h"
+//#include "../hyperneat/phenotype.h"
 
 namespace simu {
 
@@ -13,8 +13,15 @@ static constexpr int debugRegen = 0;
 static constexpr int debugGrowth = 0;
 static constexpr int debugReproduction = 0;
 
-const Critter::FixtureData Critter::_reproUserData
-  (Critter::FixtureType::REPRODUCTION);
+static const auto& audioUserData (void) {
+  static const Critter::FixtureData data (Critter::FixtureType::AUDITION);
+  return data;
+}
+
+static const auto& reproUserData (void) {
+  static const Critter::FixtureData data (Critter::FixtureType::REPRODUCTION);
+  return data;
+}
 
 Critter::FixtureData::FixtureData (FixtureType t, const Color &c,
                                    uint si, Side fs, uint ai)
@@ -172,13 +179,18 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
   _reproductionReserve = 0;
   _reproductionSensor = nullptr;
 
+  _auditionSensor = addAuditionFixture();
+  _voice.fill(0);
+  _sounds.fill(0);
+  _ears.fill(0);
+
   // Update current healths
   _currHealth[0] = e * (1 - 1/initEnergyRatio) / config::Simulation::healthToEnergyRatio();
   for (uint i=0; i<SPLINES_COUNT; i++)
     for (Side s: {Side::LEFT, Side::RIGHT})
       _currHealth[1+splineIndex(i, s)] = splineMaxHealth(i, s);
 
-  _destroyed.reset(0);
+  _destroyed.reset();
 
 //  std::cerr << "Received " << e << " energy\n"
 //            << bodyHealth() << " = " << bodyMaxHealth() << " * (1 - " << e
@@ -204,15 +216,65 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
 //                << splineMaxHealth(i) << "\n";
 //  std::cerr << std::endl;
   generateVisionRays();
-
-  auto substrate = substrateFor(_raysEnd, _genotype.connectivity);
-  _genotype.connectivity.BuildHyperNEATPhenotype(_brain, substrate);
+  buildBrain();
 
   _feedingSources.fill(0);
 
   userIndex = 0;
 }
 
+void Critter::buildBrain(void) {
+//  auto substrate = substrateFor(_raysEnd, _genotype.connectivity);
+//  _genotype.connectivity.BuildHyperNEATPhenotype(_brain, substrate);
+
+  using Coordinates = phenotype::ANN::Coordinates;
+  static const auto add = [] (auto &v, float x, float y) {
+    v.emplace_back(Coordinates::value_type({x,y}));
+  };
+
+  Coordinates inputs, outputs;
+
+// ========
+// = Inputs
+  /// TODO Integrate proprioceptive inputs (at some point)
+//  add(inputs,  .0,   .0,  -.5); // sex
+//  add(inputs,  .25,  .0,  -.5); // age
+//  add(inputs, -.25,  .0,  -.5); // reproduction
+//  add(inputs,  .0,  -.25, -.5); // energy
+//  add(inputs,  .0,   .25, -.5); // health
+
+  // Vision
+  for (const simu::P2D &r: _raysEnd) {
+    float a = std::atan2(r.y, r.x);
+    assert(-M_PI <= a && a <= M_PI);
+    float x = -a / M_PI;
+    assert(-1 <= x && x <= 1);
+    for (uint i=0; i<3; i++) add(inputs, x, -1+i*.25f / 3.f);
+  }
+
+  // Audition
+  for (int i: {-1,1})
+    for (uint j=0; j<VOCAL_CHANNELS+1; j++)
+      add(inputs, i*.5, -.75 + .25 * j / (VOCAL_CHANNELS+1));
+
+  // ========
+  // = Outputs
+  add(outputs, -.5, .75); // motors:  left
+  add(outputs, +.5, .75); //          right
+
+  add(outputs,  .0, .75); // clock speed
+
+  add(outputs,  .0, 1.0); // vocalisation:  volume
+  add(outputs,  .0,  .9); //                frequency
+
+/// TODO Integrate remaining actions
+//  add(outputs, ?, ?); // reproduction
+//  add(outputs, ?, ?); // munching
+
+  phenotype::CPPN cppn = phenotype::CPPN::fromGenotype(_genotype.brain);
+  _brain = phenotype::ANN::build(inputs, outputs, cppn);
+  _neuralOutputs = _brain.outputs();
+}
 
 void Critter::step(Environment &env) {
   // Driving improvement
@@ -222,7 +284,7 @@ void Critter::step(Environment &env) {
   performVision(env);
 
   // Query neural network
-  neuralStep(env);
+  neuralStep();
 
   // Distribute energy
   energyConsumption(env);
@@ -253,10 +315,6 @@ void Critter::autopsy (void) const {
 
 // =============================================================================
 // == Substeps
-
-#define ERR \
-  std::cerr << __PRETTY_FUNCTION__ << " not implemented" << std::endl;
-#define ERR // TODO
 
 void Critter::drivingCorrections(void) {
   P2D velocity = _body.GetLinearVelocity();
@@ -291,12 +349,8 @@ void Critter::performVision(const Environment &env) {
   //              << " of type " << fixture->GetBody()->GetType()
   //              << std::endl;
 
-      if (self == fixture->GetBody())
-        return -1;
-
-      if (fixture->GetUserData()
-          && get(fixture)->type == FixtureType::REPRODUCTION)
-        return -1;
+      if (self == fixture->GetBody()) return -1;
+      if (fixture->IsSensor())  return -1;
 
       closestContact = fixture;
       closestFraction = fraction;
@@ -348,92 +402,34 @@ void Critter::performVision(const Environment &env) {
   }
 }
 
-void Critter::neuralStep(Environment &env) {  ERR
+void Critter::neuralStep(void) {
   if (!brainDead) {
-    auto &dice = env.dice();
-
     // Set inputs
-    std::vector<double> inputs;
-    inputs.reserve(_retina.size() * std::tuple_size_v<Color> + 3);
-    inputs.push_back(sex() == Sex::FEMALE ? -1 : 1);
-    inputs.push_back(_age);
-    inputs.push_back(reproductionReadiness(reproductionType()));
-    inputs.push_back(usableEnergy() / maxUsableEnergy());
-    inputs.push_back(bodyHealthness());
-//    inputs.push_back(dice(-1,1));
-    for (const Color &c: _retina) for (float v: c)  inputs.push_back(v);
+    uint i = 0;
+    auto inputs = _brain.inputs();
+//    inputs[i++] = (sex() == Sex::FEMALE ? -1 : 1);
+//    inputs[i++] = _age;
+//    inputs[i++] = reproductionReadiness(reproductionType());
+//    inputs[i++] = usableEnergy() / maxUsableEnergy();
+//    inputs[i++] = bodyHealthness();
+    for (const auto &c: _retina) for (float v: c) inputs[i++] = v;
+    for (const auto &e: _ears)  inputs[i++] = e;
 
     // Process n propagation steps
-    _brain.Input(inputs);
-    for (uint i=0; i<_genotype.brainSubsteps; i++)  _brain.Activate();
-    _neuralOutputs = _brain.Output();
+    _brain(inputs, _neuralOutputs, _genotype.brain.substeps);
 
     // Collect outputs
 #ifndef NDEBUG
-    for (double &v: _neuralOutputs)  assert(0 <= v && v <= 1);
+    for (auto &v: _neuralOutputs)  assert(-1 <= v && v <= 1);
 #endif
-    _motors[Motor::LEFT] = 2*_neuralOutputs[0]-1;
-    _motors[Motor::RIGHT] = 2*_neuralOutputs[1]-1;
-    _clockSpeed = clockSpeed(_neuralOutputs[2]);
-    _reproduction = _neuralOutputs[3];
+    _motors[Motor::LEFT] = _neuralOutputs[0];
+    _motors[Motor::RIGHT] = _neuralOutputs[1];
+    _clockSpeed = clockSpeed(.5*(1+_neuralOutputs[2]));
 
-    if (false) {
-      auto motorsIn = _motors;
-      _motors[Motor::LEFT] = _motors[Motor::RIGHT] = 0;
+    _voice[0] = std::max(0.f, _neuralOutputs[3]);
+    _voice[1] = _neuralOutputs[4];
 
-//#define DEBUG(X) if (false && id() == ID(X))  std::cerr << "[" << CID(this) << "] "
-
-//    // Feed. Mate. Repeat
-//    const auto &r = _retina;
-//    bool foodLeft = (r[0][0] == 0 && r[0][2] == 0 && r[0][1] >= .75);
-//    bool foodRight = (r[1][0] == 0 && r[1][2] == 0 && r[1][1] >= .75);
-
-//    bool mateLeft = (r[0][0] >= .75 && r[0][2] <= .75 && r[0][1] <= .75);
-//    bool mateRight = (r[1][0] >= .75 && r[1][2] <= .75 && r[1][1] <= .75);
-
-//    bool obstacleLeft = (r[0][0] < 1 || r[0][1] < 1 || r[0][2] < 1);
-//    bool obstacleRight = (r[1][0] < 1 || r[1][1] < 1 || r[1][2] < 1);
-
-//    if (f < .75 && (foodLeft || foodRight)) { // Go to food
-//      DEBUG(1) << "Going to food" << std::endl;
-//      if (foodLeft)   _motors[Motor::LEFT] = 1;
-//      if (foodRight)  _motors[Motor::RIGHT] = 1;
-
-//    } else if (s == 1 && (mateLeft || mateRight)) { // Go to mate
-//      DEBUG(1) << "Going to mate" << std::endl;
-//      if (mateLeft)   _motors[Motor::LEFT] = 1;
-//      if (mateRight)  _motors[Motor::RIGHT] = 1;
-
-//    } else if (obstacleLeft) {  // Evade right
-//      DEBUG(1) << "Evading something on the left" << std::endl;
-//      _motors[Motor::LEFT] = -.1;
-//      _motors[Motor::RIGHT] = .1;
-
-//    } else if (obstacleRight) { // Evade left
-//      DEBUG(1) << "Evading something on the right" << std::endl;
-//      _motors[Motor::LEFT] = .1;
-//      _motors[Motor::RIGHT] = -.1;
-
-//    } else if (dice(.1)){  // Walk around
-//      DEBUG(1) << "Walking around" << std::endl;
-//      if (dice(.6))
-//        _motors[Motor::LEFT] = _motors[Motor::RIGHT] = 1;
-//      else if (dice(.2))
-//        _motors[Motor::LEFT] = _motors[Motor::RIGHT] = -1;
-//      else {
-//        int d = dice.toss(-1,1);
-//        _motors[Motor::LEFT] = d;
-//        _motors[Motor::RIGHT] = -d;
-//      }
-
-//    } else {
-//      DEBUG(1) << "Idling" << std::endl;
-//      _motors[Motor::LEFT] = motorsIn[Motor::LEFT];
-//      _motors[Motor::RIGHT] = motorsIn[Motor::RIGHT];
-//    }
-
-//    _reproduction = 1;
-    }
+//    _reproduction = _neuralOutputs[?];
   }
 
   // Apply requested motor output
@@ -451,6 +447,13 @@ void Critter::neuralStep(Environment &env) {  ERR
                 << m.second << " * " << _clockSpeed << " * "
                 << _efficiency << " * " << _size << std::endl;
   }
+
+  // Emit sounds (requested and otherwise)
+  _sounds.fill(0);
+  uint vi = VOCAL_CHANNELS * .5 * (_voice[1]+1);
+  _sounds[0] = std::min(1.f, _body.GetLinearVelocity().Length() / 5);
+  _sounds[1+vi] = _voice[0];
+  assert(0 <= _sounds[1+vi] && _sounds[1+vi] <= 1);
 
 #undef DEBUG
 }
@@ -637,7 +640,6 @@ void Critter::feed (Foodlet *f, float dt) {
   _energy += E;
 }
 
-#undef ERR
 
 // =============================================================================
 // == Helper routines
@@ -980,6 +982,21 @@ b2Fixture* Critter::addPolygonFixture (uint splineIndex, Side side,
   return addFixture(fd, cfd);
 }
 
+b2Fixture* Critter::addAuditionFixture(void) {
+  b2CircleShape s;
+  s.m_p.Set(0, 0);
+  s.m_radius = config::Simulation::auditionRange() * MAX_SIZE * RADIUS;
+
+  b2FixtureDef fd;
+  fd.shape = &s;
+  fd.density = 0;
+  fd.isSensor = true;
+  fd.filter.categoryBits = uint16(CollisionFlag::CRITTER_AUDT_FLAG);
+  fd.filter.maskBits = uint16(CollisionFlag::CRITTER_AUDT_MASK);
+
+  return addFixture(fd, audioUserData());
+}
+
 b2Fixture* Critter::addReproFixture(void) {
   assert(_reproductionSensor == nullptr);
   b2CircleShape s;
@@ -993,7 +1010,7 @@ b2Fixture* Critter::addReproFixture(void) {
   fd.filter.categoryBits = uint16(CollisionFlag::CRITTER_REPRO_FLAG);
   fd.filter.maskBits = uint16(CollisionFlag::CRITTER_REPRO_MASK);
 
-  return addFixture(fd, _reproUserData);
+  return addFixture(fd, reproUserData());
 }
 
 b2Fixture* Critter::addFixture (const b2FixtureDef &def,
@@ -1221,6 +1238,7 @@ void Critter::generateVisionRays(void) {
   _raysStart[0] = fromPolar(a0, bodyRadius());
   _raysStart[1] = ySymmetrical(_raysStart[0]);
 
+//  std::cerr << "\nGenerating vision rays\n";
   float r = _visionRange;
   for (uint i=0; i<rs_h; i++) {
     float da = 0;
@@ -1238,7 +1256,7 @@ void Critter::generateVisionRays(void) {
 //              << " = " << _raysStart[0] << " + "
 //              << r * P2D(std::cos(a), std::sin(a)) << std::endl;
 //    std::cerr << "E[" << ir << "] = " << _raysEnd[ir]
-//                 << " = { " << _raysEnd[il].x << ", " << -_raysEnd[il].y
+//                 << " = { " << _raysEnd[il].x << ", -" << _raysEnd[il].y
 //                 << " }" << std::endl;
 //    std::cerr << std::endl;
   }
@@ -1304,48 +1322,49 @@ float Critter::starvationDuration (float size, float energy, float clockSpeed) {
   return energy / baselineEnergyConsumption(size, clockSpeed);
 }
 
-void save (nlohmann::json &j, const NEAT::NeuralNetwork &ann) {
-  nlohmann::json jn, jc;
-  for (const NEAT::Neuron &n: ann.m_neurons)
-    jn.push_back({ n.m_type, n.m_a, n.m_b, n.m_timeconst, n.m_bias,
-                   n.m_activation_function_type, n.m_split_y });
-  for (const NEAT::Connection &c: ann.m_connections)
-    jc.push_back({ c.m_source_neuron_idx, c.m_target_neuron_idx,
-                   c.m_weight, c.m_recur_flag,
-                   c.m_hebb_rate, c.m_hebb_pre_rate });
-  j = { jn, jc };
-}
+//void save (nlohmann::json &j, const NEAT::NeuralNetwork &ann) {
+//  nlohmann::json jn, jc;
+//  for (const NEAT::Neuron &n: ann.m_neurons)
+//    jn.push_back({ n.m_type, n.m_a, n.m_b, n.m_timeconst, n.m_bias,
+//                   n.m_activation_function_type, n.m_split_y });
+//  for (const NEAT::Connection &c: ann.m_connections)
+//    jc.push_back({ c.m_source_neuron_idx, c.m_target_neuron_idx,
+//                   c.m_weight, c.m_recur_flag,
+//                   c.m_hebb_rate, c.m_hebb_pre_rate });
+//  j = { jn, jc };
+//}
 
-void load (const nlohmann::json &j, NEAT::NeuralNetwork &ann) {
-  for (const auto &jn: j[0]) {
-    NEAT::Neuron n;
-    uint i=0;
-    n.m_type = jn[i++];
-    n.m_a = jn[i++];
-    n.m_b = jn[i++];
-    n.m_timeconst = jn[i++];
-    n.m_bias = jn[i++];
-    n.m_activation_function_type = jn[i++];
-    n.m_split_y = jn[i++];
-    ann.m_neurons.push_back(n);
-  }
+//void load (const nlohmann::json &j, NEAT::NeuralNetwork &ann) {
+//  for (const auto &jn: j[0]) {
+//    NEAT::Neuron n;
+//    uint i=0;
+//    n.m_type = jn[i++];
+//    n.m_a = jn[i++];
+//    n.m_b = jn[i++];
+//    n.m_timeconst = jn[i++];
+//    n.m_bias = jn[i++];
+//    n.m_activation_function_type = jn[i++];
+//    n.m_split_y = jn[i++];
+//    ann.m_neurons.push_back(n);
+//  }
 
-  for (const auto &jc: j[1]) {
-    NEAT::Connection c;
-    uint i=0;
-    c.m_source_neuron_idx = jc[i++];
-    c.m_target_neuron_idx = jc[i++];
-    c.m_weight = jc[i++];
-    c.m_recur_flag = jc[i++];
-    c.m_hebb_rate = jc[i++];
-    c.m_hebb_pre_rate = jc[i++];
-    ann.m_connections.push_back(c);
-  }
-}
+//  for (const auto &jc: j[1]) {
+//    NEAT::Connection c;
+//    uint i=0;
+//    c.m_source_neuron_idx = jc[i++];
+//    c.m_target_neuron_idx = jc[i++];
+//    c.m_weight = jc[i++];
+//    c.m_recur_flag = jc[i++];
+//    c.m_hebb_rate = jc[i++];
+//    c.m_hebb_pre_rate = jc[i++];
+//    ann.m_connections.push_back(c);
+//  }
+//}
 
 nlohmann::json Critter::save (const Critter &c) {
   nlohmann::json jb;
-  simu::save(jb, c._brain);
+//  simu::save(jb, c._brain);
+  assert(false);  // Brain save not implemented
   return nlohmann::json {
     c._genotype, jb, c._energy, c._age, c._reproductionReserve,
     c._currHealth, c._destroyed.to_string(), c.userIndex
@@ -1365,13 +1384,14 @@ Critter* Critter::load (const nlohmann::json &j, b2Body *body) {
 }
 
 void Critter::saveBrain (const std::string &prefix) const {
-  std::string cppn_f = prefix + "_cppn.dot";
-  std::ofstream cppn_ofs (cppn_f);
-  _genotype.connectivity.toDot(cppn_ofs);
+//  std::string cppn_f = prefix + "_cppn.dot";
+//  std::ofstream cppn_ofs (cppn_f);
+//  _genotype.brain.toDot(cppn_ofs);
 
-  std::string ann_f = prefix + "_ann.dat";
-  std::ofstream ann_ofs (ann_f);
-  genotype::HyperNEAT::phenotypeToDat(ann_ofs, _brain);
+//  std::string ann_f = prefix + "_ann.dat";
+//  std::ofstream ann_ofs (ann_f);
+//  genotype::ES_HyperNEAT::phenotypeToDat(ann_ofs, _brain);
+  assert(false);
 }
 
 Critter* Critter::clone(const Critter *c, b2Body *b) {
@@ -1438,7 +1458,7 @@ Critter* Critter::clone(const Critter *c, b2Body *b) {
   if (c->_reproductionSensor) {
     this_c->_reproductionSensor = Box2DUtils::clone(c->_reproductionSensor, b);
     auto pair = this_c->_b2FixturesUserData.emplace(this_c->_reproductionSensor,
-                                                    _reproUserData);
+                                                    reproUserData());
     this_c->_reproductionSensor->SetUserData(&pair.first->second);
   } else
     this_c->_reproductionSensor = nullptr;

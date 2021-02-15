@@ -2,8 +2,6 @@
 
 #include "simulation.h"
 
-#include "../hyperneat/phenotype.h" // WARNING REMOVE
-
 #include "box2dutils.h"
 
 namespace simu {
@@ -13,6 +11,7 @@ static constexpr bool debugShowStepHeader = false;
 static constexpr int debugEntropy = 0;
 static constexpr int debugCritterManagement = 0;
 static constexpr int debugFoodletManagement = 0;
+static constexpr int debugAudition = 0;
 static constexpr int debugReproduction = 0;
 
 namespace statis_stats_details {
@@ -101,7 +100,7 @@ void Simulation::printStaticStats (void) {
 
 Simulation::Simulation(void)
   : _environment(nullptr), _printedHeader(false), _workPath("."),
-    _timeMs(), _aborted(false) {}
+    _timeMs(), _finished(false), _aborted(false) {}
 
 Simulation::~Simulation (void) {
   clear();
@@ -198,6 +197,7 @@ void Simulation::init(const Environment::Genome &egenome,
 
 //  InitData data;
 
+  _finished = false;
   _aborted = false;
   _genData.min = 0;
   _genData.max = 0;
@@ -234,13 +234,17 @@ void Simulation::init(const Environment::Genome &egenome,
 
   _environment = std::make_unique<Environment>(egenome);
   _environment->init(data.ienergy, data.seed);
+  std::cerr << "Using seed: " << data.seed << " -> "
+            << _environment->dice().getSeed() << "\n";
 
-  auto nextGID = cgenomes.front().id();
-  for (CGenome &g: cgenomes) {
-    if (g.id() != Critter::ID::INVALID) nextGID = std::max(nextGID, g.id());
-    g.gdata.setAsPrimordial(_gidManager);
+  if (cgenomes.size() > 0) {
+    auto nextGID = cgenomes.front().id();
+    for (CGenome &g: cgenomes) {
+      if (g.id() != Critter::ID::INVALID) nextGID = std::max(nextGID, g.id());
+      g.gdata.setAsPrimordial(_gidManager);
+    }
+    _gidManager.setNext(nextGID);
   }
-  _gidManager.setNext(nextGID);
 
   decimal energy = data.ienergy;
   decimal cenergy = energy * data.cRatio;
@@ -296,40 +300,40 @@ void Simulation::init(const Environment::Genome &egenome,
 
   logStats();
 
-  if (false) {
-    Critter *c = *_critters.begin();
-    CGenome &g = c->genotype();
+//  if (false) {
+//    Critter *c = *_critters.begin();
+//    CGenome &g = c->genotype();
 
-    auto save = [this] (Critter *c, CGenome &g, uint i) {
-      std::ostringstream oss;
-      oss << "tmp/mutated_" << i << "_";
+//    auto save = [this] (Critter *c, CGenome &g, uint i) {
+//      std::ostringstream oss;
+//      oss << "tmp/mutated_" << i << "_";
 
-      std::string p = oss.str();
-      std::ofstream gos (localFilePath(p + "cppn.dot"));
-      g.connectivity.toDot(gos);
+//      std::string p = oss.str();
+//      std::ofstream gos (localFilePath(p + "cppn.dot"));
+//      g.connectivity.toDot(gos);
 
-      std::ofstream pos (localFilePath(p + "ann.dat"));
-      auto substrate = substrateFor(c->raysEnd(), g.connectivity);
-      NEAT::NeuralNetwork brain;
-      g.connectivity.BuildHyperNEATPhenotype(brain, substrate);
-      g.connectivity.phenotypeToDat(pos, brain);
-    };
+//      std::ofstream pos (localFilePath(p + "ann.dat"));
+//      auto substrate = substrateFor(c->raysEnd(), g.connectivity);
+//      NEAT::NeuralNetwork brain;
+//      g.connectivity.BuildHyperNEATPhenotype(brain, substrate);
+//      g.connectivity.phenotypeToDat(pos, brain);
+//    };
 
-    auto &mr = genotype::Critter::config_t::mutationRates.ref();
-    for (auto &p: mr) if (p.first != "connectivity")  p.second = 0;
+//    auto &mr = genotype::Critter::config_t::mutationRates.ref();
+//    for (auto &p: mr) if (p.first != "connectivity")  p.second = 0;
 
-    genotype::Critter::printMutationRates(std::cout, 2);
+//    genotype::Critter::printMutationRates(std::cout, 2);
 
-    rng::FastDice dice (1);
-    save(c, g, 0);
-    for (uint i=1; i<=10; i++) {
-      uint n = 100;
-      for (uint j=0; j<n; j++)  g.mutate(dice);
-      save(c, g, i*n);
-    }
+//    rng::FastDice dice (1);
+//    save(c, g, 0);
+//    for (uint i=1; i<=10; i++) {
+//      uint n = 100;
+//      for (uint j=0; j<n; j++)  g.mutate(dice);
+//      save(c, g, i*n);
+//    }
 
-    exit(242);
-  }
+//    exit(242);
+//  }
 }
 
 b2Body* Simulation::critterBody (float x, float y, float a) {
@@ -476,6 +480,7 @@ void Simulation::step (void) {
 
   if (_timeMs.level > 1)  _timeMs.env = durationFrom(start),  start = now();
 
+  audition();
   reproduction();
   produceCorpses();
   decomposition();
@@ -501,6 +506,8 @@ void Simulation::step (void) {
   // If above did not fail, effect small corrections to keep things smooth
   if (config::Simulation::screwTheEntropy())  correctFloatingErrors();
 
+  maybeCall(POST_STEP);
+
   if (_timeMs.level > 0)  _timeMs.step = durationFrom(stepStart);
 
   if (config::Simulation::verbosity() >= 1
@@ -513,6 +520,64 @@ void Simulation::step (void) {
 
 void Simulation::atEnd (void) {
   logStats();
+}
+
+void Simulation::audition(void) {
+  for (Critter *c: _critters) c->ears().fill(0);
+
+  static constexpr auto S = Critter::VOCAL_CHANNELS+1;
+  static const auto &A = config::Simulation::soundAttenuation();
+  static const auto process = [] (Critter *lhs, Critter *rhs) {
+    const auto &sound = rhs->producedSound();
+    auto &ears = lhs->ears();
+    const auto earsDy = lhs->bodyRadius();
+    std::array<float, 2> distances {
+      b2Distance(rhs->pos(), lhs->body().GetWorldPoint({0, +earsDy})),
+      b2Distance(rhs->pos(), lhs->body().GetWorldPoint({0, -earsDy}))
+    };
+
+    if (debugAudition > 1)  std::cerr << "\t" << CID(lhs) << " hears:\n";
+
+    for (uint i=0; i<2; i++) {
+      float att = A*distances[i];
+      if (debugAudition >= 3)
+        std::cerr << "\t\tatt = " << att << " = " << A << " * " << distances[i]
+                  << "\n";
+
+      for (uint j=0; j<S; j++) {
+        uint ix = j + i*S;
+        float v = std::max(0.f, sound[j] - att);
+        assert(0 <= v && v <= 1);
+        ears[ix] = std::max(ears[ix], v);
+
+        if (debugAudition >= 2)
+          std::cerr << "\t\t" << v << " = max(0, " << sound[j] << " - " << att
+                    << ")\n";
+      }
+
+      if (debugAudition >= 2)  std::cerr << "\n";
+    }
+
+    if (debugAudition == 1) {
+      using utils::operator <<;
+      std::cerr << ears << "\n";
+    }
+  };
+
+  if (debugAudition > 0)
+    std::cerr << "\n" << _environment->hearingEvents().size()
+              << " hearing events\n";
+  for (auto &p: _environment->hearingEvents()) {
+    Critter *a = p.first, *b = p.second;
+    if (debugAudition > 0)
+      std::cerr << "Audition step " << CID(a) << "/" << CID(b) << ": "
+                << a->silent() << "/" << b->silent() << "\n";
+
+    if (a->silent() && b->silent())  continue;
+
+    if (!a->silent()) process(b, a);
+    if (!b->silent()) process(a, b);
+  }
 }
 
 void Simulation::reproduction(void) {
@@ -1034,6 +1099,7 @@ void Simulation::load (const stdfs::path &file, Simulation &s,
     s.deserializePopulations(jc, jf, loadTree);
   }
 
+  s._finished = false;
   s._aborted = false;
   s._genData.min = 0;
   s._genData.max = 0;
@@ -1090,6 +1156,7 @@ void Simulation::clone (const Simulation &s) {
   _autopsies = s._autopsies;
   _competitionStats = s._competitionStats;
 
+  _finished = s._finished;
   _aborted = s._aborted;
 
 #ifndef NDEBUG
@@ -1138,6 +1205,7 @@ void assertEqual (const Simulation &lhs, const Simulation &rhs, bool deepcopy) {
   ASRT(_competitionStats.regimens);
   ASRT(_competitionStats.gens);
   ASRT(_competitionStats.fights);
+  ASRT(_finished);
   ASRT(_aborted);
 #undef ASRT
 

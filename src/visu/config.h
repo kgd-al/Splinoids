@@ -21,6 +21,7 @@ struct CONFIG_FILE(Visualisation) {
   DECLARE_PARAMETER(bool, drawInnerEdges)
   DECLARE_PARAMETER(int, drawVision)
   DECLARE_PARAMETER(int, drawReproduction)
+  DECLARE_PARAMETER(bool, animateANN)
 
   DECLARE_PARAMETER(RenderingType, renderType)
 

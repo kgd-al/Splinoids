@@ -4,13 +4,13 @@
 #include <QDebug>
 #include <QTimer>
 #include <QShortcut>
+#include <QSettings>
 
 #include "kgd/apt/visu/graphicsviewzoom.h"
 
 #include "mainview.h"
 #include "actionsbuilder.hpp"
 
-#include "geneticmanipulator.h"
 #include "../visu/config.h"
 
 namespace gui {
@@ -146,6 +146,20 @@ void MainView::buildActions(void) {
   });
   _actions[sd]->setCheckable(true);
   _actions[sd]->setChecked(_manipulator->isVisible());
+
+  addBoolAction(mGui, "", "Animate", "",
+                Qt::ShiftModifier + Qt::Key_A, [this] {
+    _manipulator->toggleBrainAnimation();
+  }, config::Visualisation::animateANN.ref());
+
+  QString st = "Stats";
+  addAction(mGui, "", st, "", Qt::Key_S,
+            [this, st] {
+    _stats->setVisible(!_stats->isVisible());
+    _actions[st]->setChecked(_stats->isVisible());
+  });
+  _actions[st]->setCheckable(true);
+  _actions[st]->setChecked(_stats->isVisible());
 
 
   QMenu *mDraw = _mbar->addMenu("Draw");
@@ -284,7 +298,7 @@ MainView::MainView (visu::GraphicSimulation &simulation,
 }
 
 void MainView::updateWindowName(void) {
-  QString title = "Splinoids main window ";
+  QString title = "Main window ";
   if (_running) {
     title += "(Running";
     auto s = config::Visualisation::substepsSpeed();
@@ -339,6 +353,7 @@ void MainView::step(void) {
   if (_stepping)  n = 1;
   for (uint i=0; i<n; i++) {
     _simu.step();
+    emit stepped();
 
     // TODO
 //    if (_simu.currTime().timestamp() == 15) {

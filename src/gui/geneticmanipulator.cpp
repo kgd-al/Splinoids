@@ -207,14 +207,20 @@ struct ColorLabel : public QLabel {
 
   ColorLabel (void) {
     setAutoFillBackground(true);
+    setFrameStyle(QFrame::Box);
+    setEnabled(false);
   }
 
   void noValue (void) {
-    setColorValue ({0,0,0});
+    setColorValue (Qt::black);
   }
 
   void setValue (const Color &c) {
     setColorValue(c);
+  }
+
+  void setValue(float v) {
+    setColorValue(QColor::fromHsvF(0, 0, v));
   }
 
   void mouseReleaseEvent(QMouseEvent*) {
@@ -225,9 +231,12 @@ protected:
   QColor color;
 
   void setColorValue (const Color &c) {
-    color = toQt(c);
+    setColorValue(toQt(c));
+  }
+
+  void setColorValue (const QColor &c) {
     QPalette p = palette();
-    p.setColor(QPalette::Window, color);
+    p.setColor(QPalette::Window, c);
     setPalette(p);
     update();
   }
@@ -244,7 +253,7 @@ struct GeneColorPicker : public ColorLabel {
   }
 
   void noValue (void) {
-    setColorValue ({.5,.5,.5});
+    setColorValue (Qt::gray);
     setEnabled(false);
   }
 
@@ -411,11 +420,16 @@ QFrame* filler (bool vertical = false) {
 
 GeneticManipulator::GeneticManipulator(QWidget *parent)
   : QDialog(parent), _subject(nullptr), _readonly(true) {
+  setObjectName("splinoids::gui::geneticmanipulator");
+//  setStyleSheet("font-size: 7pt");
+
   _proxy = new CritterProxy;
 
   buildViewer();
   buildStatsLayout();
   buildGenesLayout();
+
+  _brainPanel = new kgd::es_hyperneat::gui::ES_HyperNEATPanel;
 
   _brainButton = new QPushButton;
   _brainButton->setIcon(QIcon::fromTheme("help-about"));
@@ -441,13 +455,16 @@ GeneticManipulator::GeneticManipulator(QWidget *parent)
           this, &GeneticManipulator::hide);
 
   QVBoxLayout *rootLayout = new QVBoxLayout;
-    _contentsLayout = new QVBoxLayout;
+    _contentsLayout = new QGridLayout;
 
     _innerLayout = new QHBoxLayout;
       _innerLayout->addWidget(_viewer);
       _innerLayout->addLayout(_statsLayout);
-    _contentsLayout->addLayout(_innerLayout);
-    _contentsLayout->addLayout(_genesLayout);
+    _contentsLayout->addLayout(_innerLayout, 0, 0);
+    _contentsLayout->addLayout(_genesLayout, 1, 0);
+    _contentsLayout->addWidget(_brainPanel, 0, 1, 2, 1);
+    _contentsLayout->setColumnStretch(0, 0);
+    _contentsLayout->setColumnStretch(1, 1);
 
     QHBoxLayout *buttonsLayout = new QHBoxLayout;
     buttonsLayout->addWidget(filler(false));
@@ -540,10 +557,37 @@ QLayout* GeneticManipulator::buildRetinaLayout(void) {
       cl->noValue();
       cl->hide();
     }
+
     l->addWidget(cl);
+
+    if (i == max/2) l->addSpacing(10);
   }
 
   return _retinaLayout = l;
+}
+
+QLayout* GeneticManipulator::buildEarsLayout(void) {
+  QHBoxLayout *l = new QHBoxLayout;
+  l->setSpacing(0);
+
+  for (uint i=0; i<_eLabels.size(); i++) {
+    ColorLabel *cl = _eLabels[i] = new ColorLabel;
+    if (i == 0) {
+      cl->setText("Ears");
+      cl->setAlignment(Qt::AlignCenter);
+      cl->setStyleSheet("border: 1px solid gray");
+
+    } else {
+      cl->noValue();
+      cl->hide();
+    }
+
+    l->addWidget(cl);
+
+    if (i == _eLabels.size()/2) l->addSpacing(10);
+  }
+
+  return _earsLayout = l;
 }
 
 QLayout* GeneticManipulator::buildBarsLayout (void) {
@@ -620,6 +664,9 @@ void GeneticManipulator::buildStatsLayout(void) {
   addLRow( true, "Width");  addLRow(true, "Precision");
   othersLayout->addLayout(buildRetinaLayout(), r++, 0, 1, 4);
 
+  othersLayout->addWidget(line("Audition"), r++, 0, 1, 4);
+  othersLayout->addLayout(buildEarsLayout(), r++, 0, 1, 4);
+
   othersLayout->addWidget(line("Wellfare"), r++, 0, 1, 4);
   othersLayout->addLayout(buildBarsLayout(), r++, 0, 1, 4);
 
@@ -627,14 +674,16 @@ void GeneticManipulator::buildStatsLayout(void) {
 }
 
 void GeneticManipulator::buildGenesLayout(void) {
-  const auto &sBounds = genotype::Spline::config_t::dataBounds();
   const auto &cBounds = genotype::Critter::config_t::color_bounds();
 
   QVBoxLayout *gl;
   _genesLayout = gl = new QVBoxLayout;
 
-  QGridLayout *splinesLayout = new QGridLayout;
+#if CRITTER_SPLINES_COUNT > 0
+  const auto &sBounds = genotype::Spline::config_t::dataBounds();
   gl->addWidget(line("Splines"));
+
+  QGridLayout *splinesLayout = new QGridLayout;
   gl->addLayout(splinesLayout);
   for (uint i=0; i<S_v; i++) {
     for (uint j=0; j<SD_v; j++) {
@@ -658,6 +707,7 @@ void GeneticManipulator::buildGenesLayout(void) {
     splinesLayout->addWidget(new QLabel(snames[j]), j, S_v);
 
   splinesLayout->addWidget(line("Dimorphism"), SD_v, 0, 1, -1);
+#endif
 
   QGridLayout *colorsLayout = new QGridLayout;
   gl->addWidget(line("Colors"));
@@ -673,17 +723,19 @@ void GeneticManipulator::buildGenesLayout(void) {
   }
 
   // Body colors
+  uint lx = std::max(1u, S_v);
   for (uint j=0; j<2; j++) {
     GeneColorPicker *p;
     colorsLayout->addWidget(p = _bPickers[j]
                               = new GeneColorPicker (cBounds, 0, j+S_v),
-                            2*j+1, 0, 1, S_v);
+                            2*j+1, 0, 1, lx);
   }
 
   for (uint j=0; j<4; j++) {
+    if (j%2 == 0 && S_v == 0) continue;
     QLabel *n = new QLabel(cnames[j]);
     n->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    colorsLayout->addWidget(n, j, S_v);
+    colorsLayout->addWidget(n, j, lx);
   }
 
   gl->addWidget(filler(true));
@@ -703,8 +755,8 @@ void GeneticManipulator::setReadOnly(bool r) {
   _bSex->setEnabled(!r);
 
   // Set appropriate layout directions
-  _contentsLayout->setDirection(
-    _readonly ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
+//  _contentsLayout->setDirection(
+//    _readonly ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
   _innerLayout->setDirection(
     _readonly ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom);
 
@@ -748,8 +800,15 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
         [] (float v) { return QString::number(v, 'f', 0); });
 
     _rLabels[0]->hide();
-    for (uint i=1; i<=c.retina().size(); i++)  _rLabels[i]->show();
-    for (int i=c.retina().size()+1; i<_rLabels.size(); i++) _rLabels[i]->hide();
+//    for (uint i=1; i<=c.retina().size(); i++)  _rLabels[i]->show();
+//    for (int i=c.retina().size()+1; i<_rLabels.size(); i++) _rLabels[i]->hide();
+    auto rhs = c.retina().size()/2;
+    auto lhs = (_rLabels.size()-1)/2;
+    for (uint i=0; i<rhs; i++)
+      for (uint j=0; j<2; j++)  _rLabels[1 + i + j * lhs]->setVisible(true);
+
+    _eLabels[0]->hide();
+    for (uint i=1; i<_eLabels.size(); i++) _eLabels[i]->show();
 
     for (uint i=0; i<S_v; i++) {
       for (uint j=0; j<SD_v; j++)
@@ -764,6 +823,10 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     for (uint j=0; j<2; j++)
       _bPickers[j]->setGeneValue(g.colors[j*(S_v+1)]);
 
+    _cppn = std::make_unique<phenotype::CPPN>(
+              phenotype::CPPN::fromGenotype(g.brain));
+    _brainPanel->setData(g.brain, *_cppn, c.brain());
+
     updateShapeData();
     readCurrentStatus();
 
@@ -777,6 +840,9 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     _rLabels[0]->show();
     for (int i=1; i<_rLabels.size(); i++)  _rLabels[i]->hide();
 
+    _eLabels[0]->show();
+    for (uint i=1; i<_eLabels.size(); i++) _eLabels[i]->hide();
+
     for (uint i=0; i<S_v; i++) {
       for (uint j=0; j<SD_v; j++) _sSliders[i][j]->noValue();
       for (uint j=0; j<2; j++)    _dSliders[i][j]->noValue();
@@ -787,6 +853,9 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     for (uint j=0; j<2; j++)  _bPickers[j]->noValue();
 
     for (PrettyBar *b: _sBars)  b->noValue();
+
+    _cppn.release();
+    _brainPanel->noData();
   }
 
   updateWindowName();
@@ -840,7 +909,18 @@ void GeneticManipulator::readCurrentStatus(void) {
   });
 
   const auto &r = c.retina();
-  for (uint i=0; i<r.size(); i++) _rLabels[i+1]->setValue(r[i]);
+//  for (uint i=0; i<r.size(); i++) _rLabels[i+1]->setValue(r[i]);
+  auto rhs = r.size()/2;
+  auto lhs = (_rLabels.size()-1)/2;
+  for (uint i=0; i<rhs; i++)
+    for (uint j=0; j<2; j++)
+      _rLabels[1 + i + j * lhs]->setValue(r[i+j*rhs]);
+
+  const auto &e = c.ears();
+  static constexpr auto es = simu::Critter::VOCAL_CHANNELS+1;
+  for (uint i=0; i<2; i++)
+    for (uint j=0; j<es; j++)
+      _eLabels[1 + j + i * es]->setValue(std::max(0.f, e[i*es+j]));
 
   _sBars[0]->setValue(float(c.usableEnergy()));
   _sBars[1]->setValue(float(c.bodyHealth()));
@@ -848,6 +928,16 @@ void GeneticManipulator::readCurrentStatus(void) {
   for (uint i=0; i<S_v; i++)
     for (SCritter::Side s: {SCritter::Side::LEFT, SCritter::Side::RIGHT})
       _sBars[2+uint(s)*S_v+i]->setValue(float(c.splineHealth(i, s)));
+
+  if (config::Visualisation::animateANN())
+    _brainPanel->annViewer->updateAnimation();
+}
+
+void GeneticManipulator::toggleBrainAnimation(void) {
+  if (config::Visualisation::animateANN())
+    _brainPanel->annViewer->startAnimation();
+  else
+    _brainPanel->annViewer->stopAnimation();
 }
 
 void GeneticManipulator::updateSubject(void) {

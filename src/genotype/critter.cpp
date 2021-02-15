@@ -46,10 +46,10 @@ DEFINE_GENOME_DISTANCE_WEIGHTS({
 #define GENOME Vision
 
 static constexpr float fPI = M_PI;
-static constexpr float aVI = fPI / 6;
+static constexpr float aVI = fPI / 4;
 DEFINE_GENOME_FIELD_WITH_BOUNDS(float, angleBody, "", 0.f, aVI, aVI, fPI/2.f)
 DEFINE_GENOME_FIELD_WITH_BOUNDS(float, angleRelative, "", -fPI/2.f, 0.f, 0.f, fPI/2.f)
-DEFINE_GENOME_FIELD_WITH_BOUNDS(float, width, "", fPI/60, fPI/3, fPI/3, 2*fPI/3.f)
+DEFINE_GENOME_FIELD_WITH_BOUNDS(float, width, "", fPI/60, fPI/2, fPI/2, 2*fPI/3.f)
 DEFINE_GENOME_FIELD_WITH_BOUNDS(uint, precision, "", 0u, 1u, 1u, 5u)
 
 DEFINE_GENOME_MUTATION_RATES({
@@ -73,13 +73,12 @@ using Config = genotype::Critter::config_t;
 
 DEFINE_GENOME_FIELD_AS_SUBGENOME(BOCData, cdata, "")
 DEFINE_GENOME_FIELD_AS_SUBGENOME(Vision, vision, "")
-DEFINE_GENOME_FIELD_AS_SUBGENOME(HyperNEAT, connectivity, "hNeat")
+DEFINE_GENOME_FIELD_AS_SUBGENOME(ES_HyperNEAT, brain, "")
 
 DEFINE_GENOME_FIELD_WITH_BOUNDS(float, minClockSpeed, "minCS", .1f, 1.f, 1.f, 1.f)
 DEFINE_GENOME_FIELD_WITH_BOUNDS(float, maxClockSpeed, "maxCS", 1.f, 1.f, 1.f, 2.f)
 DEFINE_GENOME_FIELD_WITH_BOUNDS(float, matureAge, "mature", .25f, .33f, .33f, .5f)
 DEFINE_GENOME_FIELD_WITH_BOUNDS(float, oldAge, "old", .5f, .66f, .66f, .75f)
-DEFINE_GENOME_FIELD_WITH_BOUNDS(uint, brainSubsteps, "bdepth", 1u, 2u, 2u, 2u)
 
 auto sexualityFunctor = [] {
   GENOME_FIELD_FUNCTOR(int, asexual) functor;
@@ -272,8 +271,7 @@ DEFINE_GENOME_MUTATION_RATES({
   EDNA_PAIR(       oldAge, 1),
   EDNA_PAIR(      asexual, 0),
 
-  EDNA_PAIR( connectivity, 40),
-  EDNA_PAIR(brainSubsteps, .1),
+  EDNA_PAIR(        brain, 40),
 
   EDNA_PAIR(        cdata, 3.f),
 })
@@ -288,8 +286,8 @@ DEFINE_GENOME_DISTANCE_WEIGHTS({
   EDNA_PAIR(       oldAge, 1),
   EDNA_PAIR(      asexual, 0),
 
-  EDNA_PAIR( connectivity, 0),
-  EDNA_PAIR(brainSubsteps, .1),
+  EDNA_PAIR(        brain, 9),
+
   EDNA_PAIR(        cdata, 0.f),
 })
 
@@ -422,7 +420,7 @@ struct genotype::Aggregator<Cs, Critter> {
 
 DEFINE_SUBCONFIG(genotype::Vision::config_t, configVision)
 DEFINE_SUBCONFIG(Config::Crossover, configCrossover)
-DEFINE_SUBCONFIG(genotype::HyperNEAT::config_t, configBrain)
+DEFINE_SUBCONFIG(config::EvolvableSubstrate, configBrain)
 
 DEFINE_CONTAINER_PARAMETER(CFILE::MutationRates, dimorphism_mutationRates,
                            utils::normalizeRates({

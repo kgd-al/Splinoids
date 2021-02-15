@@ -7,14 +7,15 @@
 
 #include "../visu/graphicsimulation.h"
 
+#include "geneticmanipulator.h"
 #include "statsview.h"
 #include "joystick.h"
 
 namespace gui {
 
-struct GeneticManipulator;
-
 class MainView : public QGraphicsView {
+  Q_OBJECT
+
   QTimer _stepTimer;
 
   visu::GraphicSimulation &_simu;
@@ -56,8 +57,14 @@ public:
   void step (void);
 
   void toggleCharacterSheet (void);
+  auto characterSheet (void) {
+    return _manipulator;
+  }
 
   void showAll();
+
+signals:
+  void stepped (void);
 
 private:
   void buildActions (void);

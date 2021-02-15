@@ -111,7 +111,8 @@ void DebugDrawer::DrawCircle(const b2Vec2& center, float radius,
 }
 
 void DebugDrawer::DrawSolidCircle(const b2Vec2& center, float radius,
-                                  const b2Vec2& /*axis*/, const b2Color& color) {
+                                  const b2Vec2& /*axis*/,
+                                  const b2Color& color) {
   _draws.push_back(std::make_unique<b2DDCircle>(center, radius,
                                                 makeColor(color), true));
   using simu::operator<<;

@@ -8,6 +8,7 @@
 #include <QComboBox>
 #include <QProgressBar>
 
+#include "kgd/eshn/gui/es_hyperneatpanel.h"
 #include "../visu/critter.h"
 
 namespace gui {
@@ -67,9 +68,15 @@ private:
   QComboBox *_bSex;
   QMap<QString, QLabel*> _dataWidgets;
   QVector<ColorLabel*> _rLabels;
+  std::array<ColorLabel*, 2*(simu::Critter::VOCAL_CHANNELS+1)+1> _eLabels;
 
-  QBoxLayout *_contentsLayout, *_innerLayout, *_retinaLayout;
+  QGridLayout *_contentsLayout;
+  QBoxLayout *_innerLayout, *_retinaLayout, *_earsLayout;
   QLayout *_genesLayout, *_statsLayout;
+
+  kgd::es_hyperneat::gui::ES_HyperNEATPanel *_brainPanel;
+  std::unique_ptr<phenotype::CPPN> _cppn;
+
   QPushButton *_brainButton, *_saveButton, *_printButton,
               *_editButton, *_hideButton;
 
@@ -93,6 +100,7 @@ public:
   }
 
   void readCurrentStatus (void);
+  void toggleBrainAnimation (void);
 
   void saveSubjectBrain (void);
   void saveSubjectBrain (const QString &prefix) const;
@@ -125,6 +133,7 @@ private:
 
   QLayout* buildBarsLayout (void);
   QLayout* buildRetinaLayout (void);
+  QLayout* buildEarsLayout (void);
 
   template <typename T>
   void set (const QString &l, T (simu::Critter::*f) (void) const,

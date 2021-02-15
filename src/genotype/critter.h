@@ -1,13 +1,10 @@
 #ifndef GNTP_CRITTER_H
 #define GNTP_CRITTER_H
 
-#include "kgd/genotype/selfawaregenome.hpp"
-
+#include "kgd/eshn/phenotype/ann.h"
 #include "kgd/apt/core/crossover.h"
 
 #include "config.h"
-
-#include "../hyperneat/genotype.h"
 
 namespace genotype {
 
@@ -60,7 +57,8 @@ class Critter : public genotype::EDNA<Critter> {
   APT_EDNA()
 
 public:
-  static constexpr uint SPLINES_COUNT = 4;
+  #define CRITTER_SPLINES_COUNT 0
+  static constexpr uint SPLINES_COUNT = CRITTER_SPLINES_COUNT;
 
   using Sex = BOCData::Sex;
 
@@ -84,8 +82,7 @@ public:
   enum ReproductionType { SEXUAL = 0, ASEXUAL = 1 };
   int asexual;
 
-  HyperNEAT connectivity;
-  uint brainSubsteps;
+  ES_HyperNEAT brain;
 
   auto id (void) const {
     return gdata.self.gid;
@@ -161,8 +158,7 @@ DECLARE_GENOME_FIELD(Critter, float, minClockSpeed)
 DECLARE_GENOME_FIELD(Critter, float, maxClockSpeed)
 DECLARE_GENOME_FIELD(Critter, float, matureAge)
 DECLARE_GENOME_FIELD(Critter, float, oldAge)
-DECLARE_GENOME_FIELD(Critter, HyperNEAT, connectivity)
-DECLARE_GENOME_FIELD(Critter, uint, brainSubsteps)
+DECLARE_GENOME_FIELD(Critter, ES_HyperNEAT, brain)
 
 } // end of namespace gntp
 
@@ -207,7 +203,7 @@ struct EDNA_CONFIG_FILE(Critter) {
   using Crossover = genotype::BOCData::config_t;
   DECLARE_SUBCONFIG(Crossover, configCrossover)
   DECLARE_SUBCONFIG(genotype::Vision::config_t, configVision)
-  DECLARE_SUBCONFIG(genotype::HyperNEAT::config_t, configBrain)
+  DECLARE_SUBCONFIG(config::EvolvableSubstrate, configBrain)
 
   DECLARE_PARAMETER(MutationRates, mutationRates)
   DECLARE_PARAMETER(DistanceWeights, distanceWeights)

@@ -3,12 +3,14 @@
 #include <QSettings>
 #include <QTimer>
 #include <QSplitter>
+#include <QDockWidget>
 
 #include "kgd/external/cxxopts.hpp"
 
 #include "gui/mainview.h"
 
 #include <QDebug>
+#include "visu/config.h"
 
 //#include "config/dependencies.h"
 
@@ -69,7 +71,7 @@ int main(int argc, char *argv[]) {
 
 //  std::string duration = "=100";
   std::string outputFolder = "tmp_visu_run/";
-  char overwrite = simu::Simulation::UNSPECIFIED;
+  char overwrite = simu::Simulation::ABORT;
 
   cxxopts::Options options("Splinoids (visualisation)",
                            "2D simulation of critters in a changing environment");
@@ -175,19 +177,36 @@ int main(int argc, char *argv[]) {
   QApplication a(argc, argv);
   setlocale(LC_NUMERIC,"C");
 
-  QSettings settings ("kgd", "Splinoids");
+  QApplication::setOrganizationName("kgd-al");
+  QApplication::setApplicationName("splinoids-visu");
+  QApplication::setApplicationDisplayName("Splinoids (visu)");
+  QApplication::setApplicationVersion("0.0.0");
+  QApplication::setDesktopFileName(
+    QApplication::organizationName() + "-" + QApplication::applicationName()
+    + ".desktop");
+  QSettings settings;
+
+#define RESTORE(X) \
+  config::Visualisation::X.ref() = settings.value("hack::" #X).toBool(); \
+  std::cerr << "Restoring " << #X << ": " << config::Visualisation::X() << "\n";
+  RESTORE(brainDeadSelection)
+  RESTORE(b2DebugDraw)
+  RESTORE(animateANN)
+#undef RESTORE
 
   QMainWindow w;
   gui::StatsView *stats = new gui::StatsView;
   visu::GraphicSimulation s (w.statusBar(), stats);
 
   gui::MainView *v = new gui::MainView (s, stats, w.menuBar());
+  gui::GeneticManipulator *cs = v->characterSheet();
 
   QSplitter splitter;
   splitter.addWidget(v);
   splitter.addWidget(stats);
   w.setCentralWidget(&splitter);
-  w.setWindowTitle("Splinoids main window");
+
+  w.setWindowTitle("Main window");
 
   // ===========================================================================
   // == Simulation setup
@@ -236,13 +255,15 @@ int main(int argc, char *argv[]) {
 
 //      cGenome.toFile("last", 2);
 
-    std::cout << "Environment:\n" << eGenome
-              << "\nSplinoid";
-    if (cGenomes.size() > 1) std::cout << "s";
-    std::cout << ":\n";
-    for (const CGenome &g: cGenomes)
-      std::cout << g;
-    std::cout << std::endl;
+    if (verbosity > config::Verbosity::QUIET) {
+      std::cout << "Environment:\n" << eGenome
+                << "\nSplinoid";
+      if (cGenomes.size() > 1) std::cout << "s";
+      std::cout << ":\n";
+      for (const CGenome &g: cGenomes)
+        std::cout << g;
+      std::cout << std::endl;
+    }
 
     s.init(eGenome, cGenomes, idata);
 
@@ -309,28 +330,41 @@ int main(int argc, char *argv[]) {
 
   // ===========================================================================
   // Final preparations
+  w.restoreGeometry(settings.value("geom").toByteArray());
+  cs->restoreGeometry(settings.value("cs::geom").toByteArray());
+  cs->setVisible(settings.value("cs::visible").toBool());
   w.show();
-
-  // Load settings
-//  qDebug() << "Loaded MainWindow::Geometry:" << settings.value("geometry").toRect();
-  w.setGeometry(settings.value("geometry").toRect());
-//  qDebug() << "MainWindow::Geometry:" << w.geometry();
-
 
   v->fitInView(s.bounds(), Qt::KeepAspectRatio);
   v->selectNext();
+
+  auto fgm = new gui::GeneticManipulator (&w);
+  fgm->setSubject(s.critters().rbegin()->second);
+  fgm->restoreGeometry(settings.value("fgm::geom").toByteArray());
+  QObject::connect(v, &gui::MainView::stepped,
+                   fgm, &gui::GeneticManipulator::readCurrentStatus);
+  fgm->show();
 
   QTimer::singleShot(100, [&v, startspeed] {
     if (startspeed) v->start(startspeed);
     else            v->stop();
   });
 
-  auto ret = a.exec();
+  auto r = a.exec();
 
-  // Save settings
-//  qDebug() << "MainWindow::Geometry:" << w.geometry();
-  if (w.geometry().isValid())  settings.setValue("geometry", w.geometry());
-//  qDebug() << "Saved MainWindow::Geometry:" << settings.value("geometry").toRect();
+  settings.setValue("cs::visible", cs->isVisible());
+  settings.setValue("cs::geom", cs->saveGeometry());
+  settings.setValue("geom", w.saveGeometry());
 
-  return ret;
+  settings.setValue("fgm::geom", fgm->saveGeometry());
+
+#define SAVE(X) \
+  settings.setValue("hack::" #X, config::Visualisation::X()); \
+  std::cerr << "Saving " << #X << ": " << config::Visualisation::X() << "\n";
+  SAVE(brainDeadSelection)
+  SAVE(b2DebugDraw)
+  SAVE(animateANN)
+#undef SAVE
+
+  return r;
 }

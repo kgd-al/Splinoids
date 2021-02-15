@@ -45,7 +45,7 @@ void doBlendedPrint (const visu::GraphicSimulation &s,
     Key (const visu::Critter &v) : Key(v.object()) {}
   };
   struct CMP {
-    bool operator() (const Key &lhs, const Key &rhs) {
+    bool operator() (const Key &lhs, const Key &rhs) const {
       if (lhs.ui != rhs.ui) return lhs.ui < rhs.ui;
       return lhs.sex < rhs.sex;
     }

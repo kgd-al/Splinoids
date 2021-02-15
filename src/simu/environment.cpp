@@ -9,6 +9,7 @@ namespace simu {
 
 static constexpr int debugFeeding = 0;
 static constexpr int debugFighting = 0;
+static constexpr int debugHearing = 0;
 static constexpr int debugMating = 0;
 
 const bool Environment::boxEdges = true;
@@ -37,9 +38,15 @@ struct CollisionMonitor : public b2ContactListener {
     return (uint16(lhs) << 8) | uint16(rhs);
   }
 
+  bool isAudition (const b2Fixture *fA, const b2Fixture *fB) {
+    /// TODO maybe dangerous
+    return (Critter::get(fA)->type | Critter::get(fB)->type)
+        == (Critter::FixtureType::AUDITION | Critter::FixtureType::BODY);
+  }
+
   bool isMatingAttempt (const b2Fixture *fA, const b2Fixture *fB) {
-    return Critter::get(fA)->type == Critter::FixtureType::REPRODUCTION
-        && Critter::get(fB)->type == Critter::FixtureType::REPRODUCTION;
+    return (Critter::get(fA)->type & Critter::get(fB)->type)
+        == Critter::FixtureType::REPRODUCTION;
   }
 
   void BeginContact(b2Contact *c) override {
@@ -52,7 +59,9 @@ struct CollisionMonitor : public b2ContactListener {
 
     switch (pair(dA.type, dB.type)) {
     case pair(BodyType::CRITTER, BodyType::CRITTER):
-      if (isMatingAttempt(fA, fB))
+      if (isAudition(fA, fB))
+        registerStartOfHearing(critter(dA), critter(dB));
+      else if (isMatingAttempt(fA, fB))
         registerStartOfMatingAttempt(critter(dA), critter(dB));
       else
         registerFightStart(critter(dA), fA, critter(dB), fB);
@@ -118,7 +127,9 @@ struct CollisionMonitor : public b2ContactListener {
 
     switch (pair(dA.type, dB.type)) {
     case pair(BodyType::CRITTER, BodyType::CRITTER):
-      if (isMatingAttempt(fA, fB))
+      if (isAudition(fA, fB))
+        registerEndOfHearing(critter(dA), critter(dB));
+      else if (isMatingAttempt(fA, fB))
         registerEndOfMatingAttempt(critter(dA), critter(dB));
       else
         registerFightEnd(critter(dA), fA, critter(dB), fB);
@@ -232,6 +243,23 @@ struct CollisionMonitor : public b2ContactListener {
     e._feedingEvents.erase({c,p});
   }
 
+  void registerStartOfHearing (Critter *cA, Critter *cB) {
+    /// TODO Find a way (latter) to prevent both contacts to register
+    if (debugHearing/* && cA->id() < cB->id()*/)
+      std::cerr << "Start of hearing between " << CID(cA) << " & " << CID(cB)
+                << std::endl;
+    if (cA->id() < cB->id())
+      e._hearingEvents.insert({cA,cB});
+  }
+
+  void registerEndOfHearing (Critter *cA, Critter *cB) {
+    if (debugHearing/* && cA->id() < cB->id()*/)
+      std::cerr << "End of hearing between " << CID(cA) << " & " << CID(cB)
+                << std::endl;
+    if (cA->id() < cB->id())
+      e._hearingEvents.erase({cA,cB});
+  }
+
   void registerStartOfMatingAttempt (Critter *cA, Critter *cB) {
     static constexpr auto S = Critter::Genome::SEXUAL;
     if (cA->sex() == cB->sex()) return;
@@ -286,9 +314,9 @@ Environment::~Environment (void) {
   delete _cmonitor;
 }
 
-void Environment::init(decimal energy, int rngSeed) {
+void Environment::init(decimal energy, uint rngSeed) {
   _energyReserve = energy;
-  if (rngSeed >= 0) _dice.reset(rngSeed);
+  if (rngSeed != uint(-1)) _dice.reset(rngSeed);
 }
 
 void Environment::modifyEnergyReserve (decimal e) {

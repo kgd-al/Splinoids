@@ -14,7 +14,13 @@ DEFINE_PRETTY_ENUMERATION(SimuFields, ENV, CRITTERS, FOODLETS, PTREE)
 
 namespace simu {
 
+struct Simulation;
+struct Scenario;
+using SimulationCallback = std::function<void(Simulation&)>;
+
 class Simulation {
+public:
+  enum Callback { POST_STEP };
 protected:
   std::unique_ptr<Environment> _environment;
 
@@ -79,7 +85,12 @@ protected:
     }
   } _competitionStats;
 
-  bool _aborted;
+  bool _finished, _aborted;
+
+private:
+  friend Scenario;
+  using Callbacks = std::map<Callback, SimulationCallback>;
+  Callbacks _callbacks;
 
 public:
   struct InitData {
@@ -92,7 +103,7 @@ public:
     float cRange;   // Critters initial coordinates are in [-range,range]^2
     float pRange;   // Plants initial coordinates are in [-range,range]^2
 
-    int seed;
+    uint seed;
 
     nlohmann::json scenario;  // To automatise tests (specifically regressions)
 
@@ -110,7 +121,7 @@ public:
   virtual ~Simulation (void);
 
   bool finished (void) const {
-    return failed() || generationGoalReached();
+    return _finished || failed() || generationGoalReached();
   }
 
   bool failed (void) const {
@@ -192,6 +203,12 @@ public:
   void init (const Environment::Genome &egenome,
              std::vector<Critter::Genome> cgenomes,
              const InitData &data);
+
+  void setupCallbacks(const Callbacks &c) { _callbacks = c; }
+  void maybeCall (Callback c) {
+    auto it = _callbacks.find(c);
+    if (it != _callbacks.end() && it->second) it->second(*this);
+  }
 
   virtual void postInit (void) {}
 
@@ -316,6 +333,8 @@ protected:
   b2Body* foodletBody (float x, float y);
 
 private:
+  void audition (void);
+
   void reproduction (void);
   Critter* createChild (const Critter *parent, const CGenome &genome,
                         decimal energy, rng::AbstractDice &dice);

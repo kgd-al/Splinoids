@@ -1,25 +1,14 @@
 #ifndef HYPERNEAT_GENOTYPE_WRAPPER_H
 #define HYPERNEAT_GENOTYPE_WRAPPER_H
 
-#include "kgd/genotype/selfawaregenome.hpp"
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wsign-compare"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wunused-variable"
-#if __GNUC__ >= 9
-#pragma GCC diagnostic ignored "-Wdeprecated-copy"
-#endif
-#include "../../MultiNEAT/src/Genome.h" // Bad header
-#pragma GCC diagnostic pop
+#include "kgd/eshn/genotype/es-hyperneat.h"
 
 namespace genotype {
 
 class HyperNEAT : public genotype::EDNA<HyperNEAT> {
   APT_EDNA()
 public:
-  NEAT::Genome data;
+  ES_HyperNEAT data;
   uint hiddenNeuronLayers;
   uint hiddenNeuronVision;
 

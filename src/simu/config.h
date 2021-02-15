@@ -53,17 +53,19 @@ enum struct CollisionFlag : uint16 {
   OBSTACLE_FLAG = 0x01,
   CRITTER_BODY_FLAG = 0x02,
   CRITTER_SPLN_FLAG = 0x04,
-  CRITTER_REPRO_FLAG = 0x08,
-  PLANT_FLAG = 0x10,
-  CORPSE_FLAG = 0x20,
+  CRITTER_AUDT_FLAG = 0x08,
+  CRITTER_REPRO_FLAG = 0x10,
+  PLANT_FLAG = 0x20,
+  CORPSE_FLAG = 0x40,
 
 
   ALL_OBJECTS_MASK = OBSTACLE_FLAG | CRITTER_BODY_FLAG | CRITTER_SPLN_FLAG
                    | PLANT_FLAG | CORPSE_FLAG,
 
   OBSTACLE_MASK = ALL_OBJECTS_MASK,
-  CRITTER_BODY_MASK = ALL_OBJECTS_MASK,
+  CRITTER_BODY_MASK = ALL_OBJECTS_MASK | CRITTER_AUDT_FLAG,
   CRITTER_SPLN_MASK = ALL_OBJECTS_MASK ^ CORPSE_FLAG,
+  CRITTER_AUDT_MASK = CRITTER_BODY_FLAG,
   CRITTER_REPRO_MASK = CRITTER_REPRO_FLAG,
   PLANT_MASK = ALL_OBJECTS_MASK,
   CORPSE_MASK = ALL_OBJECTS_MASK,
@@ -105,7 +107,8 @@ struct CONFIG_FILE(Simulation) {
   DECLARE_PARAMETER(float, critterBaseSpeed)
   DECLARE_PARAMETER(float, combatBaselineIntensity)
   DECLARE_PARAMETER(float, combatMinVelocity)
-  DECLARE_PARAMETER(float, reproductionRange) // With respect to body size
+  DECLARE_PARAMETER(float, auditionRange)     // With respect to body size
+  DECLARE_PARAMETER(float, reproductionRange) //
   DECLARE_PARAMETER(float, reproductionRequestThreshold)
 
   // Splinoid metabolic constants (per second, affected by clock speed)
@@ -123,6 +126,7 @@ struct CONFIG_FILE(Simulation) {
   DECLARE_PARAMETER(uint, ticksPerSecond)
   DECLARE_PARAMETER(uint, secondsPerDay)
   DECLARE_PARAMETER(uint, daysPerYear)
+  DECLARE_PARAMETER(float, soundAttenuation)
 
   // Other
   DECLARE_PARAMETER(bool, screwTheEntropy)

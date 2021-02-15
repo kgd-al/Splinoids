@@ -13,7 +13,7 @@ class StatsView : public QWidget {
   QMap<QString, QLabel*> details;
 
 public:
-  StatsView(void) {}
+  StatsView(void);
 
   void setupFields (const QStringList &l);
 

@@ -7,6 +7,7 @@ QPointF toQt (const simu::P2D &p) {
 }
 
 QColor toQt (const simu::Color &c) {
+  for (auto &v: c)  if (v < 0 || 1 < v) return QColor(Qt::transparent);
   return QColor::fromRgbF(c[0], c[1], c[2], 1);
 }
 
@@ -21,6 +22,7 @@ DEFINE_PARAMETER(bool, drawInnerEdges, false)
 DEFINE_PARAMETER(int, drawVision, 0)
 DEFINE_PARAMETER(int, drawReproduction, 1)
 DEFINE_PARAMETER(RenderingType, renderType, RenderingType::REGULAR)
+DEFINE_PARAMETER(bool, animateANN, true)
 
 DEFINE_PARAMETER(bool, brainDeadSelection, false)
 

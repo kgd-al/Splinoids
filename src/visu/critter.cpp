@@ -119,9 +119,7 @@ void Critter::updateShape (void) {
     aabb.upperBound.Set(-FLT_MAX, -FLT_MAX);
     const b2Fixture *f = _critter.fixturesList();
     while (f) {
-      if (simu::Critter::get(f)->type
-          != simu::Critter::FixtureType::REPRODUCTION) {
-
+      if (!f->IsSensor()) {
         const b2Shape *s = f->GetShape();
         for (int c=0; c<s->GetChildCount(); c++) {
           b2AABB sAABB;
@@ -165,7 +163,7 @@ void Critter::updateShape (void) {
                         abr.width(), abr.height());
 
   _minimalBoundingRect = _body.boundingRect().united(b2br)
-                                            .united(abr).united(abr_f);
+                                             .united(abr).united(abr_f);
 
   _critterBoundingRect = squarify(_minimalBoundingRect);
 

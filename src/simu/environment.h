@@ -36,6 +36,7 @@ public:
   };
   using FightingEvents = std::map<FightingKey, FightingData>;
 
+  using HearingEvents = std::set<std::pair<Critter*,Critter*>>;
   using MatingEvents = std::set<std::pair<Critter*,Critter*>>;
 
 //  using PendingDeletions = std::set<std::pair<Critter*, uint>>;
@@ -66,6 +67,7 @@ private:
   FeedingEvents _feedingEvents;
   FightingEvents _fightingEvents;
 
+  HearingEvents _hearingEvents;
   MatingEvents _matingEvents;
 
   // Destroyed splines that must be deleted after the physical step
@@ -81,7 +83,7 @@ public:
   Environment(const Genome &g);
   ~Environment (void);
 
-  void init (decimal energy, int rngSeed);
+  void init (decimal energy, uint rngSeed);
 
   const auto& genotype (void) const {
     return _genome;
@@ -125,6 +127,10 @@ public:
 
   const auto& matingEvents (void) const {
     return _matingEvents;
+  }
+
+  const auto& hearingEvents (void) const {
+    return _hearingEvents;
   }
 
   void vision (const Critter *c) const;

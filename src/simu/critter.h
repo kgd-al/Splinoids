@@ -3,12 +3,12 @@
 
 #include <bitset>
 
+#include "kgd/eshn/phenotype/ann.h"
+
 #include "../genotype/critter.h"
 #include "config.h"
 
 #include "box2d/b2_body.h"
-
-#include "../../MultiNEAT/src/NeuralNetwork.h"
 
 #include "../enumarray.hpp"
 
@@ -34,7 +34,22 @@ public:
   static constexpr auto SPLINES_COUNT = Genome::SPLINES_COUNT;
   static constexpr uint SPLINES_PRECISION = 4;
 
-  enum class FixtureType { BODY, ARTIFACT, REPRODUCTION };
+  static constexpr uint VOCAL_CHANNELS = 3;
+
+  using FixtureType_ut = uint8;
+  enum class FixtureType : FixtureType_ut {
+    BODY = 0x1,
+    ARTIFACT = 0x2,
+    AUDITION = 0x4,
+    REPRODUCTION = 0x8
+  };
+  friend FixtureType operator| (const FixtureType lhs, const FixtureType &rhs) {
+    return FixtureType(FixtureType_ut(lhs) | FixtureType_ut(rhs));
+  }
+  friend FixtureType operator& (const FixtureType lhs, const FixtureType &rhs) {
+    return FixtureType(FixtureType_ut(lhs) & FixtureType_ut(rhs));
+  }
+
   enum class Side : uint { LEFT = 0, RIGHT = 1 };
   struct FixtureData {
     FixtureType type;
@@ -148,16 +163,20 @@ private:
   std::vector<float> _raysFraction; // TODO Remove (debug visu only)
 
   // ===========================================================================
+  // == Audition cache data ==
+  std::array<float, 2*(VOCAL_CHANNELS+1)> _ears;
+
+  // ===========================================================================
   // == Neural outputs ==
   std::map<Motor, float> _motors;
   float _clockSpeed;
+  std::array<float, 2> _voice;
   float _reproduction;
 
   // ===========================================================================
   // == Other ==
 
-  using NeuralNetwork = NEAT::NeuralNetwork;
-  NeuralNetwork _brain;
+  phenotype::ANN _brain;
 
   float _age;
 
@@ -168,7 +187,6 @@ private:
 
   decimal _reproductionReserve;
   b2Fixture *_reproductionSensor;
-  static const FixtureData _reproUserData;
 
   /* Each portion managed independantly
    * Indices are
@@ -180,6 +198,12 @@ private:
   std::array<decimal, 1+2*SPLINES_COUNT> _currHealth;
   std::bitset<2*SPLINES_COUNT> _destroyed;
 
+  // Cached-data for sounds emitted into the environment
+  // 0 -> Involuntary (motion, feeding, ...)
+  // 1 -> Vocalisations
+  std::array<float, VOCAL_CHANNELS+1> _sounds;
+  b2Fixture *_auditionSensor;
+
   // To monitor feeding behavior
   using FeedingSources = utils::enumarray<float, BodyType,
                                                   BodyType::PLANT,
@@ -187,7 +211,7 @@ private:
   FeedingSources _feedingSources;
 
   // To monitor behavior
-  std::vector<double> _neuralOutputs;
+  decltype(std::declval<phenotype::ANN>().outputs()) _neuralOutputs;
 
   // Potential extension
   //  float _water;
@@ -574,6 +598,23 @@ public:
     return _raysFraction;
   }
 
+  auto& ears (void) {
+    return _ears;
+  }
+
+  const auto& ears (void) const {
+    return _ears;
+  }
+
+  bool silent (void) const {
+    return std::all_of(_sounds.begin(), _sounds.end(),
+                       [] (auto v) { return v == 0; });
+  }
+
+  const auto& producedSound (void) const {
+    return _sounds;
+  }
+
   static b2BodyUserData* get (b2Body *b);
   static const b2BodyUserData* get (const b2Body *b);
 
@@ -601,11 +642,11 @@ public:
 
   static float nextGrowthStepAt (uint currentStep);
 
-  static decimal energyForCreation (void) {
+  static constexpr decimal energyForCreation (void) {
     return 2*maximalEnergyStorage(MIN_SIZE);
   }
 
-  static decimal maximalEnergyStorage (float size) {
+  static constexpr decimal maximalEnergyStorage (float size) {
     assert(MIN_SIZE <= size && size <= MAX_SIZE);
 //    return size * BODY_DENSITY;
     return decimal(M_PI * size * size * RADIUS * RADIUS * MIN_DENSITY);
@@ -632,7 +673,7 @@ private:
 
   void drivingCorrections (void);
   void performVision (const Environment &env);
-  void neuralStep (Environment &env);
+  void neuralStep (void);
   void energyConsumption (Environment &env);
   void regeneration (Environment &env);
   void aging (Environment &env);
@@ -652,6 +693,7 @@ private:
   b2Fixture* addBodyFixture (void);
   b2Fixture* addPolygonFixture(uint splineIndex, Side side, uint artifactIndex,
                                const Vertices &v);
+  b2Fixture* addAuditionFixture (void);
   b2Fixture* addReproFixture (void);
   b2Fixture* addFixture (const b2FixtureDef &def,
                          const FixtureData &data);
@@ -662,6 +704,10 @@ private:
   // == Vision range managing internal methods
   void generateVisionRays (void);
   void updateVisionRays (void);
+
+  // ===========================================================================
+  // == ANN-related generation
+  void buildBrain (void);
 
   // ===========================================================================
 };

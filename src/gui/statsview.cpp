@@ -3,6 +3,10 @@
 
 namespace gui {
 
+StatsView::StatsView (void) {
+  setObjectName("splinoids::gui::statsview");
+}
+
 QFrame* line (void) {
   QFrame *l = new QFrame;
   l->setFrameShape(QFrame::HLine);

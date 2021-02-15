@@ -1,4 +1,5 @@
 leak:libfontconfig.so.1
+leak:libgvc.so.6
 leak:libdbus-1.so.3
 leak:libdrm_amdgpu.so.1
 leak:libGLX_mesa.so.0
