@@ -50,10 +50,9 @@ struct EnumAction : public QAction {
 
   void updateStatus (void) {
     std::ostringstream oss;
-    oss << details.toStdString()
-        << "; Current status for " << text().toStdString() << ": ";
+    if (!details.isEmpty()) oss << details.toStdString() << "; ";
+    oss << "Current status for " << text().toStdString() << ": ";
     formatter(oss, value);
-    oss << ")";
     setStatusTip(QString::fromStdString(oss.str()));
   }
 };

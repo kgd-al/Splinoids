@@ -12,6 +12,8 @@
 #include <QDebug>
 #include "visu/config.h"
 
+Q_DECLARE_METATYPE(BrainDead)
+
 //#include "config/dependencies.h"
 
 long maybeSeed(const std::string& s) {
@@ -186,12 +188,16 @@ int main(int argc, char *argv[]) {
     + ".desktop");
   QSettings settings;
 
-#define RESTORE(X) \
-  config::Visualisation::X.ref() = settings.value("hack::" #X).toBool(); \
+#define RESTORE(X, T) \
+  config::Visualisation::X.ref() = settings.value("hack::" #X).value<T>(); \
   std::cerr << "Restoring " << #X << ": " << config::Visualisation::X() << "\n";
-  RESTORE(brainDeadSelection)
-  RESTORE(b2DebugDraw)
-  RESTORE(animateANN)
+  RESTORE(brainDeadSelection, BrainDead)
+  RESTORE(selectionZoomFactor, bool)
+  RESTORE(drawVision, int)
+  RESTORE(drawAudition, bool)
+#ifndef NDEBUG
+  RESTORE(b2DebugDraw, bool)
+#endif
 #undef RESTORE
 
   QMainWindow w;
@@ -358,12 +364,17 @@ int main(int argc, char *argv[]) {
 
   settings.setValue("fgm::geom", fgm->saveGeometry());
 
-#define SAVE(X) \
-  settings.setValue("hack::" #X, config::Visualisation::X()); \
+
+#define SAVE(X, T) \
+  settings.setValue("hack::" #X, T(config::Visualisation::X())); \
   std::cerr << "Saving " << #X << ": " << config::Visualisation::X() << "\n";
-  SAVE(brainDeadSelection)
-  SAVE(b2DebugDraw)
-  SAVE(animateANN)
+  SAVE(brainDeadSelection, int)
+  SAVE(selectionZoomFactor, float)
+  SAVE(drawVision, int)
+  SAVE(drawAudition, bool)
+#ifndef NDEBUG
+  SAVE(b2DebugDraw, bool)
+#endif
 #undef SAVE
 
   return r;

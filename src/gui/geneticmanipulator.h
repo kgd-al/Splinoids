@@ -71,7 +71,7 @@ private:
   std::array<ColorLabel*, 2*(simu::Critter::VOCAL_CHANNELS+1)+1> _eLabels;
 
   QGridLayout *_contentsLayout;
-  QBoxLayout *_innerLayout, *_retinaLayout, *_earsLayout;
+  QBoxLayout *_retinaLayout, *_earsLayout;
   QLayout *_genesLayout, *_statsLayout;
 
   kgd::es_hyperneat::gui::ES_HyperNEATPanel *_brainPanel;
@@ -142,6 +142,9 @@ private:
 
       _dataWidgets[l]->setText(formatter((_subject->object().*f)()));
   }
+
+  void setLayoutDirection(QBoxLayout::Direction d = QBoxLayout::TopToBottom);
+  void showEvent(QShowEvent *e) override;
 };
 
 } // end of namespace gui

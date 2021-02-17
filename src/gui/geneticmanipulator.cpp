@@ -1,3 +1,4 @@
+#include <QApplication>
 #include <QHBoxLayout>
 #include <QFormLayout>
 #include <QSlider>
@@ -8,6 +9,7 @@
 #include <QGraphicsSceneMouseEvent>
 #include <QKeyEvent>
 #include <QFileDialog>
+#include <QDesktopWidget>
 
 #include "geneticmanipulator.h"
 
@@ -327,11 +329,12 @@ struct PrettyBar : public QProgressBar {
       else
         setFormat("");
     } else
-      prettyFormat();
+      resetFormat();
   }
 
   void setValue (float v) {
     QProgressBar::setValue(MAX * v / max);
+    prettyFormat();
   }
 
   void setStyle (const QColor &cc) {
@@ -449,6 +452,7 @@ GeneticManipulator::GeneticManipulator(QWidget *parent)
   _editButton = new QPushButton;
   connect(_editButton, &QPushButton::clicked,
           this, &GeneticManipulator::toggleReadOnly);
+  _editButton->setShortcut(Qt::Key_E);
 
   _hideButton = new QPushButton ("Close");
   connect(_hideButton, &QPushButton::clicked,
@@ -456,15 +460,6 @@ GeneticManipulator::GeneticManipulator(QWidget *parent)
 
   QVBoxLayout *rootLayout = new QVBoxLayout;
     _contentsLayout = new QGridLayout;
-
-    _innerLayout = new QHBoxLayout;
-      _innerLayout->addWidget(_viewer);
-      _innerLayout->addLayout(_statsLayout);
-    _contentsLayout->addLayout(_innerLayout, 0, 0);
-    _contentsLayout->addLayout(_genesLayout, 1, 0);
-    _contentsLayout->addWidget(_brainPanel, 0, 1, 2, 1);
-    _contentsLayout->setColumnStretch(0, 0);
-    _contentsLayout->setColumnStretch(1, 1);
 
     QHBoxLayout *buttonsLayout = new QHBoxLayout;
     buttonsLayout->addWidget(filler(false));
@@ -474,6 +469,8 @@ GeneticManipulator::GeneticManipulator(QWidget *parent)
     buttonsLayout->addWidget(_editButton, 0, Qt::AlignCenter);
     buttonsLayout->addWidget(_hideButton, 0, Qt::AlignCenter);
     buttonsLayout->addWidget(filler(false));
+
+    setLayoutDirection();
   rootLayout->addLayout(_contentsLayout);
   rootLayout->addLayout(buttonsLayout);
   setLayout(rootLayout);
@@ -754,12 +751,6 @@ void GeneticManipulator::setReadOnly(bool r) {
   for (auto *p: _bPickers)  p->setReadOnly(r);
   _bSex->setEnabled(!r);
 
-  // Set appropriate layout directions
-//  _contentsLayout->setDirection(
-//    _readonly ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
-  _innerLayout->setDirection(
-    _readonly ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom);
-
   _editButton->setText(r ? "Edit" : "Ok");
 
   updateWindowName();
@@ -781,6 +772,7 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
   if (_subject) {
     const simu::Critter &c = _subject->object();
     const genotype::Critter &g = c.genotype();
+    updateShapeData();
 
     _lLastname->setText(_subject->lastname());
 
@@ -985,6 +977,36 @@ void GeneticManipulator::keyReleaseEvent(QKeyEvent *e) {
 //  qDebug() << __PRETTY_FUNCTION__ << ": " << e;
   emit keyReleased(e);
   _proxy->update();
+}
+
+void GeneticManipulator::setLayoutDirection(QBoxLayout::Direction d) {
+  while (_contentsLayout->count() > 0)  _contentsLayout->takeAt(0);
+  if (d == QBoxLayout::TopToBottom) {
+    _contentsLayout->addWidget(_viewer, 0, 0);
+    _contentsLayout->addLayout(_statsLayout, 0, 1);
+    _contentsLayout->addLayout(_genesLayout, 1, 0, 1, 2);
+    _contentsLayout->addWidget(_brainPanel, 0, 2, 2, 1);
+    _contentsLayout->setColumnStretch(1, 2);
+
+  } else {
+    _contentsLayout->addWidget(_viewer, 0, 0);
+    _contentsLayout->addLayout(_statsLayout, 1, 0);
+    _contentsLayout->addLayout(_genesLayout, 0, 1, 2, 1);
+    _contentsLayout->addWidget(_brainPanel, 0, 2, 2, 1);
+    _contentsLayout->setColumnStretch(2, 1);
+  }
+}
+
+void GeneticManipulator::showEvent(QShowEvent *e) {
+  int H = QApplication::desktop()->screenGeometry().height(),
+      h = minimumHeight();
+  qDebug() << h << (h <= H ? "<=" : ">") << H;
+  setLayoutDirection(h <= H ? QBoxLayout::TopToBottom
+                            : QBoxLayout::LeftToRight);
+  h = minimumHeight();
+  qDebug() << h << (h <= H ? "<=" : ">") << H;
+
+  QDialog::showEvent(e);
 }
 
 } // end of namespace gui

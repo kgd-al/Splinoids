@@ -228,7 +228,7 @@ int main(int argc, char *argv[]) {
   // To prevent missing linkages
   std::cerr << config::PTree::rsetSize() << std::endl;
 
-  QApplication *qapp;
+  QApplication *qapp = nullptr;
 #endif
 
   cxxopts::Options options("Splinoids (tester)",

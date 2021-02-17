@@ -14,18 +14,46 @@ public:
     P2D food, other;
 
     static Specs fromString (const std::string &s);
+    static float difficulty (const Specs &s);
   };
 
   Scenario(const Specs &specs, Simulation &simulation);
   Scenario(const std::string &specs, Simulation &simulation);
 
-  void init (Simulation &s, const Genome &genome);
-  void postStep (Simulation &s);
+  void init (const Genome &genome);
+  void postStep (void);
+
+  float score (void) const;
 
   static const Simulation::InitData commonInitData;
 
 private:
   const Specs _specs;
+  Simulation &_simulation;
+
+  Critter *_subject, *_other;
+  float _pangle = NAN;
+  int _collisionDelay;
+
+  struct MotorOutput { float l, r; };
+
+  friend MotorOutput& max (MotorOutput &lhs, const MotorOutput &rhs) {
+    lhs.l = std::max(lhs.l, rhs.l);
+    lhs.r = std::max(lhs.r, rhs.r);
+    return lhs;
+  }
+
+  void motors(const MotorOutput &mo) {
+    _other->setMotorOutput(mo.l, Motor::LEFT);
+    _other->setMotorOutput(mo.r, Motor::RIGHT);
+  }
+
+  void motors(float l, float r) {
+    motors({l, r});
+  }
+
+  bool isSubjectFeeding (void) const;
+
   static const Genome& predator (void);
 };
 

@@ -41,6 +41,30 @@ void MainView::addEnumAction (QMenu *m, const QString &iname,
 template <typename F, typename T>
 void MainView::addEnumAction (QMenu *m, const QString &iname,
                               const QString &name, const QString &details,
+                              QKeySequence k, F f, T &v) {
+
+  using U = EnumUtils<T>;
+  Inc<T> next = [] (T v) -> T {
+    auto values = U::values();
+    auto it = values.find(v);
+    if (it != values.end()) {
+      it = std::next(it);
+      if (it == values.end()) it = values.begin();
+      v = *it;
+    }
+    return v;
+  };
+
+  Fmt<T> format = [] (std::ostream &os, const T &v) -> std::ostream& {
+    return os << U::getName(v);
+  };
+
+  addEnumAction(m, iname, name, details, k, f, v, next, format);
+}
+
+template <typename F, typename T>
+void MainView::addEnumAction (QMenu *m, const QString &iname,
+                              const QString &name, const QString &details,
                               QKeySequence k, F f, T &v,
                               const Inc<T> &next, const Fmt<T> &format) {
 
@@ -89,13 +113,13 @@ void MainView::buildActions(void) {
             [this] { stepping(!_stepping); });
 
   addAction(mSimu, "media-seek-forward", "Faster", "",
-            Qt::KeypadModifier + Qt::ControlModifier + Qt::Key_Plus, [this] {
+            Qt::ControlModifier + Qt::Key_PageUp, [this] {
     config::Visualisation::substepsSpeed.ref() =
       std::min(256u, config::Visualisation::substepsSpeed() * 2);
     updateWindowName();
   });
   addAction(mSimu, "media-seek-backward", "Slower", "",
-            Qt::KeypadModifier + Qt::ControlModifier + Qt::Key_Minus, [this] {
+            Qt::ControlModifier + Qt::Key_PageDown, [this] {
     config::Visualisation::substepsSpeed.ref() =
       std::max(config::Visualisation::substepsSpeed() / 2, 1u);
     updateWindowName();
@@ -109,12 +133,12 @@ void MainView::buildActions(void) {
                 _zoomout);
 
   addAction(mVisu, "zoom-in", "Zoom in", "",
-            Qt::KeypadModifier + Qt::Key_Plus, [this] {
+            Qt::Key_PageDown, [this] {
     config::Visualisation::selectionZoomFactor.ref() /= 2.;
     focusOnSelection();
   });
   addAction(mVisu, "zoom-out", "Zoom out", "",
-            Qt::KeypadModifier + Qt::Key_Minus, [this] {
+            Qt::Key_PageUp, [this] {
     config::Visualisation::selectionZoomFactor.ref() *= 2.;
     focusOnSelection();
   });
@@ -125,10 +149,11 @@ void MainView::buildActions(void) {
 
   std::cerr << "brain dead: " << config::Visualisation::brainDeadSelection()
             << std::endl;
-  addBoolAction(mVisu, "", "BrainDead Selection", "",
+  addEnumAction(mVisu, "", "BrainDead Selection", "",
                 Qt::Key_B, [this] {
-    if (selection()) selection()->object().brainDead =
-        config::Visualisation::brainDeadSelection();
+    auto bd = config::Visualisation::brainDeadSelection();
+    if (selection() && bd != BrainDead::IGNORE)
+      selection()->object().brainDead = bool(bd);
   }, config::Visualisation::brainDeadSelection.ref());
 
   addAction(mVisu, "print", "Print", "",
@@ -179,34 +204,23 @@ void MainView::buildActions(void) {
 #ifndef NDEBUG
   addBoolAction(mDraw, "", "Ghost mode", "",
                 Qt::AltModifier + Qt::Key_O, [this] { scene()->update(); },
-  config::Visualisation::ghostMode.ref());
+                config::Visualisation::ghostMode.ref());
 #endif
 
   addEnumAction(mDraw, "", "Vision",
-                "1: draw vision cone; 2: draw rays; 3: both; 0: none",
+                "1,3: draw vision cone; 2,4: draw rays; 0: none; "
+                "1,2: for selection only; 3,4: for all",
                 Qt::Key_V,
                 [this] { scene()->update(); },
-                config::Visualisation::drawVision.ref(), 3);
+                config::Visualisation::drawVision.ref(), 5);
+
+  addBoolAction(mDraw, "", "Audition", "",
+                Qt::Key_A, [this] { scene()->update(); },
+                config::Visualisation::drawAudition.ref());
 
   addEnumAction(mDraw, "", "Type", "", Qt::Key_Tab,
                 [this] { scene()->update(); },
-                config::Visualisation::renderType.ref(),
-                Inc<RenderingType>([] (RenderingType t) {
-    using EU_RT = EnumUtils<RenderingType>;
-    auto values = EU_RT::values();
-    auto it = values.find(t);
-    if (it != values.end()) {
-      it = std::next(it);
-      if (it == values.end()) it = values.begin();
-      t = *it;
-      std::cerr << "Rendering type: " << t << std::endl;
-    }
-    return t;
-
-  }), Fmt<RenderingType>(
-      [] (std::ostream &os, const RenderingType t) -> std::ostream& {
-    return os << EnumUtils<RenderingType>::getName(t);
-  }));
+                config::Visualisation::renderType.ref());
 
 #ifndef NDEBUG
   QMenu *mDebug = _mbar->addMenu("Debug");
@@ -372,6 +386,8 @@ void MainView::step(void) {
   }
 
   _stepping = false;
+
+  if (_simu.finished()) stop();
 }
 
 void MainView::joystickEvent (JButton b, PersitentJoystick::Value v) {
@@ -484,13 +500,14 @@ void MainView::selectPrevious(void) {
 }
 
 void MainView::selectionChanged(visu::Critter *c) {
+  static const auto &bd = config::Visualisation::brainDeadSelection();
 //  auto q = qDebug();
 //  q << "SelectionChanged from "
 //    << (selection()? selection()->firstname() : "-1");
 
   if (selection()) {
     selection()->setSelected(false);
-    selection()->object().brainDead = false;
+    if (bd != BrainDead::IGNORE) selection()->object().brainDead = false;
     disconnect(selection(), &visu::Critter::shapeChanged,
                _manipulator, &GeneticManipulator::updateShapeData);
   }
@@ -499,8 +516,7 @@ void MainView::selectionChanged(visu::Critter *c) {
 
   if (c) {
     selection()->setSelected(true);
-    selection()->object().brainDead =
-      config::Visualisation::brainDeadSelection();
+    if (bd != BrainDead::IGNORE) selection()->object().brainDead = bool(bd);
     focusOnSelection();
 
     connect(selection(), &visu::Critter::shapeChanged,

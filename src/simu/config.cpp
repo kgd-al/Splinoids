@@ -60,7 +60,7 @@ DEFINE_PARAMETER(decimal, healthToEnergyRatio, .05)
 DEFINE_PARAMETER(float, critterBaseSpeed, 1)
 DEFINE_PARAMETER(float, combatBaselineIntensity, .5)
 DEFINE_PARAMETER(float, combatMinVelocity, 1.)
-DEFINE_PARAMETER(float, auditionRange, 10)
+DEFINE_PARAMETER(float, auditionRange, 20)
 DEFINE_PARAMETER(float, reproductionRange, 3)
 DEFINE_PARAMETER(float, reproductionRequestThreshold, .9)
 

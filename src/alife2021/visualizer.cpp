@@ -13,6 +13,8 @@
 #include <QDebug>
 #include "../visu/config.h"
 
+Q_DECLARE_METATYPE(BrainDead)
+
 //#include "config/dependencies.h"
 
 long maybeSeed(const std::string& s) {
@@ -106,11 +108,14 @@ int main(int argc, char *argv[]) {
     + ".desktop");
   QSettings settings;
 
-#define RESTORE(X) \
-  config::Visualisation::X.ref() = settings.value("hack::" #X).toBool(); \
+#define RESTORE(X, T) \
+  config::Visualisation::X.ref() = settings.value("hack::" #X).value<T>(); \
   std::cerr << "Restoring " << #X << ": " << config::Visualisation::X() << "\n";
-  RESTORE(brainDeadSelection)
-  RESTORE(selectionZoomFactor)
+  RESTORE(brainDeadSelection, BrainDead)
+  RESTORE(selectionZoomFactor, bool)
+  RESTORE(drawVision, int)
+  RESTORE(drawAudition, bool)
+
 #undef RESTORE
 
   QMainWindow w;
@@ -141,9 +146,11 @@ int main(int argc, char *argv[]) {
   std::cout << "Reading splinoid genome from input file '"
             << cGenomeArg << "'" << std::endl;
   cGenome = CGenome::fromFile(cGenomeArg);
+  cGenome.gdata.self.gid = std::max(cGenome.gdata.self.gid,
+                                    phylogeny::GID(0));
 
   simulation.init(eGenome, {}, idata);
-  scenario.init(simulation, cGenome);
+  scenario.init(cGenome);
 
   if (!outputFolder.empty()) {
     bool ok = simulation.setWorkPath(outputFolder, simu::Simulation::Overwrite(overwrite));
@@ -171,11 +178,13 @@ int main(int argc, char *argv[]) {
   settings.setValue("cs::geom", cs->saveGeometry());
   settings.setValue("geom", w.saveGeometry());
 
-#define SAVE(X) \
-  settings.setValue("hack::" #X, config::Visualisation::X()); \
+#define SAVE(X, T) \
+  settings.setValue("hack::" #X, T(config::Visualisation::X())); \
   std::cerr << "Saving " << #X << ": " << config::Visualisation::X() << "\n";
-  SAVE(brainDeadSelection)
-  SAVE(selectionZoomFactor)
+  SAVE(brainDeadSelection, int)
+  SAVE(selectionZoomFactor, float)
+  SAVE(drawVision, int)
+  SAVE(drawAudition, bool)
 #undef SAVE
 
   return r;

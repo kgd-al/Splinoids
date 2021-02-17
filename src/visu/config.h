@@ -10,6 +10,7 @@ QPointF toQt (const simu::P2D &p);
 QColor toQt (const simu::Color &c);
 
 DEFINE_PRETTY_ENUMERATION(RenderingType, REGULAR, ENERGY, HEALTH)
+DEFINE_PRETTY_ENUMERATION(BrainDead, IGNORE = -1, UNSET = 0, SET = 1)
 
 namespace config {
 
@@ -20,12 +21,13 @@ struct CONFIG_FILE(Visualisation) {
   DECLARE_PARAMETER(bool, opaqueBodies)
   DECLARE_PARAMETER(bool, drawInnerEdges)
   DECLARE_PARAMETER(int, drawVision)
-  DECLARE_PARAMETER(int, drawReproduction)
+  DECLARE_PARAMETER(bool, drawAudition)
+  DECLARE_PARAMETER(bool, drawReproduction)
   DECLARE_PARAMETER(bool, animateANN)
 
   DECLARE_PARAMETER(RenderingType, renderType)
 
-  DECLARE_PARAMETER(bool, brainDeadSelection)
+  DECLARE_PARAMETER(BrainDead, brainDeadSelection)
 
   DECLARE_PARAMETER(int, showFights)
 

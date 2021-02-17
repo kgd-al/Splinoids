@@ -19,7 +19,7 @@
 
 namespace visu {
 
-static constexpr bool drawMotors = false;
+static constexpr bool drawMotors = true;
 static constexpr bool drawVelocity = false;
 
 using Sex = simu::Critter::Sex;
@@ -81,6 +81,8 @@ void Critter::update (void) {
     updateShape();
     emit shapeChanged();
   }
+
+  QGraphicsItem::update();
 }
 
 void Critter::updateShape (void) {
@@ -167,12 +169,15 @@ void Critter::updateShape (void) {
 
   _critterBoundingRect = squarify(_minimalBoundingRect);
 
-  QRectF vcbr = _visionCone.boundingRect(),
-         vcbr_f = QRectF(vcbr.x(), -vcbr.y() - vcbr.height(),
-                         vcbr.width(), vcbr.height());
+  float visionRange = _critter.bodyRadius() + _critter.visionRange(),
+        auditionRange = _critter.bodyRadius()
+                        * config::Simulation::auditionRange(),
+        reproRange = _critter.bodyRadius()
+                        * config::Simulation::reproductionRange();
+  float rmax = std::max(visionRange, std::max(auditionRange, reproRange));
+  QRectF otherBB (-rmax, -rmax, 2*rmax, 2*rmax);
 
-  _maximalBoundingRect =
-    squarify(_critterBoundingRect.united(vcbr).united(vcbr_f));
+  _maximalBoundingRect = squarify(_critterBoundingRect.united(otherBB));
 }
 
 void Critter::updateVision(void) {
@@ -269,6 +274,17 @@ void Critter::doPaint (QPainter *painter) const {
       painter->drawRect(critterBoundingRect());
     }
 
+    if (config::Visualisation::drawAudition()) {
+      const b2Fixture *as = _critter.auditionSensor();
+      if (as) {
+        float r = dynamic_cast<const b2CircleShape*>(as->GetShape())->m_radius;
+        painter->save();
+        painter->setBrush(QColor::fromRgbF(0,0,1,.1));
+        painter->drawEllipse(QPointF(0,0), r, r);
+        painter->restore();
+      }
+    }
+
     if (config::Visualisation::drawReproduction()) {
       const b2Fixture *rs = _critter.reproductionSensor();
       if (rs) {
@@ -344,7 +360,8 @@ void Critter::doPaint (QPainter *painter) const {
 //      painter->drawRect(_artifacts.boundingRect());
     painter->restore();
 
-    if (config::Visualisation::drawVision() >= 1 && isSelected()) {
+    static const auto &DV = config::Visualisation::drawVision();
+    if (DV && (DV >= 3 || isSelected())) {
       painter->save();
         pen.setColor(visionFillColor.darker());
         pen.setStyle(Qt::SolidLine);
@@ -354,7 +371,7 @@ void Critter::doPaint (QPainter *painter) const {
           p->drawPath(_visionCone);
         });
 
-        if (config::Visualisation::drawVision() >= 2) {
+        if (DV % 2 == 0) {
           const auto &s = object().raysStart();
           const auto &e = object().raysEnd();
           const auto &l = object().raysLength();
@@ -492,14 +509,14 @@ void Critter::debugDrawAbove (QPainter *painter) const {
     float offset = .5 * R;
     float length = .2 * R;
 
-//    pen.setStyle(Qt::DotLine);
-//    painter->setPen(pen);
-//    painter->setBrush(Qt::red);
+    pen.setStyle(Qt::DotLine);
+    painter->setPen(pen);
+    painter->setBrush(Qt::black);
 
     for (Motor m: EnumUtils<Motor>::iterator()) {
       float o = object().motorOutput(m);
-      QRectF r (0, -int(m) * offset-.5*mo_W, length * o, mo_W);
-      painter->fillRect(r, QColor::fromRgbF(1, 0, 0, std::fabs(o)));
+      QRectF r (0, int(m) * offset-.5*mo_W, length * o, mo_W);
+      painter->fillRect(r, QColor::fromRgbF(0, 0, 0, std::fabs(o)));
 //      painter->drawRect(QRectF(-length, -int(m) * offset-.5*mo_W, 2*length, mo_W));
     }
   painter->restore();

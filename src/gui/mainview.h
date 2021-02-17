@@ -85,6 +85,11 @@ private:
   template <typename F, typename T>
   void addEnumAction (QMenu *m, const QString &iname, const QString &name,
                       const QString &details, QKeySequence k, F f,
+                      T &v);
+
+  template <typename F, typename T>
+  void addEnumAction (QMenu *m, const QString &iname, const QString &name,
+                      const QString &details, QKeySequence k, F f,
                       T &v, const Inc<T> &next, const Fmt<T> &format =
       Fmt<T>([] (std::ostream &os, const T &v) -> std::ostream& {
         return os << v;

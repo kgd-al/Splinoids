@@ -16,7 +16,7 @@ namespace simu {
 
 struct Simulation;
 struct Scenario;
-using SimulationCallback = std::function<void(Simulation&)>;
+using SimulationCallback = std::function<void(void)>;
 
 class Simulation {
 public:
@@ -207,7 +207,7 @@ public:
   void setupCallbacks(const Callbacks &c) { _callbacks = c; }
   void maybeCall (Callback c) {
     auto it = _callbacks.find(c);
-    if (it != _callbacks.end() && it->second) it->second(*this);
+    if (it != _callbacks.end() && it->second) it->second();
   }
 
   virtual void postInit (void) {}

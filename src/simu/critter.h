@@ -12,7 +12,7 @@
 
 #include "../enumarray.hpp"
 
-DEFINE_PRETTY_ENUMERATION(Motor, LEFT = -1, RIGHT = 1)
+DEFINE_PRETTY_ENUMERATION(Motor, LEFT = 1, RIGHT = -1)
 
 namespace simu {
 
@@ -598,6 +598,9 @@ public:
     return _raysFraction;
   }
 
+  // ===========================================================================
+  // == Audition/Vocalisation data
+
   auto& ears (void) {
     return _ears;
   }
@@ -611,9 +614,18 @@ public:
                        [] (auto v) { return v == 0; });
   }
 
+  void setVocalisation(float v, float c);
+
   const auto& producedSound (void) const {
     return _sounds;
   }
+
+  const auto auditionSensor (void) const {
+    return _auditionSensor;
+  }
+
+  // ===========================================================================
+  // == Conversion
 
   static b2BodyUserData* get (b2Body *b);
   static const b2BodyUserData* get (const b2Body *b);

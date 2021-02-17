@@ -20,11 +20,12 @@ DEFINE_PARAMETER(float, viewZoom, 100)//100)
 DEFINE_PARAMETER(bool, opaqueBodies, true)
 DEFINE_PARAMETER(bool, drawInnerEdges, false)
 DEFINE_PARAMETER(int, drawVision, 0)
-DEFINE_PARAMETER(int, drawReproduction, 1)
+DEFINE_PARAMETER(bool, drawAudition, false)
+DEFINE_PARAMETER(bool, drawReproduction, false)
 DEFINE_PARAMETER(RenderingType, renderType, RenderingType::REGULAR)
 DEFINE_PARAMETER(bool, animateANN, true)
 
-DEFINE_PARAMETER(bool, brainDeadSelection, false)
+DEFINE_PARAMETER(BrainDead, brainDeadSelection, BrainDead::IGNORE)
 
 DEFINE_PARAMETER(int, showFights, 2)
 

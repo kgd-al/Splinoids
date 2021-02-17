@@ -451,7 +451,7 @@ void Critter::neuralStep(void) {
   // Emit sounds (requested and otherwise)
   _sounds.fill(0);
   uint vi = VOCAL_CHANNELS * .5 * (_voice[1]+1);
-  _sounds[0] = std::min(1.f, _body.GetLinearVelocity().Length() / 5);
+  _sounds[0] = std::min(1.f, _body.GetLinearVelocity().Length());
   _sounds[1+vi] = _voice[0];
   assert(0 <= _sounds[1+vi] && _sounds[1+vi] <= 1);
 
@@ -1176,6 +1176,13 @@ void Critter::setMotorOutput(float i, Motor m) {
   assert(-1 <= i && i <= 1);
   assert(EnumUtils<Motor>::isValid(m));
   _motors.at(m) = i;
+}
+
+void Critter::setVocalisation(float v, float c) {
+  assert(0 <= v && v <= 1);
+  _voice[0] = v;
+  assert(-1 <= c && c <= 1);
+  _voice[1] = c;
 }
 
 bool Critter::applyHealthDamage (const FixtureData &d, float amount,
