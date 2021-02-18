@@ -60,9 +60,17 @@ void IndEvaluator::operator() (Ind &ind, int) {
      ind.stats[scenarioLabels[i]] = 0;
 
 #ifndef NDEBUG
-  for (uint i=0; i<brains.size(); i++)
-    for (uint j=i+1; j<brains.size(); j++)
+  for (auto &b: brains) b.reset();
+  for (uint i=0; i<brains.size(); i++) {
+    for (uint j=i+1; j<brains.size(); j++) {
+      static const auto print = [] (const auto &j, const std::string &l) {
+        std::ofstream ("mismatched_ann_" + l) << j;
+      };
+      nlohmann::json jlhs = brains[i], jrhs = brains[j];
+      if (jlhs != jrhs) print(jlhs, "lhs"), print(jrhs, "rhs");
       assertEqual(brains[i], brains[j], true);
+    }
+  }
 
   assert(!brainless || totalScore == 0);
   for (uint i=0; i<S; i++)
