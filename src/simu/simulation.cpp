@@ -234,8 +234,9 @@ void Simulation::init(const Environment::Genome &egenome,
 
   _environment = std::make_unique<Environment>(egenome);
   _environment->init(data.ienergy, data.seed);
-  std::cerr << "Using seed: " << data.seed << " -> "
-            << _environment->dice().getSeed() << "\n";
+  if (config::Simulation::verbosity() >= 1)
+    std::cout << "Using seed: " << data.seed << " -> "
+              << _environment->dice().getSeed() << "\n";
 
   if (cgenomes.size() > 0) {
     auto nextGID = cgenomes.front().id();

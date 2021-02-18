@@ -8,6 +8,70 @@ static constexpr float TARGET_ENERGY = .75;
 
 static constexpr bool debugAI = false;
 
+Scenario::Specs
+Scenario::Specs::fromValues(Type t, int fx, int fy, int ox, int oy) {
+  Scenario::Specs s;
+  s.type = t;
+  s.food.x = fx;
+  s.food.y = fy;
+  if (t != ALONE) {
+    s.other.x = ox;
+    s.other.y = oy;
+  } else
+    s.other.x = s.other.y = 0;
+  return s;
+}
+
+Scenario::Specs Scenario::Specs::fromString(const std::string &s) {
+  std::ostringstream oss;
+  auto type = Type(s[0] - '0');
+  if (type < ALONE || PREDATOR < type)
+    oss << "Type '" << s[0] << "' is not recognized";
+
+  if (type == ALONE && s.size() != 3)
+    oss << "Invalid number of specifications for type ALONE";
+  else if (type != ALONE && s.size() != 5)
+    oss << "Invalid number of specifications for scenario with two splinoids";
+
+  const auto toInt = [&oss] (char c) {
+    if (c != '+' && c != '-') {
+      oss << "Invalid specification '" << c << "'!";
+      return 0;
+    } else
+      return c == '+' ? +1 : -1;
+  };
+  int fx = 0, fy = 0, ox = 0, oy = 0;
+  if (oss.str().empty()) {
+    fx = toInt(s[1]);
+    fy = toInt(s[2]);
+    if (s.size() > 3) {
+      ox = toInt(s[3]);
+      oy = toInt(s[4]);
+    }
+  }
+
+  if (!oss.str().empty())
+    utils::doThrow<std::invalid_argument>(
+      "Failed to parse '", s, "' as a scenario specification: ", oss.str());
+
+  return fromValues(type, fx, fy, ox, oy);
+}
+
+std::string Scenario::Specs::toString(const Specs &s) {
+  static const auto sgn =
+    [] (float x) { return x < 0 ? '-' : x > 0 ? '+' : '!'; };
+  std::ostringstream oss;
+  oss << s.type << sgn(s.food.x) << sgn(s.food.y);
+  if (s.type != ALONE)  oss << sgn(s.other.x) << sgn(s.other.y);
+  return oss.str();
+}
+
+float Scenario::Specs::difficulty(const Specs &s) {
+  return 0;
+}
+
+// =============================================================================
+
 const Simulation::InitData Scenario::commonInitData = [] {
   Simulation::InitData d;
   d.ienergy = 0;
@@ -40,39 +104,7 @@ const Scenario::Genome& Scenario::predator (void) {
   return g;
 }
 
-Scenario::Specs Scenario::Specs::fromString(const std::string &s) {
-  std::ostringstream oss;
-  Scenario::Specs ss;
-  ss.type = Type(s[0] - '0');
-  if (ss.type < ALONE || PREDATOR < ss.type)
-    oss << "Type '" << s[0] << "' is not recognized";
-
-  if (ss.type == ALONE && s.size() != 3)
-    oss << "Invalid number of specifications for type ALONE";
-  else if (ss.type != ALONE && s.size() != 5)
-    oss << "Invalid number of specifications for scenario with two splinoids";
-
-  const auto toInt = [&oss] (char c) {
-    if (c != '+' && c != '-') {
-      oss << "Invalid specification '" << c << "'!";
-      return 0;
-    } else
-      return c == '+' ? +1 : -1;
-  };
-  if (oss.str().empty()) {
-    ss.food.x = toInt(s[1]);
-    ss.food.y = toInt(s[2]);
-    if (s.size() > 3) {
-      ss.other.x = toInt(s[3]);
-      ss.other.y = toInt(s[4]);
-    }
-  }
-
-  if (!oss.str().empty())
-    utils::doThrow<std::invalid_argument>(
-      "Failed to parse '", s, "' as a scenario specification: ", oss.str());
-  return ss;
-}
+// =============================================================================
 
 Scenario::Scenario (const std::string &specs, Simulation &simulation)
   : Scenario(Specs::fromString(specs), simulation) {}
@@ -89,9 +121,7 @@ Scenario::Scenario (const Specs &specs, Simulation &simulation)
 
 void Scenario::init(const Genome &genome) {
   static constexpr auto E = Critter::maximalEnergyStorage(Critter::MAX_SIZE);
-  auto modifiedGenome = genome; /// TODO Remove
-  modifiedGenome.colors[0] = config::Simulation::obstacleColor();
-  _subject = _simulation.addCritter(modifiedGenome, 0, 0, 0, E, .5);
+  _subject = _simulation.addCritter(genome, 0, 0, 0, E, .5);
 
   float S = .5*_simulation.environment().extent();
   _simulation.addFoodlet(BodyType::PLANT, _specs.food.x * S, _specs.food.y * S,
@@ -162,7 +192,7 @@ void Scenario::postStep(void) {
     auto &body = _other->body();
 
     const auto &r = _other->retina();
-    assert(r.size() == PREDATOR_RETINA_SIZE);
+    assert(!predator || r.size() == PREDATOR_RETINA_SIZE);
     using MO = MotorOutput;
     static constexpr std::array<MO, PREDATOR_RETINA_SIZE> visionResponse {{
       {0,1}, {1,1}, {1,0},  {0,1}, {1,1}, {1,0}
@@ -245,11 +275,12 @@ void Scenario::postStep(void) {
       && !_simulation.environment().fightingEvents().empty());
   }
 
-
   _simulation._finished |= isSubjectFeeding();
 
   _simulation._finished |=
     (_subject->usableEnergy() / _subject->maxUsableEnergy()) <= TARGET_ENERGY;
+//  std::cerr << " " << _simulation.currTime().timestamp() << " "
+//            << _subject->usableEnergy() / _subject->maxUsableEnergy() << "\n";
 }
 
 float Scenario::score (void) const {

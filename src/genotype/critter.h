@@ -57,7 +57,7 @@ class Critter : public genotype::EDNA<Critter> {
   APT_EDNA()
 
 public:
-  #define CRITTER_SPLINES_COUNT 4
+  #define CRITTER_SPLINES_COUNT 0
   static constexpr uint SPLINES_COUNT = CRITTER_SPLINES_COUNT;
 
   using Sex = BOCData::Sex;
@@ -83,6 +83,8 @@ public:
   int asexual;
 
   ES_HyperNEAT brain;
+
+  Critter (void) {}
 
   auto id (void) const {
     return gdata.self.gid;
@@ -145,7 +147,16 @@ public:
     ok &= (this->gdata == that.gdata);
   }
 
-//  Critter();
+  // == Gaga required methods
+  std::string serialize (void) const {
+    return json(*this).dump();
+  }
+
+  Critter (const std::string &json) {
+    *this = json;
+  }
+
+  void reset (void) {}
 };
 
 DECLARE_GENOME_FIELD(Critter, Critter::Splines, splines)

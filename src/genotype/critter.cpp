@@ -262,7 +262,7 @@ DEFINE_GENOME_FIELD_WITH_FUNCTOR(Cs, colors, "", colorsFunctor())
 
 DEFINE_GENOME_MUTATION_RATES({
   EDNA_PAIR(      splines, std::tuple_size_v<Ss> * std::tuple_size_v<D>),
-  EDNA_PAIR(   dimorphism, std::tuple_size_v<Dm> + 1),
+  EDNA_PAIR(   dimorphism, 1.5 * std::tuple_size_v<Dm>),
   EDNA_PAIR(       colors, std::tuple_size_v<Cs>),
   EDNA_PAIR(       vision, 4),
   EDNA_PAIR(minClockSpeed, 1),

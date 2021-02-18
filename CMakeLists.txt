@@ -23,8 +23,10 @@ if(WITH_DEBUG_INFO)
 
     # Enable small memory error detector (fuse=gold fixes linker errors)
 #    set(ASAN "-fsanitize=thread")
-    set(ASAN "-fsanitize=address -fsanitize=undefined")
+    set(ASAN "-fsanitize=address -fsanitize=undefined \
+        -fno-sanitize-recover=all")
     string(APPEND CMAKE_CXX_FLAGS " -g ${ASAN} -fno-omit-frame-pointer")
+    message("ASAN: ${ASAN}")
     if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         string(APPEND CMAKE_CXX_FLAGS " -fuse-ld=gold")
     endif()
@@ -78,7 +80,7 @@ message("Using additionnal pre-processor definitions: ${KGD_DEFINITIONS}")
 
 FUNCTION(PREPEND output prefix)
    SET(listVar "")
-   FOREACH(f ${ARGN})
+   FOREACH(f ${${output}})
       LIST(APPEND listVar "${prefix}/${f}")
    ENDFOREACH(f)
    SET(${output} "${listVar}" PARENT_SCOPE)
@@ -91,7 +93,7 @@ set(GNTP_SRC
     "environment.h"
     "environment.cpp"
 )
-PREPEND(GNTP_SRC "src/genotype" ${GNTP_SRC})
+PREPEND(GNTP_SRC "src/genotype")
 
 set(SIMU_SRC
     "critter.h"
@@ -111,7 +113,7 @@ set(SIMU_SRC
 
     "../enumarray.hpp"
 )
-PREPEND(SIMU_SRC "src/simu" ${SIMU_SRC})
+PREPEND(SIMU_SRC "src/simu")
 
 add_library(SIMU_OBJS OBJECT ${GNTP_SRC} ${SIMU_SRC})
 
@@ -155,14 +157,20 @@ find_package(OpenMP)
 ################################################################################
 ## Target (alife2021 ga evolution)
 ################################################################################
-add_library(PP_OBJS OBJECT
-  "src/alife2021/scenario.cpp" "src/alife2021/scenario.h")
+set(PP_SRC
+    "scenario.cpp"
+    "scenario.h"
+    "indevaluator.cpp"
+    "indevaluator.h"
+)
+PREPEND(PP_SRC "src/alife2021")
+add_library(PP_OBJS OBJECT ${PP_SRC})
 add_executable(
   pp-evolver
   $<TARGET_OBJECTS:SIMU_OBJS>
   $<TARGET_OBJECTS:PP_OBJS>
   "src/alife2021/evolver.cpp")
-target_link_libraries(pp-evolver ${SIMU_LIBS})
+target_link_libraries(pp-evolver ${SIMU_LIBS} pthread)
 
 ################################################################################
 ## Target (alife2021 evaluation)
@@ -200,7 +208,7 @@ if (NOT CLUSTER_BUILD)
         "b2debugdrawer.h"
         "b2debugdrawer.cpp"
     )
-    PREPEND(VISU_SRC "src/visu" ${VISU_SRC})
+    PREPEND(VISU_SRC "src/visu")
 
     set(GUI_SRC
         "mainview.h"
@@ -214,7 +222,7 @@ if (NOT CLUSTER_BUILD)
         "joystick.cpp"
     )
 
-    PREPEND(GUI_SRC "src/gui" ${GUI_SRC})
+    PREPEND(GUI_SRC "src/gui")
 
     set(GUI_MISC_SRC
         "joystick/joystick.hh"

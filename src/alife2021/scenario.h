@@ -13,7 +13,10 @@ public:
     Type type;
     P2D food, other;
 
+    static Specs fromValues (Type t, int fx, int fy, int ox = 0, int oy = 0);
     static Specs fromString (const std::string &s);
+    static std::string toString (const Specs &s);
+
     static float difficulty (const Specs &s);
   };
 
@@ -22,6 +25,10 @@ public:
 
   void init (const Genome &genome);
   void postStep (void);
+
+  const auto& subjectBrain (void) const {
+    return _subject->brain();
+  }
 
   float score (void) const;
 
