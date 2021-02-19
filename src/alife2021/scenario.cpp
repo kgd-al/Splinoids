@@ -84,6 +84,12 @@ const Simulation::InitData Scenario::commonInitData = [] {
   return d;
 }();
 
+Scenario::Genome Scenario::brainless (Genome g) {
+  g.brain.cppn.nodes.clear();
+  g.brain.cppn.links.clear();
+  return g;
+}
+
 static constexpr uint PREDATOR_VISION_PRECISION = 1;
 static constexpr uint PREDATOR_RETINA_SIZE = 2*(2*PREDATOR_VISION_PRECISION+1);
 const Scenario::Genome& Scenario::predator (void) {
@@ -99,7 +105,7 @@ const Scenario::Genome& Scenario::predator (void) {
     g.vision.angleRelative = -g.vision.angleBody;
     g.vision.width = g.vision.width / 2;
     g.vision.precision = PREDATOR_VISION_PRECISION;
-    return g;
+    return brainless(g);
   }();
   return g;
 }
@@ -129,7 +135,7 @@ void Scenario::init(const Genome &genome) {
 
   if (_specs.type != Specs::ALONE) {
     const Simulation::CGenome &g =
-      _specs.type == Specs::CLONE ? genome : predator();
+      _specs.type == Specs::CLONE ? brainless(genome) : predator();
     _other = _simulation.addCritter(
       g, _specs.other.x * (S - 3*R), _specs.other.y * S,
       -_specs.other.y * M_PI / 2., E, .5);

@@ -2,6 +2,8 @@
 
 namespace simu {
 
+std::atomic<bool> IndEvaluator::aborted = false;
+
 IndEvaluator::IndEvaluator (const genotype::Environment &e) : egenome(e) {
   static constexpr auto pos = {-1,+1};
   for (int fx: pos)
@@ -29,6 +31,13 @@ void IndEvaluator::selectCurrentScenarios (rng::AbstractDice &dice) {
   std::cout << "\nDifficulty: " << diff << "\n";
 }
 
+void IndEvaluator::setScenarios(const std::string &s) {
+  for (const std::string str: utils::split(s, ';')) {
+    auto specs = Specs::fromString(str);
+    currentScenarios[specs.type] = specs;
+  }
+}
+
 void IndEvaluator::operator() (Ind &ind, int) {
   float totalScore = 0;
 
@@ -46,18 +55,13 @@ void IndEvaluator::operator() (Ind &ind, int) {
     brainless = scenario.subjectBrain().empty();
     if (brainless)  break;
 
-    while (!simulation.finished())  simulation.step();
+    while (!simulation.finished() && !aborted)  simulation.step();
 
     float score = scenario.score();
     totalScore += score;
     ind.stats[scenarioLabels[i]] = score;
     assert(!brainless);
   }
-
-  ind.stats["b"] = brainless;
-  if (brainless)
-   for (uint i=0; i<S; i++)
-     ind.stats[scenarioLabels[i]] = 0;
 
 #ifndef NDEBUG
   for (auto &b: brains) b.reset();
@@ -67,7 +71,13 @@ void IndEvaluator::operator() (Ind &ind, int) {
         std::ofstream ("mismatched_ann_" + l) << j;
       };
       nlohmann::json jlhs = brains[i], jrhs = brains[j];
-      if (jlhs != jrhs) print(jlhs, "lhs"), print(jrhs, "rhs");
+      if (jlhs != jrhs) {
+        std::ofstream ("mismatched.spln.json") << nlohmann::json(ind.dna);
+        print(jlhs, "lhs");
+        print(jrhs, "rhs");
+        brains[i].render_gvc_graph("mismatched_lhs.png");
+        brains[j].render_gvc_graph("mismatched_rhs.png");
+      }
       assertEqual(brains[i], brains[j], true);
     }
   }
@@ -76,6 +86,11 @@ void IndEvaluator::operator() (Ind &ind, int) {
   for (uint i=0; i<S; i++)
     assert(!brainless || ind.stats[scenarioLabels[i]] == 0);
 #endif
+
+  ind.stats["b"] = !brainless;
+  if (brainless)
+   for (uint i=0; i<S; i++)
+     ind.stats[scenarioLabels[i]] = 0;
 
   ind.fitnesses["fitness"] = totalScore;
 }

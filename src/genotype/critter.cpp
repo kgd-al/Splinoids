@@ -263,7 +263,7 @@ DEFINE_GENOME_FIELD_WITH_FUNCTOR(Cs, colors, "", colorsFunctor())
 DEFINE_GENOME_MUTATION_RATES({
   EDNA_PAIR(      splines, std::tuple_size_v<Ss> * std::tuple_size_v<D>),
   EDNA_PAIR(   dimorphism, 1.5 * std::tuple_size_v<Dm>),
-  EDNA_PAIR(       colors, std::tuple_size_v<Cs>),
+  EDNA_PAIR(       colors, .5*std::tuple_size_v<Cs>),
   EDNA_PAIR(       vision, 4),
   EDNA_PAIR(minClockSpeed, 1),
   EDNA_PAIR(maxClockSpeed, 1),
@@ -432,7 +432,7 @@ DEFINE_CONTAINER_PARAMETER(CFILE::MutationRates, dimorphism_mutationRates,
 
 DEFINE_CONTAINER_PARAMETER(CFILE::MutationRates, colors_mutationRates,
                            utils::normalizeRates({
-  {  "homogeneous", 1.f  },
+  {  "homogeneous", Critter::SPLINES_COUNT > 0 ? 1 : 0  },
   { "monomorphism", 9.f  },
   {       "mutate", 490.f  },
 }))

@@ -23,8 +23,11 @@ struct IndEvaluator {
   IndEvaluator (const genotype::Environment &e);
 
   void selectCurrentScenarios (rng::AbstractDice &dice);
+  void setScenarios (const std::string &s);
 
   void operator() (Ind &ind, int);
+
+  static std::atomic<bool> aborted;
 };
 
 } // end of namespace simu

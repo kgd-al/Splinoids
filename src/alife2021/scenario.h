@@ -61,6 +61,7 @@ private:
 
   bool isSubjectFeeding (void) const;
 
+  static Genome brainless (Genome g);
   static const Genome& predator (void);
 };
 

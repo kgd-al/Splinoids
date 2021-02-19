@@ -153,7 +153,7 @@ public:
   }
 
   Critter (const std::string &json) {
-    *this = json;
+    *this = json::parse(json);
   }
 
   void reset (void) {}
