@@ -67,7 +67,11 @@ std::string Scenario::Specs::toString(const Specs &s) {
 }
 
 float Scenario::Specs::difficulty(const Specs &s) {
-  return 0;
+  float d = std::fabs(atan2(s.food.y, s.food.x) / M_PI);
+  if (s.type != ALONE) {
+
+  }
+  return d;
 }
 
 // =============================================================================
