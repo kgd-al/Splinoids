@@ -37,4 +37,5 @@ eos/
 *results/
 scenarii/
 snapshots/
+test/
 tmp/

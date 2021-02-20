@@ -111,6 +111,8 @@ public:
   void printSubjectPhenotype (void);
   void printSubjectPhenotype (const QString &filename) const;
 
+  void renderSubjectBrain (QPainter *painter) const;
+
 signals:
   void keyReleased (QKeyEvent *e);
 

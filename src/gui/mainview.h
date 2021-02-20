@@ -47,6 +47,8 @@ public:
 
   void selectNext (void);
   void selectPrevious (void);
+  void select(visu::Critter *c);
+  void focusOnSelection (void);
 
   void start (uint speed = 1);
   void stop (void);
@@ -106,7 +108,6 @@ private:
   void updateWindowName(void);
 
   void selectionChanged (visu::Critter *c);
-  void focusOnSelection (void);
 
   void externalCritterControl (void);
 

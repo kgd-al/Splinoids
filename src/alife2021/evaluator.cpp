@@ -29,6 +29,7 @@ void sigint_manager (int) {
 int main(int argc, char *argv[]) {
   using CGenome = genotype::Critter;
   using EGenome = genotype::Environment;
+  using Ind = simu::IndEvaluator::Ind;
 
   // ===========================================================================
   // == Command line arguments parsing
@@ -43,7 +44,7 @@ int main(int argc, char *argv[]) {
   std::string scenarios;
 
   EGenome eGenome;
-  std::vector<CGenome> cGenomes;
+  std::vector<Ind> individuals;
 
   std::string outputFolder = "tmp/pp-eval/";
   char overwrite = simu::Simulation::PURGE;
@@ -97,15 +98,15 @@ int main(int argc, char *argv[]) {
     if (cGenomeSeed < -1) {
       std::cout << "Reading splinoid genome from input file '"
                 << arg << "'" << std::endl;
-      cGenomes.push_back(CGenome::fromFile(arg));
+      individuals.push_back(simu::IndEvaluator::fromJsonFile(arg));
 
     } else {
-      rng::FastDice dice;
-      if (cGenomeSeed >= 0) dice.reset(cGenomeSeed);
-      std::cout << "Generating splinoid genome from rng seed "
-                << dice.getSeed() << std::endl;
-      CGenome g = CGenome::random(dice);
-      cGenomes.push_back(g);
+//      rng::FastDice dice;
+//      if (cGenomeSeed >= 0) dice.reset(cGenomeSeed);
+//      std::cout << "Generating splinoid genome from rng seed "
+//                << dice.getSeed() << std::endl;
+//      CGenome g = CGenome::random(dice);
+//      cGenomes.push_back(g);
     }
   }
 
@@ -129,8 +130,7 @@ int main(int argc, char *argv[]) {
   simu::IndEvaluator eval (eGenome);
   eval.setScenarios(scenarios);
 
-  for (const auto &g: cGenomes) {
-    simu::IndEvaluator::Ind ind (g);
+  for (auto &ind: individuals) {
     eval(ind, 0);
 
     for (const auto &p: ind.stats)
