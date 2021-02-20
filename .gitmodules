@@ -13,3 +13,6 @@
 [submodule "MultiNEAT"]
 	path = MultiNEAT
 	url = https://github.com/peter-ch/MultiNEAT.git
+[submodule "gaga"]
+	path = gaga
+	url = git@github.com:kgd-al/gaga.git

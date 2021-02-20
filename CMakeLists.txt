@@ -164,6 +164,7 @@ set(PP_SRC
     "indevaluator.h"
 )
 PREPEND(PP_SRC "src/alife2021")
+list(APPEND PP_SRC "gaga/gaga.hpp")
 add_library(PP_OBJS OBJECT ${PP_SRC})
 add_executable(
   pp-evolver
