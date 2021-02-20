@@ -1,8 +1,9 @@
 #ifndef INDEVALUATOR_H
 #define INDEVALUATOR_H
 
+#include "kgd/external/json.hpp"
+#include "kgd/external/gaga.hpp"
 #include "scenario.h"
-#include "../../gaga/gaga.hpp"
 
 namespace simu {
 

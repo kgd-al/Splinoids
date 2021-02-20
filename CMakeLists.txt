@@ -61,10 +61,10 @@ endif()
 find_package(ES-HyperNEAT REQUIRED)
 include_directories(${ES-HyperNEAT_INCLUDE_DIRS})
 message("> ES-HyperNEAT found at " ${ES-HyperNEAT_DIR})
-message("  > Core libraries " "${ES-HyperNEAT_LIBRARIES}")
-list(APPEND SIMU_LIBS ${ES-HyperNEAT_LIBRARIES})
-message("  > Gui libraries " "${ES-HyperNEAT_GUI_LIBRARIES}")
+list(APPEND CORE_LIBS ${ES-HyperNEAT_LIBRARIES})
+message("  > Core libraries " "${CORE_LIBS}")
 list(APPEND GUI_LIBS ${ES-HyperNEAT_GUI_LIBRARIES})
+message("  > Gui libraries " "${GUI_LIBS}")
 
 list(APPEND KGD_DEFINITIONS ${ES-HyperNEAT_KGD_DEFINITIONS})
 
@@ -120,7 +120,7 @@ add_library(SIMU_OBJS OBJECT ${GNTP_SRC} ${SIMU_SRC})
 include_directories(box2d/include)
 add_subdirectory(box2d)
 
-list(APPEND SIMU_LIBS box2d)
+list(APPEND CORE_LIBS box2d)
 
 ################################################################################
 ## Target (simulation)
@@ -129,7 +129,7 @@ add_executable(
   simulator
   $<TARGET_OBJECTS:SIMU_OBJS>
   "src/simulator.cpp")
-target_link_libraries(simulator ${SIMU_LIBS})
+target_link_libraries(simulator ${CORE_LIBS})
 
 ################################################################################
 ## Target (evaluation)
@@ -138,7 +138,7 @@ target_link_libraries(simulator ${SIMU_LIBS})
 #  evaluator
 #  $<TARGET_OBJECTS:SIMU_OBJS>
 #  "src/evaluator.cpp")
-#target_link_libraries(evaluator ${SIMU_LIBS})
+#target_link_libraries(evaluator ${CORE_LIBS})
 
 ################################################################################
 ## Target (timelines explorer)
@@ -151,7 +151,7 @@ find_package(OpenMP)
 #    timelines
 #    $<TARGET_OBJECTS:SIMU_OBJS>
 #    "src/timelines.cpp")
-#  target_link_libraries(timelines ${SIMU_LIBS} OpenMP::OpenMP_CXX)
+#  target_link_libraries(timelines ${CORE_LIBS} OpenMP::OpenMP_CXX)
 #endif()
 
 ################################################################################
@@ -164,14 +164,13 @@ set(PP_SRC
     "indevaluator.h"
 )
 PREPEND(PP_SRC "src/alife2021")
-list(APPEND PP_SRC "gaga/gaga.hpp")
 add_library(PP_OBJS OBJECT ${PP_SRC})
 add_executable(
   pp-evolver
   $<TARGET_OBJECTS:SIMU_OBJS>
   $<TARGET_OBJECTS:PP_OBJS>
   "src/alife2021/evolver.cpp")
-target_link_libraries(pp-evolver ${SIMU_LIBS} pthread)
+target_link_libraries(pp-evolver ${CORE_LIBS} pthread)
 
 ################################################################################
 ## Target (alife2021 evaluation)
@@ -181,7 +180,7 @@ add_executable(
   $<TARGET_OBJECTS:SIMU_OBJS>
   $<TARGET_OBJECTS:PP_OBJS>
   "src/alife2021/evaluator.cpp")
-target_link_libraries(pp-evaluator ${SIMU_LIBS})
+target_link_libraries(pp-evaluator ${CORE_LIBS})
 
 if (NOT CLUSTER_BUILD)
     ############################################################################
@@ -253,7 +252,7 @@ if (NOT CLUSTER_BUILD)
       "src/visualizer.cpp"
     )
     set_property(TARGET visualizer PROPERTY AUTOMOC ON)
-    target_link_libraries(visualizer ${SIMU_LIBS} ${GUI_LIBS})
+    target_link_libraries(visualizer ${CORE_LIBS} ${GUI_LIBS})
 
 ################################################################################
 ### Targets (Watchmaker)
@@ -268,7 +267,7 @@ if (NOT CLUSTER_BUILD)
 #      "src/watchmaker.cpp"
 #    )
 #    set_property(TARGET watchmaker PROPERTY AUTOMOC ON)
-#    target_link_libraries(watchmaker ${SIMU_LIBS} ${GUI_LIBS})
+#    target_link_libraries(watchmaker ${CORE_LIBS} ${GUI_LIBS})
 
 ################################################################################
 ### Targets (alife2021 visualizer)
@@ -282,7 +281,7 @@ if (NOT CLUSTER_BUILD)
         "src/alife2021/visualizer.cpp"
     )
     set_property(TARGET pp-visualizer PROPERTY AUTOMOC ON)
-    target_link_libraries(pp-visualizer ${SIMU_LIBS} ${GUI_LIBS})
+    target_link_libraries(pp-visualizer ${CORE_LIBS} ${GUI_LIBS})
 
 ################################################################################
 ### Targets (Visu tool)
@@ -295,7 +294,7 @@ if (NOT CLUSTER_BUILD)
 #        "src/visualuator.cpp"
 #    )
 #    set_property(TARGET visu-tool PROPERTY AUTOMOC ON)
-#    target_link_libraries(visu-tool ${SIMU_LIBS} ${GUI_LIBS})
+#    target_link_libraries(visu-tool ${CORE_LIBS} ${GUI_LIBS})
 
 endif()
 
@@ -307,14 +306,14 @@ if (CLUSTER_BUILD)
         tester
         $<TARGET_OBJECTS:SIMU_OBJS>
         "src/tests/tester.cpp")
-    target_link_libraries(tester ${SIMU_LIBS})
+    target_link_libraries(tester ${CORE_LIBS})
 else()
     add_executable(
         tester
         $<TARGET_OBJECTS:SIMU_OBJS>
         $<TARGET_OBJECTS:VISU_OBJS>
         "src/tests/tester.cpp")
-    target_link_libraries(tester ${SIMU_LIBS} ${SIMU_LIBS} ${GUI_LIBS})
+    target_link_libraries(tester ${CORE_LIBS} ${GUI_LIBS})
 endif()
 
 ################################################################################
