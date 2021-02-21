@@ -9,6 +9,7 @@
 #include <QGraphicsSceneMouseEvent>
 #include <QKeyEvent>
 #include <QFileDialog>
+#include <QColorDialog>
 #include <QDesktopWidget>
 
 #include "geneticmanipulator.h"
@@ -104,79 +105,51 @@ void MiniViewer::resizeEvent(QResizeEvent */*e*/) {
 
 // =============================================================================
 
-static constexpr const char *snames [] {
-  "SA",
-  "EA", "EL",
-  "DX0", "DY0", "DX1", "DY1",
-  "W0", "W1", "W2",
-  "",
-  "XX", "XY"
-};
-
-using SData = GeneticManipulator::SData;
-struct GeneSlider : public QSlider {
+struct LabeledSlider : public QSlider {
   static constexpr int SCALE = 100;
-  using T = SData::value_type;
 
-  template <typename B>
-  GeneSlider (const B &b, uint i, uint j)
-    : GeneSlider(b.min[j], b.max[j], i, j) {}
+  LabeledSlider (double min, double max)
+    : QSlider (Qt::Horizontal), min(min), max(max) {
+    setRange(min, max);
+    setEnabled(false);
+  }
 
-  template <typename T_>
-  GeneSlider (T_ min, T_ max, uint i, uint j)
-    : QSlider (Qt::Horizontal), i(i), j(j), min(min), max(max),
-      valueset(false), readonly(false) {
+  int scale (double v) const {
+    return SCALE * (v - min) / (max - min);
+  }
 
+  void setRange (double min, double max) {
     setMinimum(scale(min));
     setMaximum(scale(max));
   }
 
-  void setReadOnly (bool r) {
-    readonly = r;
-    setEnabled();
+  void setValue (double v) {
+    QSlider::setValue(scale(v));
+  }
+
+  double invertScale (int v) const {
+    return (max - min) * float(v) / float(SCALE) + min;
+  }
+
+  double value (void) const {
+    return invertScale(scaledValue());
   }
 
   void noValue (void) {
     setValue (SCALE/2);
-    valueset = false;
-    setEnabled();
   }
 
-  void setGeneValue (T v) {
-    QSlider::setValue(scale(v));
-    valueset = true;
-    setEnabled();
-  }
-
-  void setEnabled(void) {
-    QSlider::setEnabled(valueset && !readonly);
-  }
-
-  T geneValue (void) const {
-    return invertScale(value());
-  }
-
-  int scale (T v) const {
-    return SCALE * (v - min) / (max - min);
-  }
-
-  T invertScale (int v) const {
-    return (max - min) * float(v) / float(SCALE) + min;
-  }
-
-  auto splineIndex (void) const {
-    return i;
-  }
-
-  auto splineDataIndex (void) const {
-    return j;
+  int scaledValue (void) const {
+    return QSlider::value();
   }
 
   void paintEvent(QPaintEvent *e) {
     QSlider::paintEvent(e);
     qreal x = width() * float(value() - minimum()) / (maximum() - minimum());
+    qDebug() << width() << "* (" << value() << "-" << minimum() << ") / ("
+             << maximum() << "-" << minimum() << ")";
 
-    QString text = QString::number(geneValue(), 'f', 2);
+    QString text = QString::number(value(), 'f', 2);
     QPainter painter (this);
 
     QRectF bounds;
@@ -192,8 +165,71 @@ struct GeneSlider : public QSlider {
   }
 
 private:
+  const double min, max;
+
+  using QSlider::value;
+  using QSlider::setValue;
+  using QSlider::setRange;
+};
+
+// =============================================================================
+
+static constexpr const char *snames [] {
+  "SA",
+  "EA", "EL",
+  "DX0", "DY0", "DX1", "DY1",
+  "W0", "W1", "W2",
+  "",
+  "XX", "XY"
+};
+
+using SData = GeneticManipulator::SData;
+struct GeneSlider : public LabeledSlider {
+  using T = SData::value_type;
+
+  template <typename B>
+  GeneSlider (const B &b, uint i, uint j)
+    : GeneSlider(b.min[j], b.max[j], i, j) {}
+
+  GeneSlider (double min, double max, uint i, uint j)
+    : LabeledSlider (min, max), i(i), j(j),
+      valueset(false), readonly(false) {}
+
+  void setReadOnly (bool r) {
+    readonly = r;
+    setEnabled();
+  }
+
+  void noValue (void) {
+    LabeledSlider::noValue();
+    valueset = false;
+    setEnabled();
+  }
+
+  void setGeneValue (T v) {
+    LabeledSlider::setValue(v);
+    valueset = true;
+    setEnabled();
+  }
+
+  void setEnabled(void) {
+    LabeledSlider::setEnabled(valueset && !readonly);
+  }
+
+  T geneValue (void) const {
+    return value();
+  }
+
+  auto splineIndex (void) const {
+    return i;
+  }
+
+  auto splineDataIndex (void) const {
+    return j;
+  }
+
+private:
   const uint i,j;
-  const T min, max;
   bool valueset, readonly;
 };
 
@@ -225,10 +261,6 @@ struct ColorLabel : public QLabel {
     setColorValue(QColor::fromHsvF(0, 0, v));
   }
 
-  void mouseReleaseEvent(QMouseEvent*) {
-    qDebug() << "Want to change color...";
-  }
-
 protected:
   QColor color;
 
@@ -237,10 +269,56 @@ protected:
   }
 
   void setColorValue (const QColor &c) {
+    color = c;
     QPalette p = palette();
     p.setColor(QPalette::Window, c);
     setPalette(p);
     update();
+  }
+};
+
+class ColorLabels : public QWidget {
+  QVector<ColorLabel*> _labels;
+
+public:
+  ColorLabels (int n, bool split) {
+    QHBoxLayout *l = new QHBoxLayout;
+    l->setSpacing(0);
+
+    _labels.resize(n+1);
+    for (int i=0; i<n+1; i++) {
+      ColorLabel *cl = _labels[i] = new ColorLabel;
+      if (i == 0) {
+        cl->setAlignment(Qt::AlignCenter);
+        cl->setStyleSheet("border: 1px solid gray");
+
+      } else {
+        cl->noValue();
+        cl->hide();
+        cl->setText(QString::number(i));
+      }
+
+      l->addWidget(cl);
+
+      if (split && i == n/2) l->addSpacing(10);
+    }
+
+    l->setContentsMargins(0, 0, 0, 0);
+    setContentsMargins(0, 0, 0, 0);
+    setLayout(l);
+  }
+
+  void setEnabled (bool enabled) {
+    _labels[0]->setVisible(!enabled);
+    for (int i=1; i<_labels.size(); i++) _labels[i]->setVisible(enabled);
+  }
+
+  ColorLabel* label (int i) {
+    return _labels[i+1];
+  }
+
+  uint size (void) const {
+    return _labels.size() - 1;
   }
 };
 
@@ -251,7 +329,7 @@ struct GeneColorPicker : public ColorLabel {
 
   void setReadOnly (bool r) {
     readonly = r;
-    if (r)  setEnabled(false);
+    setEnabled(!readonly);
   }
 
   void noValue (void) {
@@ -265,7 +343,9 @@ struct GeneColorPicker : public ColorLabel {
   }
 
   void mouseReleaseEvent(QMouseEvent*) {
-    qDebug() << "Want to change color...";
+    auto selected = QColorDialog::getColor(color, this);
+    qDebug() << "requested color change from" << color << "to"
+             << selected;
   }
 
 private:
@@ -402,6 +482,7 @@ QWidget* line (const QString &text = QString()) {
   } else {
     QWidget *holder = new QWidget;
     QHBoxLayout *layout = new QHBoxLayout;
+    layout->setContentsMargins(0, 0, 0, 0);
     holder->setLayout(layout);
     layout->addWidget(line(), 1);
     layout->addWidget(new QLabel(text), 0);
@@ -431,6 +512,7 @@ GeneticManipulator::GeneticManipulator(QWidget *parent)
   buildViewer();
   buildStatsLayout();
   buildGenesLayout();
+  buildNeuralLayout();
 
   _brainPanel = new kgd::es_hyperneat::gui::ES_HyperNEATPanel;
 
@@ -459,7 +541,16 @@ GeneticManipulator::GeneticManipulator(QWidget *parent)
           this, &GeneticManipulator::hide);
 
   QVBoxLayout *rootLayout = new QVBoxLayout;
-    _contentsLayout = new QGridLayout;
+    _contentsLayout = new QHBoxLayout;
+      auto llayout = new QVBoxLayout;
+        llayout->addWidget(_viewer);
+        llayout->addLayout(_statsLayout);
+      _contentsLayout->addLayout(llayout);
+      _contentsLayout->addLayout(_genesLayout);
+      auto rlayout = new QVBoxLayout;
+        rlayout->addLayout(_neuralLayout);
+        rlayout->addWidget(_brainPanel);
+      _contentsLayout->addLayout(rlayout);
 
     QHBoxLayout *buttonsLayout = new QHBoxLayout;
     buttonsLayout->addWidget(filler(false));
@@ -470,7 +561,6 @@ GeneticManipulator::GeneticManipulator(QWidget *parent)
     buttonsLayout->addWidget(_hideButton, 0, Qt::AlignCenter);
     buttonsLayout->addWidget(filler(false));
 
-    setLayoutDirection();
   rootLayout->addLayout(_contentsLayout);
   rootLayout->addLayout(buttonsLayout);
   setLayout(rootLayout);
@@ -534,57 +624,6 @@ void GeneticManipulator::printSubjectPhenotype(const QString &filename) const {
 
 void GeneticManipulator::buildViewer(void) {
   _viewer = new MiniViewer (this, _proxy);
-}
-
-QLayout* GeneticManipulator::buildRetinaLayout(void) {
-  QHBoxLayout *l = new QHBoxLayout;
-  l->setSpacing(0);
-
-  uint max = 2 * (1+2*genotype::Vision::config_t::precisionBounds().max) + 1;
-  _rLabels.resize(max);
-
-  for (uint i=0; i<max; i++) {
-    ColorLabel *cl = _rLabels[i] = new ColorLabel;
-    if (i == 0) {
-      cl->setText("Retina");
-      cl->setAlignment(Qt::AlignCenter);
-      cl->setStyleSheet("border: 1px solid gray");
-
-    } else {
-      cl->noValue();
-      cl->hide();
-    }
-
-    l->addWidget(cl);
-
-    if (i == max/2) l->addSpacing(10);
-  }
-
-  return _retinaLayout = l;
-}
-
-QLayout* GeneticManipulator::buildEarsLayout(void) {
-  QHBoxLayout *l = new QHBoxLayout;
-  l->setSpacing(0);
-
-  for (uint i=0; i<_eLabels.size(); i++) {
-    ColorLabel *cl = _eLabels[i] = new ColorLabel;
-    if (i == 0) {
-      cl->setText("Ears");
-      cl->setAlignment(Qt::AlignCenter);
-      cl->setStyleSheet("border: 1px solid gray");
-
-    } else {
-      cl->noValue();
-      cl->hide();
-    }
-
-    l->addWidget(cl);
-
-    if (i == _eLabels.size()/2) l->addSpacing(10);
-  }
-
-  return _earsLayout = l;
 }
 
 QLayout* GeneticManipulator::buildBarsLayout (void) {
@@ -659,10 +698,6 @@ void GeneticManipulator::buildStatsLayout(void) {
   othersLayout->addWidget(line("Vision"), r++, 0, 1, 4);
   addLRow( true, "Angle");  addLRow(true, "Rotation");
   addLRow( true, "Width");  addLRow(true, "Precision");
-  othersLayout->addLayout(buildRetinaLayout(), r++, 0, 1, 4);
-
-  othersLayout->addWidget(line("Audition"), r++, 0, 1, 4);
-  othersLayout->addLayout(buildEarsLayout(), r++, 0, 1, 4);
 
   othersLayout->addWidget(line("Wellfare"), r++, 0, 1, 4);
   othersLayout->addLayout(buildBarsLayout(), r++, 0, 1, 4);
@@ -738,6 +773,31 @@ void GeneticManipulator::buildGenesLayout(void) {
   gl->addWidget(filler(true));
 }
 
+void GeneticManipulator::buildNeuralLayout(void) {
+  QFormLayout *nl;
+  _neuralLayout = nl = new QFormLayout;
+  nl->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+
+  nl->addRow(line("Neural I/O"));
+  int rcells = 2 * (1+2*genotype::Vision::config_t::precisionBounds().max);
+  nl->addRow("Vision", _rLabels = new ColorLabels(rcells, true));
+  nl->addRow("Audition", _eLabels
+             = new ColorLabels(2*(simu::Critter::VOCAL_CHANNELS+1), true));
+
+  nl->addRow(line(""));
+
+  QGridLayout *g = new QGridLayout;
+  g->addWidget(new QLabel("Motors"), 0, 0, 1, 2);
+  g->addWidget(_mSliders[0] = new LabeledSlider(-1, 1), 1, 0);
+  g->addWidget(_mSliders[1] = new LabeledSlider(-1, 1), 1, 1);
+  g->addWidget(new QLabel("Clock"), 0, 2);
+  g->addWidget(_mSliders[2] = new LabeledSlider(-1, 1), 1, 2);
+  nl->addRow(g);
+
+  nl->addRow("Sound", _sLabels
+             = new ColorLabels(simu::Critter::VOCAL_CHANNELS+1, false));
+}
+
 void GeneticManipulator::updateWindowName (void) {
   QString name = _readonly ? "Splinoid Sheet" : "Genetic Manipulator";
   if (_subject) name += ": " + _subject->firstname();
@@ -791,16 +851,15 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     set("Precision", &SCritter::visionPrecision,
         [] (float v) { return QString::number(v, 'f', 0); });
 
-    _rLabels[0]->hide();
-//    for (uint i=1; i<=c.retina().size(); i++)  _rLabels[i]->show();
-//    for (int i=c.retina().size()+1; i<_rLabels.size(); i++) _rLabels[i]->hide();
     auto rhs = c.retina().size()/2;
-    auto lhs = (_rLabels.size()-1)/2;
-    for (uint i=0; i<rhs; i++)
-      for (uint j=0; j<2; j++)  _rLabels[1 + i + j * lhs]->setVisible(true);
+    auto lhs = _rLabels->size()/2;
+    _rLabels->setEnabled(true);
+    for (uint i=rhs; i<lhs; i++)
+      for (uint j=0; j<2; j++)
+        _rLabels->label(i + j * lhs)->setVisible(false);
 
-    _eLabels[0]->hide();
-    for (uint i=1; i<_eLabels.size(); i++) _eLabels[i]->show();
+    _eLabels->setEnabled(true);
+    _sLabels->setEnabled(true);
 
     for (uint i=0; i<S_v; i++) {
       for (uint j=0; j<SD_v; j++)
@@ -814,6 +873,8 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
 
     for (uint j=0; j<2; j++)
       _bPickers[j]->setGeneValue(g.colors[j*(S_v+1)]);
+
+    _mSliders.back()->setRange(g.minClockSpeed, g.minClockSpeed);
 
     _cppn = std::make_unique<phenotype::CPPN>(
               phenotype::CPPN::fromGenotype(g.brain));
@@ -829,11 +890,9 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     _bSex->setEnabled(false);
     for (QLabel *l: _dataWidgets) l->setText("");
 
-    _rLabels[0]->show();
-    for (int i=1; i<_rLabels.size(); i++)  _rLabels[i]->hide();
-
-    _eLabels[0]->show();
-    for (uint i=1; i<_eLabels.size(); i++) _eLabels[i]->hide();
+    _rLabels->setEnabled(false);
+    _eLabels->setEnabled(false);
+    _sLabels->setEnabled(false);
 
     for (uint i=0; i<S_v; i++) {
       for (uint j=0; j<SD_v; j++) _sSliders[i][j]->noValue();
@@ -846,9 +905,13 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
 
     for (PrettyBar *b: _sBars)  b->noValue();
 
+    for (auto l: _mSliders) l->noValue();
+
     _cppn.release();
     _brainPanel->noData();
   }
+
+  qDebug() << "selection name: " << _lFirstname->text() << _lLastname->text();
 
   updateWindowName();
 
@@ -903,16 +966,19 @@ void GeneticManipulator::readCurrentStatus(void) {
   const auto &r = c.retina();
 //  for (uint i=0; i<r.size(); i++) _rLabels[i+1]->setValue(r[i]);
   auto rhs = r.size()/2;
-  auto lhs = (_rLabels.size()-1)/2;
+  auto lhs = _rLabels->size()/2;
   for (uint i=0; i<rhs; i++)
     for (uint j=0; j<2; j++)
-      _rLabels[1 + i + j * lhs]->setValue(r[i+j*rhs]);
+      _rLabels->label(i + j * lhs)->setValue(r[i+j*rhs]);
 
   const auto &e = c.ears();
+  const auto &s = c.producedSound();
   static constexpr auto es = simu::Critter::VOCAL_CHANNELS+1;
-  for (uint i=0; i<2; i++)
-    for (uint j=0; j<es; j++)
-      _eLabels[1 + j + i * es]->setValue(std::max(0.f, e[i*es+j]));
+  for (uint j=0; j<es; j++) {
+    for (uint i=0; i<2; i++)
+      _eLabels->label(j + i * es)->setValue(std::max(0.f, e[i*es+j]));
+    _sLabels->label(j)->setValue(s[j]);
+  }
 
   _sBars[0]->setValue(float(c.usableEnergy()));
   _sBars[1]->setValue(float(c.bodyHealth()));
@@ -920,6 +986,10 @@ void GeneticManipulator::readCurrentStatus(void) {
   for (uint i=0; i<S_v; i++)
     for (SCritter::Side s: {SCritter::Side::LEFT, SCritter::Side::RIGHT})
       _sBars[2+uint(s)*S_v+i]->setValue(float(c.splineHealth(i, s)));
+
+  _mSliders[0]->setValue(c.motorOutput(Motor::LEFT));
+  _mSliders[1]->setValue(c.motorOutput(Motor::RIGHT));
+  _mSliders[2]->setValue(c.clockSpeed());
 
   if (config::Visualisation::animateANN())
     _brainPanel->annViewer->updateAnimation();
@@ -977,36 +1047,6 @@ void GeneticManipulator::keyReleaseEvent(QKeyEvent *e) {
 //  qDebug() << __PRETTY_FUNCTION__ << ": " << e;
   emit keyReleased(e);
   _proxy->update();
-}
-
-void GeneticManipulator::setLayoutDirection(QBoxLayout::Direction d) {
-  while (_contentsLayout->count() > 0)  _contentsLayout->takeAt(0);
-  if (d == QBoxLayout::TopToBottom) {
-    _contentsLayout->addWidget(_viewer, 0, 0);
-    _contentsLayout->addLayout(_statsLayout, 0, 1);
-    _contentsLayout->addLayout(_genesLayout, 1, 0, 1, 2);
-    _contentsLayout->addWidget(_brainPanel, 0, 2, 2, 1);
-    _contentsLayout->setColumnStretch(1, 2);
-
-  } else {
-    _contentsLayout->addWidget(_viewer, 0, 0);
-    _contentsLayout->addLayout(_statsLayout, 1, 0);
-    _contentsLayout->addLayout(_genesLayout, 0, 1, 2, 1);
-    _contentsLayout->addWidget(_brainPanel, 0, 2, 2, 1);
-    _contentsLayout->setColumnStretch(2, 1);
-  }
-}
-
-void GeneticManipulator::showEvent(QShowEvent *e) {
-  int H = QApplication::desktop()->screenGeometry().height(),
-      h = minimumHeight();
-  qDebug() << h << (h <= H ? "<=" : ">") << H;
-  setLayoutDirection(h <= H ? QBoxLayout::TopToBottom
-                            : QBoxLayout::LeftToRight);
-  h = minimumHeight();
-  qDebug() << h << (h <= H ? "<=" : ">") << H;
-
-  QDialog::showEvent(e);
 }
 
 } // end of namespace gui

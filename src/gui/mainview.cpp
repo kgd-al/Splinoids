@@ -501,9 +501,9 @@ void MainView::selectPrevious(void) {
 
 void MainView::selectionChanged(visu::Critter *c) {
   static const auto &bd = config::Visualisation::brainDeadSelection();
-//  auto q = qDebug();
-//  q << "SelectionChanged from "
-//    << (selection()? selection()->firstname() : "-1");
+  auto q = qDebug();
+  q << "SelectionChanged from "
+    << (selection()? selection()->firstname() : "-1");
 
   if (selection()) {
     selection()->setSelected(false);
@@ -527,8 +527,9 @@ void MainView::selectionChanged(visu::Critter *c) {
 
   _manipulator->setSubject(c);
 
-//  q << "to"
-//    << (selection()? selection()->firstname() : "-1");
+  q << "to"
+    << (selection()? selection()->firstname() : "-1")
+    << (void*)selection();
 }
 
 void MainView::focusOnSelection (void) {

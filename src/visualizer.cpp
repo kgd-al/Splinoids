@@ -344,13 +344,6 @@ int main(int argc, char *argv[]) {
   v->fitInView(s.bounds(), Qt::KeepAspectRatio);
   v->selectNext();
 
-  auto fgm = new gui::GeneticManipulator (&w);
-  fgm->setSubject(s.critters().rbegin()->second);
-  fgm->restoreGeometry(settings.value("fgm::geom").toByteArray());
-  QObject::connect(v, &gui::MainView::stepped,
-                   fgm, &gui::GeneticManipulator::readCurrentStatus);
-  fgm->show();
-
   QTimer::singleShot(100, [&v, startspeed] {
     if (startspeed) v->start(startspeed);
     else            v->stop();
@@ -361,9 +354,6 @@ int main(int argc, char *argv[]) {
   settings.setValue("cs::visible", cs->isVisible());
   settings.setValue("cs::geom", cs->saveGeometry());
   settings.setValue("geom", w.saveGeometry());
-
-  settings.setValue("fgm::geom", fgm->saveGeometry());
-
 
 #define SAVE(X, T) \
   settings.setValue("hack::" #X, T(config::Visualisation::X())); \

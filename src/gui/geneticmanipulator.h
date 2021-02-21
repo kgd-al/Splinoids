@@ -14,9 +14,11 @@
 namespace gui {
 
 struct CritterProxy;
+struct LabeledSlider;
 struct GeneSlider;
-struct GeneColorPicker;
 struct ColorLabel;
+struct GeneColorPicker;
+struct ColorLabels;
 struct PrettyBar;
 
 class MiniViewer : public QGraphicsView {
@@ -67,12 +69,12 @@ private:
   QLabel *_lFirstname, *_lLastname;
   QComboBox *_bSex;
   QMap<QString, QLabel*> _dataWidgets;
-  QVector<ColorLabel*> _rLabels;
-  std::array<ColorLabel*, 2*(simu::Critter::VOCAL_CHANNELS+1)+1> _eLabels;
+  ColorLabels *_rLabels, *_eLabels, *_sLabels;
+  std::array<LabeledSlider*, 3> _mSliders;
 
-  QGridLayout *_contentsLayout;
+  QHBoxLayout *_contentsLayout;
   QBoxLayout *_retinaLayout, *_earsLayout;
-  QLayout *_genesLayout, *_statsLayout;
+  QLayout *_genesLayout, *_statsLayout, *_neuralLayout;
 
   kgd::es_hyperneat::gui::ES_HyperNEATPanel *_brainPanel;
   std::unique_ptr<phenotype::CPPN> _cppn;
@@ -130,10 +132,9 @@ private:
   void buildViewer (void);
   void buildGenesLayout (void);
   void buildStatsLayout (void);
+  void buildNeuralLayout (void);
 
   QLayout* buildBarsLayout (void);
-  QLayout* buildRetinaLayout (void);
-  QLayout* buildEarsLayout (void);
 
   template <typename T>
   void set (const QString &l, T (simu::Critter::*f) (void) const,
@@ -142,9 +143,6 @@ private:
 
       _dataWidgets[l]->setText(formatter((_subject->object().*f)()));
   }
-
-  void setLayoutDirection(QBoxLayout::Direction d = QBoxLayout::TopToBottom);
-  void showEvent(QShowEvent *e) override;
 };
 
 } // end of namespace gui
