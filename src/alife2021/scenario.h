@@ -26,6 +26,10 @@ public:
   void init (const Genome &genome);
   void postStep (void);
 
+  const auto subject (void) const {
+    return _subject;
+  }
+
   const auto& subjectBrain (void) const {
     return _subject->brain();
   }

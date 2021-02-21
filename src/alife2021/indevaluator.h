@@ -1,14 +1,16 @@
 #ifndef INDEVALUATOR_H
 #define INDEVALUATOR_H
 
+#include "kgd/external/json.hpp"
+#include "kgd/external/gaga.hpp"
 #include "scenario.h"
-#include "../../gaga/gaga.hpp"
 
 namespace simu {
 
 struct IndEvaluator {
   using Specs = Scenario::Specs;
-  using GA = GAGA::GA<genotype::Critter>;
+  using DNA = genotype::Critter;
+  using GA = GAGA::GA<DNA>;
   using Ind = GA::Ind_t;
 
   static constexpr int S = 3;
@@ -26,6 +28,8 @@ struct IndEvaluator {
   void setScenarios (const std::string &s);
 
   void operator() (Ind &ind, int);
+
+  static Ind fromJsonFile (const std::string &path);
 
   static std::atomic<bool> aborted;
 };

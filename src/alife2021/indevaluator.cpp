@@ -95,4 +95,18 @@ void IndEvaluator::operator() (Ind &ind, int) {
   ind.fitnesses["fitness"] = totalScore;
 }
 
+IndEvaluator::Ind IndEvaluator::fromJsonFile(const std::string &path) {
+  std::ifstream t(path);
+  std::stringstream buffer;
+  buffer << t.rdbuf();
+  auto o = nlohmann::json::parse(buffer.str());
+
+  if (o.count("dna")) // assuming this is a gaga individual
+    return Ind(o);
+  else {
+    DNA g = o;
+    return Ind(g);
+  }
+}
+
 } // end of namespace simu

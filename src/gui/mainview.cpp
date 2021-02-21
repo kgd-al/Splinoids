@@ -499,6 +499,10 @@ void MainView::selectPrevious(void) {
   selectionChanged(newSelection);
 }
 
+void MainView::select(visu::Critter *c) {
+  selectionChanged(c);
+}
+
 void MainView::selectionChanged(visu::Critter *c) {
   static const auto &bd = config::Visualisation::brainDeadSelection();
   auto q = qDebug();

@@ -622,6 +622,13 @@ void GeneticManipulator::printSubjectPhenotype(const QString &filename) const {
   _subject->printPhenotype(filename);
 }
 
+void GeneticManipulator::renderSubjectBrain (QPainter *painter) const {
+  QGraphicsView *v = _brainPanel->annViewer;
+  v->render(painter, QRectF(),
+            v->mapFromScene(v->sceneRect()).boundingRect());
+//  qDebug() << v->viewport()->rect() << v->sceneRect() << v->sceneRect().toRect();
+}
+
 void GeneticManipulator::buildViewer(void) {
   _viewer = new MiniViewer (this, _proxy);
 }
