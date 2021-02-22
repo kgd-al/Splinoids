@@ -130,13 +130,32 @@ int main(int argc, char *argv[]) {
   simu::IndEvaluator eval (eGenome);
   eval.setScenarios(scenarios);
 
+  static const auto &diffStats = [] (auto prev, auto curr) {
+    for (const auto &p: curr) {
+      auto it = prev.find(p.first);
+      std::cout << "\t" << p.first << ": ";
+      if (it != prev.end())  std::cout << it->second << " >> ";
+      std::cout << p.second;
+      if (it != prev.end()) {
+        std::cout << "\t";
+        if (p.second == it->second)
+          std::cout << GAGA_COLOR_GREEN << "OK";
+        else
+          std::cout << GAGA_COLOR_RED << "Mismatch";
+        std::cout << GAGA_COLOR_NORMAL;
+      }
+      std::cout << "\n";
+    }
+  };
+
   for (auto &ind: individuals) {
+    auto prevStats = ind.stats;
+    auto prevFitnesses = ind.fitnesses;
+
     eval(ind, 0);
 
-    for (const auto &p: ind.stats)
-      std::cout << "\t" << p.first << ": " << p.second << "\n";
-    for (const auto &p: ind.fitnesses)
-      std::cout << p.first << ": " << p.second << "\n";
+    diffStats(prevStats, ind.stats);
+    diffStats(prevFitnesses, ind.fitnesses);
   }
 
   auto duration = simu::Simulation::durationFrom(start);

@@ -71,11 +71,13 @@ private:
   QMap<QString, QLabel*> _dataWidgets;
   ColorLabels *_rLabels, *_eLabels, *_sLabels;
   std::array<LabeledSlider*, 3> _mSliders;
+  std::array<QLabel*, 2> _cLabels;
 
   QHBoxLayout *_contentsLayout;
   QBoxLayout *_retinaLayout, *_earsLayout;
   QLayout *_genesLayout, *_statsLayout, *_neuralLayout;
 
+  QWidget *_brainIO;
   kgd::es_hyperneat::gui::ES_HyperNEATPanel *_brainPanel;
   std::unique_ptr<phenotype::CPPN> _cppn;
 
@@ -101,6 +103,14 @@ public:
     setReadOnly(_readonly);
   }
 
+  auto* brainPanel (void) {
+    return _brainPanel;
+  }
+
+  auto brainIO (void) {
+    return _brainIO;
+  }
+
   void readCurrentStatus (void);
   void toggleBrainAnimation (void);
 
@@ -112,8 +122,6 @@ public:
 
   void printSubjectPhenotype (void);
   void printSubjectPhenotype (const QString &filename) const;
-
-  void renderSubjectBrain (QPainter *painter) const;
 
 signals:
   void keyReleased (QKeyEvent *e);
@@ -134,7 +142,7 @@ private:
   void buildViewer (void);
   void buildGenesLayout (void);
   void buildStatsLayout (void);
-  void buildNeuralLayout (void);
+  void buildNeuralPanel (void);
 
   QLayout* buildBarsLayout (void);
 

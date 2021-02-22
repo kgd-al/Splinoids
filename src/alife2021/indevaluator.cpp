@@ -87,7 +87,7 @@ void IndEvaluator::operator() (Ind &ind, int) {
     assert(!brainless || ind.stats[scenarioLabels[i]] == 0);
 #endif
 
-  ind.stats["b"] = !brainless;
+  ind.stats["brain"] = !brainless;
   if (brainless)
    for (uint i=0; i<S; i++)
      ind.stats[scenarioLabels[i]] = 0;

@@ -27,12 +27,14 @@ done
 resolution="$((2*$S))x$S"
 echo "resolution: $resolution"
 
+base=$(dirname $individual)/$(basename $individual .dna)
+imgfolder=$base/$scenario/
+rm $imgfolder/*.png
+
 # -i data/test.dna -s "1++++"
 
 ./build/release/pp-visualizer --env-genome data/small.env.json --spln-genome $individual --overwrite p --scenario "$scenario" --snapshots=$S
 
-base=$(dirname $individual)/$(basename $individual .dna)
-imgfolder=$base/$scenario/
 echo "image folder: $imgfolder"
 if [ ! -d "$imgfolder" ]
 then

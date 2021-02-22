@@ -173,15 +173,21 @@ int main(int argc, char *argv[]) {
   }
 
   // ===========================================================================
-  // Final preparations (for regular version)
+  // Final preparations (for both version)
+
+  v->fitInView(simulation.bounds(), Qt::KeepAspectRatio);
+  v->select(simulation.critters().at(scenario.subject()));
+
   if (snapshots <= 0) {
+  // ===========================================================================
+  // Regular version
     w.restoreGeometry(settings.value("geom").toByteArray());
     cs->restoreGeometry(settings.value("cs::geom").toByteArray());
     cs->setVisible(settings.value("cs::visible").toBool());
     w.show();
 
     v->fitInView(simulation.bounds(), Qt::KeepAspectRatio);
-    v->selectNext();
+    v->select(simulation.critters().at(scenario.subject()));
 
     QTimer::singleShot(100, [&v, startspeed] {
       if (startspeed) v->start(startspeed);
@@ -206,6 +212,9 @@ int main(int argc, char *argv[]) {
     return r;
 
   } else {
+  // ===========================================================================
+  // Batch snapshot mode
+
     stdfs::path savefolder = cGenomeArg;
     savefolder = savefolder.replace_extension();
     savefolder /= scenarioArg;
@@ -215,39 +224,19 @@ int main(int argc, char *argv[]) {
     config::Visualisation::drawVision.overrideWith(2);
     config::Visualisation::drawAudition.overrideWith(0);
 
-    v->fitInView(simulation.bounds(), Qt::KeepAspectRatio);
-    v->select(simulation.critters().at(scenario.subject()));
+    // Create ad-hock widget for rendering
+    QWidget *renderer = new QWidget;
+    renderer->setContentsMargins(0, 0, 0, 0);
+    QGridLayout *layout = new QGridLayout;
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->addWidget(v, 0, 0, 2, 1);
+    layout->addWidget(cs->brainIO(), 0, 1);
+    layout->addWidget(cs->brainPanel()->annViewer, 1, 1);
+    renderer->setLayout(layout);
 
-    const auto generate = [v, &simulation, &scenario, &savefolder, snapshots] {
+    const auto generate = [v, &simulation, &savefolder, renderer, snapshots] {
       v->focusOnSelection();
       v->characterSheet()->readCurrentStatus();
-
-      int S = snapshots;
-      QImage lhs (S, S, QImage::Format_RGB32),
-             rhs (S, S, QImage::Format_RGB32),
-             both (2*S, S, QImage::Format_RGB32);
-      {
-        lhs.fill(Qt::red);
-        QPainter painter (&lhs);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        v->render(&painter, QRectF(),
-                  v->mapFromScene(v->sceneRect()).boundingRect());
-
-//        qDebug() << lhs.rect() << v->mapFromScene(v->sceneRect()).boundingRect();
-      }
-      {
-        rhs.fill(Qt::white);
-        QPainter painter (&rhs);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        v->characterSheet()->renderSubjectBrain(&painter);
-      }
-      {
-        both.fill(Qt::blue);
-        QPainter painter (&both);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        painter.drawImage(0, 0, lhs);
-        painter.drawImage(S, 0, rhs);
-      }
 
       std::ostringstream oss;
       oss << savefolder.string() << "/" << std::setfill('0') << std::setw(5)
@@ -255,11 +244,9 @@ int main(int argc, char *argv[]) {
       auto savepath = oss.str();
       auto qsavepath = QString::fromStdString(savepath);
 
-      lhs.save(qsavepath + "-lhs.png");
-      rhs.save(qsavepath + "-rhs.png");
-
       std::cout << "Saving to " << savepath << ": ";
-      if (both.save(qsavepath))
+      if (renderer->grab().scaledToHeight(snapshots, Qt::SmoothTransformation)
+          .save(qsavepath))
         std::cout << "OK\r";
       else {
         std::cout << "FAILED !";

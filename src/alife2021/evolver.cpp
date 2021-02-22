@@ -165,7 +165,6 @@ int main(int argc, char *argv[]) {
 //    s.setWorkPath(outputFolder, simu::Simulation::Overwrite(overwrite));
   simu::Simulation::printStaticStats();
 
-  bool success = true;
   rng::AtomicDice dice (seed);
   std::cout << "Using seed " << seed << " -> " << dice.getSeed() << "\n";
 
@@ -227,6 +226,31 @@ int main(int argc, char *argv[]) {
   auto start = simu::Simulation::now();
   ga.step(generations);
 
+  // Check status
+  static constexpr auto bThreshold = .9f;
+  static constexpr auto bCount = 5;
+  const auto &stats = ga.genStats;
+  int success = -1, contiguousBrains = 0;
+  for (uint i=0; i<stats.size() && success < 0; i++) {
+    if (stats[i].at("cs_brain").at("avg") >= bThreshold)
+          contiguousBrains++;
+    else  contiguousBrains = 0;
+    if (contiguousBrains >= bCount)
+      success = i - bCount - 1;
+  }
+
+  if (success > 0) {
+    std::cout << "Performing " << success << " additionnal generations to reach"
+                 " target number of brains (" << bCount << " contiguous"
+                 " geneneration with >= " << bThreshold << "brain proportion)"
+                 "\n";
+    ga.step(success);
+  }
+
+  stdfs::create_directory_symlink(
+    GAGA::concat("gen", ga.getCurrentGenerationNumber()-1),
+    ga.getSaveFolder() / "gen_last");
+
   // ===========================================================================
   // == Post-evolution
 
@@ -242,8 +266,8 @@ int main(int argc, char *argv[]) {
   days = duration / 24;
 
   std::cout << "### Evolution ";
-  if (success)  std::cout << "completed";
-  else          std::cout << "failed";
+  if (success >= 0) std::cout << "completed";
+  else              std::cout << "failed";
   std::cout << " in ";
   if (days > 0)
     std::cout << days << " days ";

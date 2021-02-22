@@ -145,9 +145,8 @@ struct LabeledSlider : public QSlider {
 
   void paintEvent(QPaintEvent *e) {
     QSlider::paintEvent(e);
-    qreal x = width() * float(value() - minimum()) / (maximum() - minimum());
-    qDebug() << width() << "* (" << value() << "-" << minimum() << ") / ("
-             << maximum() << "-" << minimum() << ")";
+    qreal x = width() * float(scaledValue() - minimum())
+            / (maximum() - minimum());
 
     QString text = QString::number(value(), 'f', 2);
     QPainter painter (this);
@@ -295,7 +294,6 @@ public:
       } else {
         cl->noValue();
         cl->hide();
-        cl->setText(QString::number(i));
       }
 
       l->addWidget(cl);
@@ -512,9 +510,8 @@ GeneticManipulator::GeneticManipulator(QWidget *parent)
   buildViewer();
   buildStatsLayout();
   buildGenesLayout();
-  buildNeuralLayout();
 
-  _brainPanel = new kgd::es_hyperneat::gui::ES_HyperNEATPanel;
+  buildNeuralPanel();
 
   _brainButton = new QPushButton;
   _brainButton->setIcon(QIcon::fromTheme("help-about"));
@@ -547,10 +544,7 @@ GeneticManipulator::GeneticManipulator(QWidget *parent)
         llayout->addLayout(_statsLayout);
       _contentsLayout->addLayout(llayout);
       _contentsLayout->addLayout(_genesLayout);
-      auto rlayout = new QVBoxLayout;
-        rlayout->addLayout(_neuralLayout);
-        rlayout->addWidget(_brainPanel);
-      _contentsLayout->addLayout(rlayout);
+      _contentsLayout->addLayout(_neuralLayout);
 
     QHBoxLayout *buttonsLayout = new QHBoxLayout;
     buttonsLayout->addWidget(filler(false));
@@ -622,12 +616,6 @@ void GeneticManipulator::printSubjectPhenotype(const QString &filename) const {
   _subject->printPhenotype(filename);
 }
 
-void GeneticManipulator::renderSubjectBrain (QPainter *painter) const {
-  QGraphicsView *v = _brainPanel->annViewer;
-  v->render(painter, QRectF(),
-            v->mapFromScene(v->sceneRect()).boundingRect());
-//  qDebug() << v->viewport()->rect() << v->sceneRect() << v->sceneRect().toRect();
-}
 
 void GeneticManipulator::buildViewer(void) {
   _viewer = new MiniViewer (this, _proxy);
@@ -780,29 +768,42 @@ void GeneticManipulator::buildGenesLayout(void) {
   gl->addWidget(filler(true));
 }
 
-void GeneticManipulator::buildNeuralLayout(void) {
-  QFormLayout *nl;
-  _neuralLayout = nl = new QFormLayout;
-  nl->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+void GeneticManipulator::buildNeuralPanel(void) {
+  _brainIO = new QWidget;
+  QFormLayout *iol = new QFormLayout;
+  iol->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
 
-  nl->addRow(line("Neural I/O"));
+  iol->addRow(line("Neural I/O"));
   int rcells = 2 * (1+2*genotype::Vision::config_t::precisionBounds().max);
-  nl->addRow("Vision", _rLabels = new ColorLabels(rcells, true));
-  nl->addRow("Audition", _eLabels
+  iol->addRow("Vision", _rLabels = new ColorLabels(rcells, true));
+  iol->addRow("Audition", _eLabels
              = new ColorLabels(2*(simu::Critter::VOCAL_CHANNELS+1), true));
 
-  nl->addRow(line(""));
+  iol->addRow(line(""));
 
   QGridLayout *g = new QGridLayout;
-  g->addWidget(new QLabel("Motors"), 0, 0, 1, 2);
+  g->addWidget(new QLabel("Motors"), 0, 0, 1, 2, Qt::AlignCenter);
   g->addWidget(_mSliders[0] = new LabeledSlider(-1, 1), 1, 0);
   g->addWidget(_mSliders[1] = new LabeledSlider(-1, 1), 1, 1);
-  g->addWidget(new QLabel("Clock"), 0, 2);
-  g->addWidget(_mSliders[2] = new LabeledSlider(-1, 1), 1, 2);
-  nl->addRow(g);
 
-  nl->addRow("Sound", _sLabels
+  g->addWidget(new QLabel("Clock"), 0, 2, 1, 1, Qt::AlignCenter);
+  auto ml = new QHBoxLayout;
+  ml->addWidget(_cLabels[0] =  new QLabel);
+  ml->addWidget(_mSliders[2] = new LabeledSlider(-1, 1));
+  ml->addWidget(_cLabels[1] = new QLabel);
+  g->addLayout(ml, 1, 2);
+
+  iol->addRow(g);
+
+  iol->addRow("Sound", _sLabels
              = new ColorLabels(simu::Critter::VOCAL_CHANNELS+1, false));
+
+  _brainIO->setLayout(iol);
+
+  QVBoxLayout *nl;
+  _neuralLayout = nl = new QVBoxLayout;
+  nl->addWidget(_brainIO);
+  nl->addWidget(_brainPanel = new kgd::es_hyperneat::gui::ES_HyperNEATPanel);
 }
 
 void GeneticManipulator::updateWindowName (void) {
@@ -881,7 +882,9 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     for (uint j=0; j<2; j++)
       _bPickers[j]->setGeneValue(g.colors[j*(S_v+1)]);
 
-    _mSliders.back()->setRange(g.minClockSpeed, g.minClockSpeed);
+    _cLabels[0]->setText(QString::number(100*g.minClockSpeed, 'f', 1));
+    _mSliders.back()->setRange(100*g.minClockSpeed, 100*g.maxClockSpeed);
+    _cLabels[1]->setText(QString::number(100*g.maxClockSpeed, 'f', 1));
 
     _cppn = std::make_unique<phenotype::CPPN>(
               phenotype::CPPN::fromGenotype(g.brain));
@@ -912,7 +915,8 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
 
     for (PrettyBar *b: _sBars)  b->noValue();
 
-    for (auto l: _mSliders) l->noValue();
+    for (auto s: _mSliders) s->noValue();
+    for (auto l: _cLabels)  l->setText("");
 
     _cppn.release();
     _brainPanel->noData();
@@ -996,7 +1000,7 @@ void GeneticManipulator::readCurrentStatus(void) {
 
   _mSliders[0]->setValue(c.motorOutput(Motor::LEFT));
   _mSliders[1]->setValue(c.motorOutput(Motor::RIGHT));
-  _mSliders[2]->setValue(c.clockSpeed());
+  _mSliders[2]->setValue(100*c.clockSpeed());
 
   if (config::Visualisation::animateANN())
     _brainPanel->annViewer->updateAnimation();
