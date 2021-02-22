@@ -31,6 +31,7 @@ struct IndEvaluator {
 
   static Ind fromJsonFile (const std::string &path);
 
+  stdfs::path trajectoriesSavePrefix;
   static std::atomic<bool> aborted;
 };
 

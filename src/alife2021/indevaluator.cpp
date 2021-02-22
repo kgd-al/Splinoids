@@ -55,7 +55,26 @@ void IndEvaluator::operator() (Ind &ind, int) {
     brainless = scenario.subjectBrain().empty();
     if (brainless)  break;
 
-    while (!simulation.finished() && !aborted)  simulation.step();
+    std::ofstream ofs;
+    if (!trajectoriesSavePrefix.empty()) {
+      stdfs::path savePath =
+        trajectoriesSavePrefix / Specs::toString(scenario.specs());
+      stdfs::create_directories(savePath);
+      ofs.open(savePath / "trajectory.dat");
+      ofs << "Time x y a\n";
+      std::cout << (trajectoriesSavePrefix / Specs::toString(scenario.specs())
+                   / "trajectory.dat") << ": " << ofs.is_open() << "\n";
+    }
+
+    while (!simulation.finished() && !aborted) {
+      simulation.step();
+
+      if (ofs.is_open()) {
+        const auto &s = *scenario.subject();
+        ofs << simulation.currTime().timestamp() << " " << s.x() << " " << s.y()
+            << " " << s.rotation() << "\n";
+      }
+    }
 
     float score = scenario.score();
     totalScore += score;

@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
   std::string scenarios;
 
   EGenome eGenome;
-  std::vector<Ind> individuals;
+  std::map<std::string, Ind> individuals;
 
   std::string outputFolder = "tmp/pp-eval/";
   char overwrite = simu::Simulation::PURGE;
@@ -98,7 +98,10 @@ int main(int argc, char *argv[]) {
     if (cGenomeSeed < -1) {
       std::cout << "Reading splinoid genome from input file '"
                 << arg << "'" << std::endl;
-      individuals.push_back(simu::IndEvaluator::fromJsonFile(arg));
+
+      auto base = stdfs::path(arg).replace_extension();
+      individuals.emplace(
+        std::make_pair(base, simu::IndEvaluator::fromJsonFile(arg)));
 
     } else {
 //      rng::FastDice dice;
@@ -137,7 +140,7 @@ int main(int argc, char *argv[]) {
       if (it != prev.end())  std::cout << it->second << " >> ";
       std::cout << p.second;
       if (it != prev.end()) {
-        std::cout << "\t";
+        std::cout << "\t ";
         if (p.second == it->second)
           std::cout << GAGA_COLOR_GREEN << "OK";
         else
@@ -148,10 +151,12 @@ int main(int argc, char *argv[]) {
     }
   };
 
-  for (auto &ind: individuals) {
+  for (auto &p: individuals) {
+    auto &ind = p.second;
     auto prevStats = ind.stats;
     auto prevFitnesses = ind.fitnesses;
 
+    eval.trajectoriesSavePrefix = p.first;
     eval(ind, 0);
 
     diffStats(prevStats, ind.stats);

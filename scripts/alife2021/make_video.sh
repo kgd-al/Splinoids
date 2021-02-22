@@ -28,7 +28,7 @@ resolution="$((2*$S))x$S"
 echo "resolution: $resolution"
 
 base=$(dirname $individual)/$(basename $individual .dna)
-imgfolder=$base/$scenario/
+imgfolder=$base/$scenario/screenshots/
 rm $imgfolder/*.png
 
 # -i data/test.dna -s "1++++"

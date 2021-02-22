@@ -26,6 +26,10 @@ public:
   void init (const Genome &genome);
   void postStep (void);
 
+  const auto& specs (void) const {
+    return _specs;
+  }
+
   const auto subject (void) const {
     return _subject;
   }

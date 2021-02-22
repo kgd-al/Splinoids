@@ -48,7 +48,7 @@ DEFINE_PARAMETER(uint, logStatsEvery, 0)
 DEFINE_PARAMETER(int, verbosity, 1)
 
 DEFINE_PARAMETER(Color, emptyColor, utils::uniformStdArray<Color>(0))
-DEFINE_PARAMETER(Color, obstacleColor, utils::uniformStdArray<Color>(1))
+DEFINE_PARAMETER(Color, obstacleColor, Color{{0.f, 0.f, 1.f}})
 
 DEFINE_PARAMETER(float, plantMinRadius, .25)
 DEFINE_PARAMETER(float, plantMaxRadius, .75)

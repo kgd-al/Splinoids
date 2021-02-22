@@ -216,8 +216,7 @@ int main(int argc, char *argv[]) {
   // Batch snapshot mode
 
     stdfs::path savefolder = cGenomeArg;
-    savefolder = savefolder.replace_extension();
-    savefolder /= scenarioArg;
+    savefolder = savefolder.replace_extension() / scenarioArg / "screenshots";
     stdfs::create_directories(savefolder);
 
     config::Visualisation::brainDeadSelection.overrideWith(BrainDead::UNSET);
