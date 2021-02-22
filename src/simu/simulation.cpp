@@ -146,19 +146,21 @@ bool Simulation::setWorkPath (const stdfs::path &path, Overwrite o) {
   _workPath = path;
   if (verb > 1) std::cout << " to " << _workPath << std::endl;
 
-  stdfs::path statsPath = localFilePath("global.dat");
-  if (_statsLogger.is_open()) _statsLogger.close();
-  _statsLogger.open(statsPath, std::ofstream::out | std::ofstream::trunc);
-  if (!_statsLogger.is_open())
-    utils::doThrow<std::invalid_argument>(
-      "Unable to open stats file ", statsPath);
+  if (config::Simulation::logStatsEvery() > 0) {
+    stdfs::path statsPath = localFilePath("global.dat");
+    if (_statsLogger.is_open()) _statsLogger.close();
+    _statsLogger.open(statsPath, std::ofstream::out | std::ofstream::trunc);
+    if (!_statsLogger.is_open())
+      utils::doThrow<std::invalid_argument>(
+        "Unable to open stats file ", statsPath);
 
-  stdfs::path competPath = localFilePath("competition.dat");
-  if (_competitionLogger.is_open()) _competitionLogger.close();
-  _competitionLogger.open(competPath, std::ofstream::out | std::ofstream::trunc);
-  if (!_competitionLogger.is_open())
-    utils::doThrow<std::invalid_argument>(
-      "Unable to open compet file ", competPath);
+    stdfs::path competPath = localFilePath("competition.dat");
+    if (_competitionLogger.is_open()) _competitionLogger.close();
+    _competitionLogger.open(competPath, std::ofstream::out | std::ofstream::trunc);
+    if (!_competitionLogger.is_open())
+      utils::doThrow<std::invalid_argument>(
+        "Unable to open compet file ", competPath);
+  }
 
 //  using O = genotype::cgp::Outputs;
 //  using U = EnumUtils<O>;
@@ -291,7 +293,8 @@ void Simulation::init(const Environment::Genome &egenome,
 //             1, 2); // TODO
   plantRenewal(W * data.pRange);
 
-  _statsLogger.open(config::Simulation::logFile());
+  if (config::Simulation::logStatsEvery() > 0)
+    _statsLogger.open(config::Simulation::logFile());
   _reproductions = ReproductionStats{};
   _autopsies = Autopsies{};
 
@@ -299,7 +302,7 @@ void Simulation::init(const Environment::Genome &egenome,
 
   postInit();
 
-  logStats();
+  if (_statsLogger && config::Simulation::logStatsEvery() > 0)  logStats();
 
 //  if (false) {
 //    Critter *c = *_critters.begin();
@@ -520,7 +523,7 @@ void Simulation::step (void) {
 }
 
 void Simulation::atEnd (void) {
-  logStats();
+  if (_statsLogger && config::Simulation::logStatsEvery() > 0)  logStats();
 }
 
 void Simulation::audition(void) {
