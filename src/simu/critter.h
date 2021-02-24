@@ -222,6 +222,7 @@ public:
   std::array<std::vector<Vertices>, 2*SPLINES_COUNT> collisionObjects;
 
   bool brainDead; // TODO for external control
+  std::vector<bool> selectiveBrainDead; // deactivate specific neural outputs
 
   uint userIndex;  // To monitor source population
 

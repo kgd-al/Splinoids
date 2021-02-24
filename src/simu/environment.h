@@ -62,7 +62,7 @@ private:
   CollisionMonitor *_cmonitor;
 
   b2Body *_edges;
-  b2BodyUserData _edgesUserData;
+  b2BodyUserData _edgesUserData, _obstaclesUserData;
 
   FeedingEvents _feedingEvents;
   FightingEvents _fightingEvents;
@@ -109,7 +109,9 @@ public:
     return _physics;
   }
 
-  b2Body* body (void) {
+  b2Body* createObstacle (float x, float y, float w, float h);
+
+  b2Body* edges (void) {
     return _edges;
   }
 

@@ -7,7 +7,7 @@
 
 #include "kgd/external/cxxopts.hpp"
 
-#include "scenario.h"
+#include "indevaluator.h"
 #include "../gui/mainview.h"
 
 #include <QDebug>
@@ -30,13 +30,12 @@ long maybeSeed(const std::string& s) {
   return p? l : -2;
 }
 
-int main(int argc, char *argv[]) {  
+int main(int argc, char *argv[]) {
   // To prevent missing linkages
   std::cerr << config::PTree::rsetSize() << std::endl;
 //  std::cerr << phylogeny::SID::INVALID << std::endl;
 
   using CGenome = genotype::Critter;
-  using EGenome = genotype::Environment;
 
   // ===========================================================================
   // == Command line arguments parsing
@@ -46,12 +45,9 @@ int main(int argc, char *argv[]) {
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::QUIET;
 
-  simu::Simulation::InitData idata = simu::Scenario::commonInitData;
+  std::string cGenomeArg, scenarioArg;
 
-  std::string eGenomeArg, cGenomeArg, scenarioArg;
-
-  genotype::Environment eGenome;
-  genotype::Critter cGenome;
+  CGenome cGenome;
 
   int startspeed = 1;
 
@@ -59,6 +55,8 @@ int main(int argc, char *argv[]) {
   char overwrite = simu::Simulation::ABORT;
 
   int snapshots = -1;
+
+  bool v1scenarios = false;
 
   cxxopts::Options options("Splinoids (pp-gui-evaluation)",
                            "2D simulation of minimal splinoids for the "
@@ -71,7 +69,6 @@ int main(int argc, char *argv[]) {
     ("v,verbosity", "Verbosity level. " + config::verbosityValues(),
      cxxopts::value(verbosity))
 
-    ("env-genome", "Environment's genome", cxxopts::value(eGenomeArg))
     ("spln-genome", "Splinoid genome", cxxopts::value(cGenomeArg))
     ("scenario", "Scenario specifications", cxxopts::value(scenarioArg))
 
@@ -86,6 +83,9 @@ int main(int argc, char *argv[]) {
 
     ("snapshots", "Generate simu+ann snapshots of provided size (batch)",
      cxxopts::value(snapshots)->implicit_value("25"))
+
+    ("1,v1", "Use v1 scenarios",
+     cxxopts::value(v1scenarios)->implicit_value("true"))
     ;
 
   auto result = options.parse(argc, argv);
@@ -154,21 +154,17 @@ int main(int argc, char *argv[]) {
   if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
   if (configFile.empty()) config::Simulation::printConfig("");
 
-  std::cout << "Reading environment genome from input file '"
-            << eGenomeArg << "'" << std::endl;
-  eGenome = EGenome::fromFile(eGenomeArg);
-
   std::cout << "Reading splinoid genome from input file '"
             << cGenomeArg << "'" << std::endl;
-  cGenome = CGenome::fromFile(cGenomeArg);
+  cGenome = simu::IndEvaluator::fromJsonFile(cGenomeArg).dna;
   cGenome.gdata.self.gid = std::max(cGenome.gdata.self.gid,
                                     phylogeny::GID(0));
 
-  simulation.init(eGenome, {}, idata);
   scenario.init(cGenome);
 
   if (!outputFolder.empty()) {
-    bool ok = simulation.setWorkPath(outputFolder, simu::Simulation::Overwrite(overwrite));
+    bool ok = simulation.setWorkPath(outputFolder,
+                                     simu::Simulation::Overwrite(overwrite));
     if (!ok)  exit(2);
   }
 

@@ -27,8 +27,6 @@ void sigint_manager (int) {
 //}
 
 int main(int argc, char *argv[]) {
-  using CGenome = genotype::Critter;
-  using EGenome = genotype::Environment;
   using Ind = simu::IndEvaluator::Ind;
 
   // ===========================================================================
@@ -37,17 +35,17 @@ int main(int argc, char *argv[]) {
   using Verbosity = config::Verbosity;
 
   std::string configFile = "auto";  // Default to auto-config
-  Verbosity verbosity = Verbosity::SHOW;
+  Verbosity verbosity = Verbosity::QUIET;
 
-  std::string eGenomeArg;
   std::vector<std::string> cGenomeArgs;
-  std::string scenarios;
+  std::string scenarios = "all";
 
-  EGenome eGenome;
   std::map<std::string, Ind> individuals;
 
   std::string outputFolder = "tmp/pp-eval/";
   char overwrite = simu::Simulation::PURGE;
+
+  bool v1scenarios = false;
 
   cxxopts::Options options("Splinoids (pp-evaluator)",
                            "Evaluation of minimal splinoids evolved according"
@@ -66,12 +64,11 @@ int main(int argc, char *argv[]) {
                   "[a]bort or [p]urge",
      cxxopts::value(overwrite))
 
-    ("scenarios", "Specific scenario(s) to test",
-     cxxopts::value(scenarios))
-    ("env-genome", "Environment's genome",
-     cxxopts::value(eGenomeArg))
-    ("spln-genome", "Splinoid genome",
-     cxxopts::value(cGenomeArgs))
+    ("scenarios", "Specific scenario(s) to test", cxxopts::value(scenarios))
+    ("spln-genome", "Splinoid genome", cxxopts::value(cGenomeArgs))
+
+    ("1,v1", "Use v1 scenarios",
+     cxxopts::value(v1scenarios)->implicit_value("true"))
     ;
 
   auto result = options.parse(argc, argv);
@@ -85,11 +82,10 @@ int main(int argc, char *argv[]) {
   if (result.count("auto-config") && result["auto-config"].as<bool>())
     configFile = "auto";
 
+  if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
+  config::Simulation::verbosity.overrideWith(0);
+  if (configFile.empty()) config::Simulation::printConfig("");
 
-  std::cout << "Reading environment genome from input file '"
-            << eGenomeArg << "'" << std::endl;
-  eGenome = EGenome::fromFile(eGenomeArg);
-  std::cout << "Environment:\n" << eGenome << "\n";
 
   if (cGenomeArgs.empty())
     utils::doThrow<std::invalid_argument>("No splinoid genomes provided");
@@ -130,7 +126,7 @@ int main(int argc, char *argv[]) {
 
   auto start = simu::Simulation::now();
 
-  simu::IndEvaluator eval (eGenome);
+  simu::IndEvaluator eval (!v1scenarios);
   eval.setScenarios(scenarios);
 
   static const auto &diffStats = [] (auto prev, auto curr) {
@@ -156,7 +152,7 @@ int main(int argc, char *argv[]) {
     auto prevStats = ind.stats;
     auto prevFitnesses = ind.fitnesses;
 
-    eval.trajectoriesSavePrefix = p.first;
+    eval.logsSavePrefix = p.first;
     eval(ind, 0);
 
     diffStats(prevStats, ind.stats);

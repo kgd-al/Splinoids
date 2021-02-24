@@ -14,15 +14,10 @@ struct IndEvaluator {
   using Ind = GA::Ind_t;
 
   static constexpr int S = 3;
-  static constexpr std::array<const char*, S> scenarioLabels {{
-    "T0", "T1", "T2"
-  }};
-  std::array<std::vector<Specs>, S> allScenarios;
-  std::array<Specs, S> currentScenarios;
+  std::array<std::vector<Specs>, S+1> allScenarios;
+  std::vector<Specs> currentScenarios;
 
-  const genotype::Environment egenome;
-
-  IndEvaluator (const genotype::Environment &e);
+  IndEvaluator (bool v0Scenarios);
 
   void selectCurrentScenarios (rng::AbstractDice &dice);
   void setScenarios (const std::string &s);
@@ -31,7 +26,9 @@ struct IndEvaluator {
 
   static Ind fromJsonFile (const std::string &path);
 
-  stdfs::path trajectoriesSavePrefix;
+  const bool usingV0Scenarios;
+  stdfs::path logsSavePrefix;
+
   static std::atomic<bool> aborted;
 };
 

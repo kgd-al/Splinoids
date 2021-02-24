@@ -307,6 +307,9 @@ Environment::Environment(const Genome &g)
   _physics.SetContactListener(_cmonitor);
 
   _energyReserve = 0;
+
+  _obstaclesUserData.type = BodyType::OBSTACLE;
+  _obstaclesUserData.ptr.obstacle = nullptr;
 }
 
 Environment::~Environment (void) {
@@ -348,6 +351,29 @@ void Environment::step (void) {
 
 //  std::cerr << "Physical step took " << _physics.GetProfile().step
 //            << " ms" << std::endl;
+}
+
+b2Body* Environment::createObstacle(float x, float y, float w, float h) {
+  b2BodyDef bodyDef;
+  bodyDef.type = b2_staticBody;
+  bodyDef.position.Set(x+.5f*w, y+.5f*h);
+
+  b2Body *body = _physics.CreateBody(&bodyDef);
+
+  b2PolygonShape box;
+  box.SetAsBox(.5f*w, .5f*h);
+
+  b2FixtureDef fixtureDef;
+  fixtureDef.shape = &box;
+  fixtureDef.density = 0;
+  fixtureDef.isSensor = false;
+  fixtureDef.filter.categoryBits = uint16(CollisionFlag::OBSTACLE_FLAG);
+  fixtureDef.filter.maskBits = uint16(CollisionFlag::OBSTACLE_MASK);
+
+  body->CreateFixture(&fixtureDef);
+  body->SetUserData(&_obstaclesUserData);
+
+  return body;
 }
 
 void Environment::createEdges(void) {

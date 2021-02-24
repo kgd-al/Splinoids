@@ -4,25 +4,35 @@ namespace simu {
 
 std::atomic<bool> IndEvaluator::aborted = false;
 
-IndEvaluator::IndEvaluator (const genotype::Environment &e) : egenome(e) {
+IndEvaluator::IndEvaluator (bool v0Scenarios): usingV0Scenarios(v0Scenarios) {
   static constexpr auto pos = {-1,+1};
+
   for (int fx: pos)
     for (int fy: pos)
-       allScenarios[0].push_back(Specs::fromValues(Specs::ALONE, fx, fy));
+       allScenarios[0].push_back(Specs::fromValues(Specs::V0_ALONE, fx, fy));
 
-  for (Specs::Type t: {Specs::CLONE, Specs::PREDATOR})
+  for (Specs::Type t: {Specs::V0_CLONE, Specs::V0_PREDATOR})
     for (int fx: pos)
       for (int fy: pos)
         for (int ox: pos)
           for (int oy: pos)
             allScenarios[int(t)].push_back(
               Specs::fromValues(t, fx, fy, ox, oy));
+
+  for (auto t=Specs::V1_ALONE; t<=Specs::V1_BOTH; t=Specs::Type(int(t)+1))
+    for (int y: pos)
+      allScenarios.back().push_back(Specs::fromValue(t, y));
+
+  if (!v0Scenarios) setScenarios("all");
 }
 
 
 void IndEvaluator::selectCurrentScenarios (rng::AbstractDice &dice) {
+  if (!usingV0Scenarios) return;
+
   std::cout << "Scenarios for current generation: ";
   float diff = 0;
+  currentScenarios.resize(3);
   for (uint i=0; i<S; i++) {
     const auto &s = currentScenarios[i] = *dice(allScenarios[i]);
     std::cout << " " << Specs::toString(s);
@@ -32,53 +42,119 @@ void IndEvaluator::selectCurrentScenarios (rng::AbstractDice &dice) {
 }
 
 void IndEvaluator::setScenarios(const std::string &s) {
-  for (const std::string str: utils::split(s, ';')) {
-    auto specs = Specs::fromString(str);
-    currentScenarios[specs.type] = specs;
+  if (s == "all") {
+    if (usingV0Scenarios) {
+      for (uint i=0; i<S; i++)
+        for (const auto &s: allScenarios[i])
+          currentScenarios.push_back(s);
+    } else
+      currentScenarios = allScenarios.back();
+  } else {
+    currentScenarios.clear();
+    for (const std::string str: utils::split(s, ';')) {
+      auto specs = Specs::fromString(str);
+      currentScenarios.push_back(specs);
+    }
   }
 }
 
 void IndEvaluator::operator() (Ind &ind, int) {
   float totalScore = 0;
 
+#ifndef NDEBUG
   std::vector<phenotype::ANN> brains;
+#endif
 
   bool brainless = false;
-  for (uint i=0; i<S; i++) {
+  for (const Specs &spec: currentScenarios) {
     Simulation simulation;
-    Scenario scenario (currentScenarios[i], simulation);
+    Scenario scenario (spec, simulation);
 
-    simulation.init(egenome, {}, simu::Scenario::commonInitData);
     scenario.init(ind.dna);
+    const Critter &s = *scenario.subject();
 
-    brains.push_back(scenario.subjectBrain());
-    brainless = scenario.subjectBrain().empty();
+#ifndef NDEBUG
+    brains.push_back(s.brain());
+#endif
+
+    brainless = s.brain().empty();
     if (brainless)  break;
 
-    std::ofstream ofs;
-    if (!trajectoriesSavePrefix.empty()) {
+    std::ofstream tlog, alog, nlog;
+    if (!logsSavePrefix.empty()) {
       stdfs::path savePath =
-        trajectoriesSavePrefix / Specs::toString(scenario.specs());
+        logsSavePrefix / Specs::toString(scenario.specs());
       stdfs::create_directories(savePath);
-      ofs.open(savePath / "trajectory.dat");
-      ofs << "Time x y a\n";
-      std::cout << (trajectoriesSavePrefix / Specs::toString(scenario.specs())
-                   / "trajectory.dat") << ": " << ofs.is_open() << "\n";
+      tlog.open(savePath / "trajectory.dat");
+
+      tlog << "Env size: " << simulation.environment().extent() << "\n"
+           << "Food_x Food_y Food_r\n";
+      if (auto f = scenario.foodlet())
+        tlog << f->x() << " " << f->y() << " " << f->radius() << "\n\n";
+
+      tlog << "sx sy sa cx cy ca px py pa\n";
+
+      alog.open(savePath / "vocalisation.dat");
+      alog << "Noise";
+      for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
+        alog << " S" << i;
+      for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
+        alog << " C" << i;
+      alog << "\n";
+
+      nlog.open(savePath / "neurons.dat");
+      nlog << "Flag";
+      for (const auto &p: s.brain().neurons())
+        if (p.second->isHidden())
+          nlog << " (" << p.first.x() << "," << p.first.y() << ")";
+      nlog << "\n";
     }
 
     while (!simulation.finished() && !aborted) {
       simulation.step();
 
-      if (ofs.is_open()) {
-        const auto &s = *scenario.subject();
-        ofs << simulation.currTime().timestamp() << " " << s.x() << " " << s.y()
-            << " " << s.rotation() << "\n";
+      if (tlog.is_open()) {
+        tlog << s.x() << " " << s.y()
+            << " " << s.rotation() << " ";
+
+        if (auto c = scenario.clone())
+          tlog << c->x() << " " << c->y() << " " << c->rotation();
+        else
+          tlog << "nan nan nan";
+        tlog << " ";
+
+        if (auto p = scenario.predator())
+          tlog << p->x() << " " << p->y() << " " << p->rotation();
+        else
+          tlog << "nan nan nan";
+
+        tlog << "\n";
+      }
+
+      if (alog.is_open()) {
+        for (float v: s.producedSound())  alog << v << " ";
+
+        if (auto c = scenario.clone())
+          for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
+            alog << c->producedSound()[i+1] << " ";
+        else
+          for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
+            alog << "nan ";
+        alog << "\n";
+      }
+
+      if (nlog.is_open()) {
+        nlog << "0";
+        for (const auto &p: s.brain().neurons())
+          if (p.second->isHidden())
+            nlog << " " << p.second->value;
+        nlog << "\n";
       }
     }
 
     float score = scenario.score();
     totalScore += score;
-    ind.stats[scenarioLabels[i]] = score;
+    ind.stats[Specs::toString(spec)] = score;
     assert(!brainless);
   }
 
@@ -102,16 +178,24 @@ void IndEvaluator::operator() (Ind &ind, int) {
   }
 
   assert(!brainless || totalScore == 0);
-  for (uint i=0; i<S; i++)
-    assert(!brainless || ind.stats[scenarioLabels[i]] == 0);
+  for (const Specs &spec: currentScenarios)
+    assert(!brainless || ind.stats[Specs::toString(spec)] == 0);
 #endif
 
   ind.stats["brain"] = !brainless;
   if (brainless)
-   for (uint i=0; i<S; i++)
-     ind.stats[scenarioLabels[i]] = 0;
+   for (const Specs &spec: currentScenarios)
+     ind.stats[Specs::toString(spec)] = 0;
 
   ind.fitnesses["fitness"] = totalScore;
+
+  if (!logsSavePrefix.empty()) {
+    std::ofstream ofs (logsSavePrefix / "scores.dat");
+    for (const Specs &spec: currentScenarios) {
+      auto s = Specs::toString(spec);
+      ofs << s << " " << ind.stats.at(s) << "\n";
+    }
+  }
 }
 
 IndEvaluator::Ind IndEvaluator::fromJsonFile(const std::string &path) {

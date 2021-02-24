@@ -198,6 +198,8 @@ if (NOT CLUSTER_BUILD)
         "critter.cpp"
         "foodlet.h"
         "foodlet.cpp"
+        "obstacle.h"
+        "obstacle.cpp"
         "environment.h"
         "environment.cpp"
         "graphicsimulation.h"

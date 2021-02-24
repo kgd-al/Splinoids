@@ -39,7 +39,7 @@ Environment::Environment (simu::Environment &e,
 #endif
 
   if (simu::Environment::boxEdges) {
-      b2Fixture *f = _environment.body()->GetFixtureList();
+      b2Fixture *f = _environment.edges()->GetFixtureList();
       while (f) {
         const b2PolygonShape *s =
             dynamic_cast<const b2PolygonShape*>(f->GetShape());
@@ -55,7 +55,7 @@ Environment::Environment (simu::Environment &e,
   } else {
     const b2ChainShape *edgeVertices =
       dynamic_cast<const b2ChainShape*>(
-        _environment.body()->GetFixtureList()->GetShape());
+        _environment.edges()->GetFixtureList()->GetShape());
     auto n = edgeVertices->m_count-1;
     auto v = edgeVertices->m_vertices;
     for (int i=0; i<n; i++) {

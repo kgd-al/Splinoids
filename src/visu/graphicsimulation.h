@@ -91,6 +91,8 @@ public:
                             float s, simu::decimal e) override;
   void delFoodlet(simu::Foodlet *foodlet) override;
 
+  b2Body* addObstacle(float x, float y, float w, float h) override;
+
   void postInit (void) override;
 
   void step (void) override;

@@ -274,6 +274,7 @@ void Critter::buildBrain(void) {
   phenotype::CPPN cppn = phenotype::CPPN::fromGenotype(_genotype.brain);
   _brain = phenotype::ANN::build(inputs, outputs, cppn);
   _neuralOutputs = _brain.outputs();
+  selectiveBrainDead.resize(_neuralOutputs.size());
 }
 
 void Critter::step(Environment &env) {
@@ -422,12 +423,13 @@ void Critter::neuralStep(void) {
 #ifndef NDEBUG
     for (auto &v: _neuralOutputs)  assert(-1 <= v && v <= 1);
 #endif
-    _motors[Motor::LEFT] = _neuralOutputs[0];
-    _motors[Motor::RIGHT] = _neuralOutputs[1];
-    _clockSpeed = clockSpeed(.5*(1+_neuralOutputs[2]));
+    if (!selectiveBrainDead[0]) _motors[Motor::LEFT] = _neuralOutputs[0];
+    if (!selectiveBrainDead[1]) _motors[Motor::RIGHT] = _neuralOutputs[1];
+    if (!selectiveBrainDead[2])
+      _clockSpeed = clockSpeed(.5*(1+_neuralOutputs[2]));
 
-    _voice[0] = std::max(0.f, _neuralOutputs[3]);
-    _voice[1] = _neuralOutputs[4];
+    if (!selectiveBrainDead[3]) _voice[0] = std::max(0.f, _neuralOutputs[3]);
+    if (!selectiveBrainDead[4]) _voice[1] = _neuralOutputs[4];
 
 //    _reproduction = _neuralOutputs[?];
   }

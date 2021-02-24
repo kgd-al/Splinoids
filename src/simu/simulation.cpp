@@ -370,7 +370,6 @@ Critter* Simulation::addCritter (const CGenome &genome,
   Critter *c = new Critter (genome, body, e_, age);
   _critters.insert(c);
 
-
 #ifndef NDEBUG
   decimal e__ = c->totalEnergy();
   if (debugEntropy && e_ != e__)
@@ -426,7 +425,8 @@ b2Body* Simulation::foodletBody(float x, float y) {
   return _environment->physics().CreateBody(&bodyDef);
 }
 
-Foodlet* Simulation::addFoodlet(BodyType t, float x, float y, float r, decimal e) {
+Foodlet* Simulation::addFoodlet(BodyType t, float x, float y, float r,
+                                decimal e) {
   b2Body *body = foodletBody(x, y);
   Foodlet *f = new Foodlet (t, _nextFoodletID++, body, r, e);
 
@@ -451,6 +451,10 @@ void Simulation::delFoodlet(Foodlet *foodlet) {
   _foodlets.erase(foodlet);
   physics().DestroyBody(&foodlet->body());
   delete foodlet;
+}
+
+b2Body* Simulation::addObstacle(float x, float y, float w, float h) {
+  return _environment->createObstacle(x, y, w, h);
 }
 
 void Simulation::clear (void) {

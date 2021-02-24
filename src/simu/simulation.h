@@ -220,6 +220,8 @@ public:
   virtual Foodlet* addFoodlet (BodyType t, float x, float y, float r, decimal e);
   virtual void delFoodlet (Foodlet *foodlet);
 
+  virtual b2Body* addObstacle (float x, float y, float w, float h);
+
   void clear (void);
   virtual void preClear (void) {}
 

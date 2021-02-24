@@ -57,6 +57,8 @@ int main(int argc, char *argv[]) {
   uint popSize = 5, generations = 1, threads = 1;
   long seed = -1;
 
+  bool v1scenarios = false;
+
   cxxopts::Options options("Splinoids (pp-evolver)",
                            "Evolution of minimal splinoids in 2D simulations"
                            " with enforced prey/predator interactions");
@@ -88,6 +90,10 @@ int main(int argc, char *argv[]) {
     ("generations", "Number of generations to let the evolution run for",
      cxxopts::value(generations))
     ("threads", "Number of parallel threads", cxxopts::value(threads))
+
+
+    ("1,v1", "Use v1 scenarios",
+     cxxopts::value(v1scenarios)->implicit_value("true"))
     ;
 
   auto result = options.parse(argc, argv);
@@ -113,11 +119,6 @@ int main(int argc, char *argv[]) {
     genotype::Critter::config_t::mutationRates.overrideWith(cm);
   }
   if (configFile.empty()) config::Simulation::printConfig("");
-
-  std::cout << "Reading environment genome from input file '"
-            << eGenomeArg << "'" << std::endl;
-  eGenome = EGenome::fromFile(eGenomeArg);
-  std::cout << "Environment:\n" << eGenome << "\n";
 
 //  if (load.empty()) {
 //    if (cGenomeArgs.empty())  cGenomeArgs.push_back("-1");
@@ -165,10 +166,16 @@ int main(int argc, char *argv[]) {
 //    s.setWorkPath(outputFolder, simu::Simulation::Overwrite(overwrite));
   simu::Simulation::printStaticStats();
 
-  rng::AtomicDice dice (seed);
-  std::cout << "Using seed " << seed << " -> " << dice.getSeed() << "\n";
+  rng::AtomicDice dice;
+  std::cout << "Using seed ";
+  if (seed >= 0) {
+    dice.reset(seed);
+    std::cout << seed << " -> ";
+  }
+  std::cout << dice.getSeed() << "\n";
 
-  simu::IndEvaluator eval (eGenome);
+  simu::IndEvaluator eval (!v1scenarios);
+
   simu::IndEvaluator::GA ga;
   ga.setPopSize(popSize);
   ga.setNbThreads(threads);
@@ -242,7 +249,7 @@ int main(int argc, char *argv[]) {
   if (success > 0) {
     std::cout << "Performing " << success << " additionnal generations to reach"
                  " target number of brains (" << bCount << " contiguous"
-                 " geneneration with >= " << bThreshold << "brain proportion)"
+                 " geneneration with >= " << bThreshold << " brain proportion)"
                  "\n";
     ga.step(success);
   }

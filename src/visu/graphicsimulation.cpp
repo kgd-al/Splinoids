@@ -1,6 +1,7 @@
 #include "graphicsimulation.h"
 #include "config.h"
 #include "b2debugdrawer.h"
+#include "obstacle.h"
 #include "../gui/statsview.h"
 
 #include <QPainter>
@@ -192,6 +193,12 @@ void GraphicSimulation::delFoodlet(simu::Foodlet *foodlet) {
 
   delete vfoodlet;
   Simulation::delFoodlet(foodlet);
+}
+
+b2Body* GraphicSimulation::addObstacle(float x, float y, float w, float h) {
+  auto b = Simulation::addObstacle(x, y, w, h);
+  _scene->addItem(new Obstacle(*b));
+  return b;
 }
 
 QPixmap GraphicSimulation::render (void) const {

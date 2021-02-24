@@ -1,7 +1,7 @@
 #!/bin/bash
 
 usage(){
-  echo "Usage: $0 -i=<ind.dna> -s=<scenario spec> [-h=height]"
+  echo "Usage: $0 -i=<ind.dna> -s=<scenario spec> [-H=height]"
 }
 
 
@@ -10,7 +10,7 @@ OPTIND=1         # Reset in case getopts has been used previously in the shell.
 
 S="720"
 outfile=""
-while getopts "h?i:s:h:" opt; do
+while getopts "h?i:s:H:" opt; do
     case "$opt" in
     h|\?)
         usage
@@ -20,7 +20,7 @@ while getopts "h?i:s:h:" opt; do
         ;;
     s)  scenario=$OPTARG
         ;;
-    h)  S=$OPTARG
+    H)  S=$OPTARG
         ;;
     esac
 done
@@ -29,11 +29,11 @@ echo "resolution: $resolution"
 
 base=$(dirname $individual)/$(basename $individual .dna)
 imgfolder=$base/$scenario/screenshots/
-rm $imgfolder/*.png
+rm -f $imgfolder/*.png
 
 # -i data/test.dna -s "1++++"
 
-./build/release/pp-visualizer --env-genome data/small.env.json --spln-genome $individual --overwrite p --scenario "$scenario" --snapshots=$S
+./build/release/pp-visualizer --spln-genome $individual --overwrite p --scenario "$scenario" --snapshots=$S
 
 echo "image folder: $imgfolder"
 if [ ! -d "$imgfolder" ]
