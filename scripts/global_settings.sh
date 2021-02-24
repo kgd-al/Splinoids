@@ -9,7 +9,7 @@ verbosity=0
 ## Project 
 
 project="Splinoids"
-projectPath="$HOME/thesis/code/$project"
+projectPath="$HOME/work/code/$project"
 build="release"
 
 ###############################################################################
@@ -20,7 +20,7 @@ cecyle[hostname]="cecyle"
 cecyle[host]="${cecyle[hostname]}.irit.fr"
 cecyle[user]="kevin"
 cecyle[port]="3003"
-cecyle[evos]="${cecyle[hostname]}:thesis/$project/results/"
+cecyle[evos]="${cecyle[hostname]}:$project/"
 cecyle[localMount]="$projectPath/cecyle/"
 
 declare -A eos
@@ -28,7 +28,7 @@ eos[hostname]="eos"
 eos[host]="${eos[hostname]}.calmip.univ-toulouse.fr"
 eos[user]="dubois"
 eos[port]="22"
-eos[evos]="${eos[hostname]}:$project/tmp/"
+eos[evos]="${eos[hostname]}:$project/"
 eos[localMount]="$projectPath/eos/"
 
 declare -A olympe
@@ -36,7 +36,7 @@ olympe[hostname]="olympe"
 olympe[host]="${olympe[hostname]}.calmip.univ-toulouse.fr"
 olympe[user]="dubois"
 olympe[port]="22"
-olympe[evos]="${olympe[hostname]}:code/$project/tmp/"
+olympe[evos]="${olympe[hostname]}:code/$project/"
 olympe[localMount]="$projectPath/olympe/"
 
 sshConfig="$HOME/.ssh/config"
