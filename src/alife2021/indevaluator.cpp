@@ -80,19 +80,22 @@ void IndEvaluator::operator() (Ind &ind, int) {
     brainless = s.brain().empty();
     if (brainless)  break;
 
+    std::bitset<3> tags;
     std::ofstream tlog, alog, nlog;
     if (!logsSavePrefix.empty()) {
       stdfs::path savePath =
         logsSavePrefix / Specs::toString(scenario.specs());
       stdfs::create_directories(savePath);
-      tlog.open(savePath / "trajectory.dat");
 
+      std::string stags = "GAE";
+
+      tlog.open(savePath / "trajectory.dat");
       tlog << "Env size: " << simulation.environment().extent() << "\n"
            << "Food_x Food_y Food_r\n";
       if (auto f = scenario.foodlet())
         tlog << f->x() << " " << f->y() << " " << f->radius() << "\n\n";
 
-      tlog << "sx sy sa cx cy ca px py pa\n";
+      tlog << stags << " sx sy sa cx cy ca px py pa\n";
 
       alog.open(savePath / "vocalisation.dat");
       alog << "Noise";
@@ -103,7 +106,7 @@ void IndEvaluator::operator() (Ind &ind, int) {
       alog << "\n";
 
       nlog.open(savePath / "neurons.dat");
-      nlog << "Flag";
+      nlog << stags;
       for (const auto &p: s.brain().neurons())
         if (p.second->isHidden())
           nlog << " (" << p.first.x() << "," << p.first.y() << ")";
@@ -113,9 +116,22 @@ void IndEvaluator::operator() (Ind &ind, int) {
     while (!simulation.finished() && !aborted) {
       simulation.step();
 
+      if (!logsSavePrefix.empty()) {
+        const auto r = s.retina();
+        tags[2] = std::any_of(r.begin(), r.end(),
+          [] (const auto &c) { return c[0] == 0 && c[1] > 0 && c[2] == 0; });
+
+        tags[1] = std::any_of(r.begin(), r.end(),
+          [] (const auto &c) { return std::all_of(c.begin(), c.end(),
+            [] (auto v) { return 0 < v && v < 1; }); });
+
+        tags[0] = std::any_of(r.begin(), r.end(),
+          [] (const auto &c) { return c[0] == 1; });
+      }
+
       if (tlog.is_open()) {
-        tlog << s.x() << " " << s.y()
-            << " " << s.rotation() << " ";
+        tlog << tags
+             << " " << s.x() << " " << s.y() << " " << s.rotation() << " ";
 
         if (auto c = scenario.clone())
           tlog << c->x() << " " << c->y() << " " << c->rotation();
@@ -144,7 +160,7 @@ void IndEvaluator::operator() (Ind &ind, int) {
       }
 
       if (nlog.is_open()) {
-        nlog << "0";
+        nlog << tags;
         for (const auto &p: s.brain().neurons())
           if (p.second->isHidden())
             nlog << " " << p.second->value;

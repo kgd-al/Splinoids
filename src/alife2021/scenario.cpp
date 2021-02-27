@@ -23,7 +23,8 @@ Scenario::Specs::fromValues(Type t, int fx, int fy, int ox, int oy) {
   case V0_CLONE:  s.clone.x = ox; s.clone.y = oy; break;
   case V0_PREDATOR: s.predator.x = ox; s.predator.y = oy; break;
   default:
-    utils::doThrow<std::invalid_argument>("Only V0 scenario use 4 coordinates");
+    utils::doThrow<std::invalid_argument>(
+      "Only V0 scenario use 4 coordinates (t=", t, ")");
   }
   return s;
 }
@@ -41,13 +42,18 @@ Scenario::Specs::fromValue(Type t, int y) {
   case V1_PREDATOR: s.predator.y = y; break;
   case V1_BOTH: s.predator.y = -(s.clone.y = y);  break;
   default:
-    utils::doThrow<std::invalid_argument>("Only V1 scenario use 1 coordinate");
+    utils::doThrow<std::invalid_argument>(
+      "Only V1 scenarios use 1 coordinate (t=", t, ")");
   }
   return s;
 }
 
 Scenario::Specs Scenario::Specs::fromString(const std::string &s) {
   std::ostringstream oss;
+  if (s.size() < 3)
+    utils::doThrow<std::invalid_argument>(
+      "Argument '", s, "' is too small to be a scenario specification");
+
   auto type = Type((s[0] - '0') * V1_ALONE + (s[1] - '0'));
   if (type < V0_ALONE || V1_BOTH < type)
     oss << "Type '" << s[0] << s[1] << "' is not recognized";
@@ -68,7 +74,7 @@ Scenario::Specs Scenario::Specs::fromString(const std::string &s) {
   };
 
   Specs spec;
-  if (type <= V0_PREDATOR) {
+  if (type <= V0_PREDATOR && oss.str().empty()) {
     int fx = 0, fy = 0, ox = 0, oy = 0;
     if (oss.str().empty()) {
       fx = toInt(s[2]);
@@ -81,7 +87,7 @@ Scenario::Specs Scenario::Specs::fromString(const std::string &s) {
 
     spec = fromValues(type, fx, fy, ox, oy);
 
-  } else
+  } else if (oss.str().empty())
     spec = fromValue(type, toInt(s[2]));
 
   if (!oss.str().empty())

@@ -18,11 +18,18 @@ ext="png"
 o=$(dirname $f)/$(basename $f .csv).$ext
 echo "$f -> $o"
 
+echo $o >> .generated_files
+if [ -f "$o" ]
+then
+  echo "Output file $o already generated. Skipping"
+  exit 0
+fi
+
 ptype="with lines"
 # ptype="smooth bezier"
     
-columns=$(head -n 1 $f | awk -F, '{print (NF-12)/3}')
-layout=$(echo $(($columns+1)) | awk '{a=int(sqrt($1)); printf "%d,%d", a, $1/a;}')
+c=$(head -n 1 $f | awk -F, '{print (NF-12)/3}')
+layout=$(echo $(($c+1)) | awk '{a=int(sqrt($1)); printf "%d,%d", a, $1/a;}')
     
 cmd="
     set term ${ext}cairo size 1680,1050;
@@ -38,15 +45,15 @@ cmd="
     subtype(j)=system('echo '.title(j).' | cut -d_ -f2');
     
     set key above title 'aggregate';
-    set yrange [-1:80];
-    set y2range [-1/80:1];
+    set yrange [-1:$(($c*10))];
+    set y2range [-1/$(($c*10)):1];
     set y2tics (0,1);
-    plot for [i in '2 0 1'] f using 1:(column(29+int(i))) $ptype t type(29+i), f using 1:26 w l axes x1y2 t 'brain?';
+    plot for [i in '2 0 1'] f using 1:(column($(($c*3+5))+int(i))) $ptype t type(29+i), f using 1:$(($c*3+2)) w l axes x1y2 t 'brain?';
     set yrange [*:*];
     set y2range [*:*];
     unset y2tics;    
     
-    do for [i=0:$columns-1] {
+    do for [i=0:$c-1] {
       ix=3*i+2;
       set key above title type(ix);
       plot for [j in '2 0 1'] f using 1:(column(ix+j)) $ptype title subtype(ix+j).(ix+j);
@@ -54,5 +61,5 @@ cmd="
     unset multiplot;
 "
 
-echo "Executing $cmd"
+# echo "Executing $cmd"
 gnuplot -e "$cmd"

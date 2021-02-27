@@ -132,16 +132,13 @@ int main(int argc, char *argv[]) {
   static const auto &diffStats = [] (auto prev, auto curr) {
     for (const auto &p: curr) {
       auto it = prev.find(p.first);
-      std::cout << "\t" << p.first << ": ";
-      if (it != prev.end())  std::cout << it->second << " >> ";
-      std::cout << p.second;
+      std::cout << "\t" << std::setw(10) << p.first << ": ";
       if (it != prev.end()) {
-        std::cout << "\t ";
         if (p.second == it->second)
-          std::cout << GAGA_COLOR_GREEN << "OK";
+          std::cout << GAGA_COLOR_GREEN;
         else
-          std::cout << GAGA_COLOR_RED << "Mismatch";
-        std::cout << GAGA_COLOR_NORMAL;
+          std::cout << GAGA_COLOR_RED << it->second << " >> ";
+        std::cout << p.second << GAGA_COLOR_NORMAL;
       }
       std::cout << "\n";
     }

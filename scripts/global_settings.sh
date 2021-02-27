@@ -20,7 +20,7 @@ cecyle[hostname]="cecyle"
 cecyle[host]="${cecyle[hostname]}.irit.fr"
 cecyle[user]="kevin"
 cecyle[port]="3003"
-cecyle[evos]="${cecyle[hostname]}:$project/"
+cecyle[evos]="${cecyle[hostname]}:work/code/$project/"
 cecyle[localMount]="$projectPath/cecyle/"
 
 declare -A eos

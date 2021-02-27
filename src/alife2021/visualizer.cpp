@@ -45,7 +45,7 @@ int main(int argc, char *argv[]) {
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::QUIET;
 
-  std::string cGenomeArg, scenarioArg;
+  std::string cGenomeArg, scenarioArg = "10+";
 
   CGenome cGenome;
 
@@ -55,6 +55,11 @@ int main(int argc, char *argv[]) {
   char overwrite = simu::Simulation::ABORT;
 
   int snapshots = -1;
+  bool withTrace = false; /// TODO not used
+
+  bool annRender = false;
+  std::string annRenderingColors;
+  float annAlphaThreshold = 0;
 
   bool v1scenarios = false;
 
@@ -83,6 +88,15 @@ int main(int argc, char *argv[]) {
 
     ("snapshots", "Generate simu+ann snapshots of provided size (batch)",
      cxxopts::value(snapshots)->implicit_value("25"))
+    ("with-trace", "Splinoids leave a trace of their trajectory",
+     cxxopts::value(withTrace)->implicit_value("-1"))
+
+    ("ann-render", "Export qt-based visualisation of the phenotype's ANN",
+     cxxopts::value(annRender)->implicit_value("true"))
+    ("ann-colors", "Specifiy a collections of positions/colors for the ANN's"
+     " nodes", cxxopts::value(annRenderingColors))
+    ("ann-threshold", "Rendering threshold for provided alpha value"
+                      " (inclusive)", cxxopts::value(annAlphaThreshold))
 
     ("1,v1", "Use v1 scenarios",
      cxxopts::value(v1scenarios)->implicit_value("true"))
@@ -169,45 +183,12 @@ int main(int argc, char *argv[]) {
   }
 
   // ===========================================================================
-  // Final preparations (for both version)
+  // Final preparations (for all versions)
 
   v->fitInView(simulation.bounds(), Qt::KeepAspectRatio);
   v->select(simulation.critters().at(scenario.subject()));
 
-  if (snapshots <= 0) {
-  // ===========================================================================
-  // Regular version
-    w.restoreGeometry(settings.value("geom").toByteArray());
-    cs->restoreGeometry(settings.value("cs::geom").toByteArray());
-    cs->setVisible(settings.value("cs::visible").toBool());
-    w.show();
-
-    v->fitInView(simulation.bounds(), Qt::KeepAspectRatio);
-    v->select(simulation.critters().at(scenario.subject()));
-
-    QTimer::singleShot(100, [&v, startspeed] {
-      if (startspeed) v->start(startspeed);
-      else            v->stop();
-    });
-
-    auto r = a.exec();
-
-    settings.setValue("cs::visible", cs->isVisible());
-    settings.setValue("cs::geom", cs->saveGeometry());
-    settings.setValue("geom", w.saveGeometry());
-
-  #define SAVE(X, T) \
-    settings.setValue("hack::" #X, T(config::Visualisation::X())); \
-    std::cerr << "Saving " << #X << ": " << config::Visualisation::X() << "\n";
-    SAVE(brainDeadSelection, int)
-    SAVE(selectionZoomFactor, float)
-    SAVE(drawVision, int)
-    SAVE(drawAudition, bool)
-  #undef SAVE
-
-    return r;
-
-  } else {
+  if (snapshots > 0) {
   // ===========================================================================
   // Batch snapshot mode
 
@@ -256,6 +237,104 @@ int main(int argc, char *argv[]) {
     }
 
     return 0;
+
+  } else if (annRender) {
+    using ANNViewer = kgd::es_hyperneat::gui::ann::Viewer;
+    ANNViewer *av = cs->brainPanel()->annViewer;
+    av->stopAnimation();
+
+    const auto render = [av, cGenomeArg] (const std::string &name) {
+      QImage img (500, 500, QImage::Format_RGB32);
+      img.fill(Qt::white);
+
+      QPainter painter (&img);
+      painter.setRenderHint(QPainter::Antialiasing, true);
+
+      av->render(&painter, QRectF(),
+                 av->mapFromScene(av->sceneRect()).boundingRect());
+
+      auto path = stdfs::path(cGenomeArg).replace_extension() / name;
+      if (img.save(QString::fromStdString(path)))
+        std::cout << "Rendered subject brain into " << path << "\n";
+       else
+        std::cerr << "Failed to render subject brain into " << path << "\n";
+    };
+
+    if (annRenderingColors.empty())
+      annRenderPath.replace_extension() /= "ann.png";
+      render("ann.png");
+
+    else {
+      ANNViewer::CustomNodeColors colors;
+      std::ifstream ifs (annRenderingColors);
+      if (!ifs)
+        utils::doThrow<std::invalid_argument>(
+          "Failed to open color mapping '", annRenderingColors, "'");
+
+      for (std::string line; std::getline(ifs, line); ) {
+        if (line.empty() || line[0] == '/') continue;
+        std::istringstream iss (line);
+        ANNViewer::CustomNodeColors::key_type pos;
+        iss >> pos;
+
+        ANNViewer::CustomNodeColors::mapped_type list;
+        std::string color;
+        while (iss >> color) {
+          QColor c (QString::fromStdString(color));
+          if (c.isValid() && c.alphaF() >= annAlphaThreshold)
+            list.push_back(c);
+        }
+
+        if (!list.isEmpty())  colors[pos] = list;
+      }
+
+      std::cout << "Parsed color map:\n";
+      for (const auto &p: colors) {
+        std::cout << "\t" << std::setfill(' ') << std::setw(10) << p.first
+                  << ":\t";
+        for (const QColor &c: p.second)
+          std::cout << " #" << std::hex << std::setfill('0') << std::setw(8)
+                    << c.rgba() << std::dec;
+        std::cout << "\n";
+      }
+
+      av->setCustomColors(colors);
+      render("ann_clustered.png");
+    }
+
+  } else {
+  // ===========================================================================
+  // Regular version
+    w.restoreGeometry(settings.value("geom").toByteArray());
+    cs->restoreGeometry(settings.value("cs::geom").toByteArray());
+    cs->setVisible(settings.value("cs::visible").toBool());
+    w.show();
+
+    v->fitInView(simulation.bounds(), Qt::KeepAspectRatio);
+    v->select(simulation.critters().at(scenario.subject()));
+
+    QTimer::singleShot(100, [&v, startspeed] {
+      if (startspeed) v->start(startspeed);
+      else            v->stop();
+    });
+
+    auto r = a.exec();
+
+    settings.setValue("cs::visible", cs->isVisible());
+    settings.setValue("cs::geom", cs->saveGeometry());
+    settings.setValue("geom", w.saveGeometry());
+
+  #define SAVE(X, T) \
+    settings.setValue("hack::" #X, T(config::Visualisation::X())); \
+    std::cerr << "Saving " << #X << ": " << config::Visualisation::X() << "\n";
+    SAVE(brainDeadSelection, int)
+    SAVE(selectionZoomFactor, float)
+    SAVE(drawVision, int)
+    SAVE(drawAudition, bool)
+  #undef SAVE
+
+    return r;
+
   }
 
 }
