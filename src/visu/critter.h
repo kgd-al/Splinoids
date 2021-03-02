@@ -42,6 +42,8 @@ private:
   } _prevState;
 
 public:
+  QString tag;
+
   Critter(simu::Critter &critter);
 
   const auto& object (void) const {

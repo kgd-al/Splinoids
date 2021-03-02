@@ -28,7 +28,7 @@ rm .generated_files
 for f in $folders
 do
   printf "\n####\n$f\n"
-  [ -z "$clean" ] && rm -rvf $f/gen_stats.png $f/gen_last/*.png $f/gen_last/*/
+  [ -z "$clean" ] && rm -rf $f/gen_stats.png $f/gen_last/*.png $f/gen_last/*/
 
   $(dirname $0)/fitnesses_summary.sh $f/gen_stats.csv
   

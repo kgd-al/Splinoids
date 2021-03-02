@@ -4,7 +4,7 @@ namespace simu {
 
 static constexpr auto R = Critter::MAX_SIZE * Critter::RADIUS;
 static constexpr float fPI = M_PI;
-static constexpr float TARGET_ENERGY = .85;
+static constexpr float TARGET_ENERGY = .90;
 
 static constexpr bool debugAI = false;
 
@@ -140,7 +140,7 @@ const Scenario::Genome& Scenario::predatorGenome (void) {
   static const auto g = [] {
     rng::FastDice dice (0);
     auto g = Scenario::Genome::random(dice);
-    g.gdata.self.gid = phylogeny::GID(-1);
+    g.gdata.self.gid = phylogeny::GID(2);
     g.cdata.sex = Critter::Sex::FEMALE;
     g.colors[0] = Color{1,0,0};
     g.colors[1] = Color{0,1,0};
@@ -187,13 +187,13 @@ Scenario::Scenario (const Specs &specs, Simulation &simulation)
   });
 }
 
-void Scenario::init(const Genome &genome) {
+void Scenario::init(Genome genome, int lesions) {
   static constexpr auto E = Critter::maximalEnergyStorage(Critter::MAX_SIZE);
   _simulation.init(environmentGenome(_specs.type), {}, commonInitData);
 
   float S = _simulation.environment().extent();
 
-
+  genome.gdata.self.gid = phylogeny::GID(0);
   if (_specs.type <= Specs::V0_PREDATOR) {
     _subject = _simulation.addCritter(genome, 0, 0, 0, E, .5);
     _foodlet = _simulation.addFoodlet(BodyType::PLANT,
@@ -202,8 +202,14 @@ void Scenario::init(const Genome &genome) {
                                       Critter::RADIUS, E);
 
     if (_specs.type != Specs::V0_ALONE) {
-      const Simulation::CGenome &g =
-        _specs.type == Specs::V0_CLONE ? genome : predatorGenome();
+      Simulation::CGenome g;
+      if (_specs.type == Specs::V0_CLONE) {
+        g = genome;
+        g.gdata.self.gid = phylogeny::GID(1);
+
+      } else
+        g = predatorGenome();
+
       const P2D pos =
         _specs.type == Specs::V0_CLONE ? _specs.clone : _specs.predator;
 
@@ -228,8 +234,11 @@ void Scenario::init(const Genome &genome) {
                                       Critter::RADIUS, E);
 
     if (_specs.type == Specs::V1_CLONE || _specs.type == Specs::V1_BOTH) {
+      auto cloneGenome = genome;
+      cloneGenome.gdata.self.gid = phylogeny::GID(1);
+
       auto c = _simulation.addCritter(
-                genome,
+                cloneGenome,
                 _specs.clone.x * (.5 * S - 3*R),
                 _specs.clone.y * (S - 3 * R),
                 -_specs.clone.y * M_PI / 2., E, .5);
@@ -255,6 +264,24 @@ void Scenario::init(const Genome &genome) {
 
     float width = .5, space = 1.5, length = S-space;
     _simulation.addObstacle(0, -.5*width, length, width);
+  }
+
+  if (lesions > 0) {
+    std::cout << "Applying lesion type: " << lesions << "\n";
+
+    for (auto &pair: _subject->brain().neurons()) {
+      phenotype::ANN::Neuron &n = *pair.second;
+      for (auto it=n.links().begin(); it!=n.links().end(); ) {
+        phenotype::ANN::Neuron &tgt = *(it->in.lock());
+        if (tgt.type == phenotype::ANN::Neuron::I
+            && (lesions == 3
+              || (lesions == 1 && tgt.pos.y() < -.75)
+              || (lesions == 2 && tgt.pos.y() >= -.75)))
+          it = n.links().erase(it);
+        else
+          ++it;
+      }
+    }
   }
 }
 
@@ -315,6 +342,8 @@ bool Scenario::predatorWon(void) const {
 }
 
 void Scenario::postStep(void) {
+  static constexpr auto E = Critter::VOCAL_CHANNELS+1;
+
   for (uint i=0; i<_others.size(); i++) {
     bool predator = (_specs.type == Specs::V0_PREDATOR)
                     || (_specs.type == Specs::V1_PREDATOR)
@@ -334,9 +363,12 @@ void Scenario::postStep(void) {
     bool seeing = predator && std::any_of(r.begin(), r.end(), &splinoid);
 
     const auto &e = c->ears();
-    bool hearing = predator && std::any_of(e.begin(), e.end(), [] (float v) {
-      return v != 0;
-    });
+    bool hearing = false;
+    if (predator) {
+      for (uint i=0; i<e.size() && !hearing; i++)
+        if (i%E > 0 && e[i] > 0)
+          hearing = true;
+    }
 
     bool collision = nonSensorCollision(body);
 
@@ -361,7 +393,6 @@ void Scenario::postStep(void) {
       motors(c, o);
 
     } else if (hearing) {
-      static constexpr auto E = Critter::VOCAL_CHANNELS+1;
       std::array<float, 2> em {0};
       for (uint i=0; i<e.size(); i++)
         em[i/E] = std::max(em[i/E], e[i]);

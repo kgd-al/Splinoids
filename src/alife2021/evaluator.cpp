@@ -46,6 +46,7 @@ int main(int argc, char *argv[]) {
   char overwrite = simu::Simulation::PURGE;
 
   bool v1scenarios = false;
+  std::string lesions;
 
   cxxopts::Options options("Splinoids (pp-evaluator)",
                            "Evaluation of minimal splinoids evolved according"
@@ -69,6 +70,7 @@ int main(int argc, char *argv[]) {
 
     ("1,v1", "Use v1 scenarios",
      cxxopts::value(v1scenarios)->implicit_value("true"))
+    ("lesions", "Lesion type to apply (def: {})", cxxopts::value(lesions))
     ;
 
   auto result = options.parse(argc, argv);
@@ -128,6 +130,7 @@ int main(int argc, char *argv[]) {
 
   simu::IndEvaluator eval (!v1scenarios);
   eval.setScenarios(scenarios);
+  eval.setLesionTypes(lesions);
 
   static const auto &diffStats = [] (auto prev, auto curr) {
     for (const auto &p: curr) {
@@ -139,7 +142,8 @@ int main(int argc, char *argv[]) {
         else
           std::cout << GAGA_COLOR_RED << it->second << " >> ";
         std::cout << p.second << GAGA_COLOR_NORMAL;
-      }
+      } else
+        std::cout << "\t" << GAGA_COLOR_YELLOW << p.second << GAGA_COLOR_NORMAL;
       std::cout << "\n";
     }
   };

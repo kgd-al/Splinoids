@@ -922,7 +922,7 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     _brainPanel->noData();
   }
 
-  qDebug() << "selection name: " << _lFirstname->text() << _lLastname->text();
+//  qDebug() << "selection name: " << _lFirstname->text() << _lLastname->text();
 
   updateWindowName();
 

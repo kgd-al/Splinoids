@@ -208,6 +208,8 @@ QPixmap GraphicSimulation::render (void) const {
   QPainter painter (&p);
   painter.setRenderHint(QPainter::Antialiasing, true);
 
+  painter.translate(0, Z * r.height());
+  painter.scale(1, -1);
   _scene->render(&painter);
 
   return p;

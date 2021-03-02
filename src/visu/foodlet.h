@@ -13,6 +13,8 @@ private:
   QPainterPath _body;
 
 public:
+  QString tag;
+
   Foodlet(simu::Foodlet &foodlet);
 
   const auto& object (void) const {

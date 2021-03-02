@@ -496,6 +496,10 @@ public:
     return _brain;
   }
 
+  auto& brain (void) {
+    return _brain;
+  }
+
   const auto& feedingSources (void) const {
     return _feedingSources;
   }

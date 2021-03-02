@@ -206,8 +206,24 @@ QRectF Critter::boundingRect (void) const {
 
 void Critter::paint(QPainter *painter,
                     const QStyleOptionGraphicsItem*, QWidget*) {
+  painter->save();
   painter->rotate(qRadiansToDegrees(_critter.rotation()));
   doPaint(painter);
+  painter->restore();
+
+  if (!tag.isEmpty()) {
+    painter->save();
+    painter->scale(1, -1);
+
+    painter->setPen(Qt::black);
+    auto rect = boundingRect().translated(0, .25);
+    QFont f = painter->font();
+    f.setPointSizeF(.1*f.pointSizeF());
+    painter->setFont(f);
+
+    painter->drawText(rect, Qt::AlignCenter, tag);
+    painter->restore();
+  }
 }
 
 QColor Critter::bodyColor(void) const {
@@ -274,7 +290,7 @@ void Critter::doPaint (QPainter *painter) const {
       painter->drawRect(critterBoundingRect());
     }
 
-    if (config::Visualisation::drawAudition()) {
+    if (config::Visualisation::drawAudition() && isSelected()) {
       const b2Fixture *as = _critter.auditionSensor();
       if (as) {
         float r = dynamic_cast<const b2CircleShape*>(as->GetShape())->m_radius;
@@ -392,15 +408,16 @@ void Critter::doPaint (QPainter *painter) const {
       painter->restore();
     }
 
-    float e = _critter.sizeRatio();
-    pen.setColor(sexColors.value(_critter.sex()));
-    pen.setStyle(Qt::SolidLine);
-    pen.setJoinStyle(Qt::RoundJoin);
-    pen.setWidthF(.05 * e);
-    painter->setPen(pen);
-    painter->drawPolyline(
-      QPolygonF({ QPointF(0., -.1*e), QPointF(.1*e, 0.), QPointF(0.,  .1*e) }));
+//    float e = _critter.sizeRatio();
+//    pen.setColor(sexColors.value(_critter.sex()));
+//    pen.setStyle(Qt::SolidLine);
+//    pen.setJoinStyle(Qt::RoundJoin);
+//    pen.setWidthF(.05 * e);
+//    painter->setPen(pen);
+//    painter->drawPolyline(
+//      QPolygonF({ QPointF(0., -.1*e), QPointF(.1*e, 0.), QPointF(0.,  .1*e) }));
   painter->restore();
+
 
 //  qDebug() << "Painted " << CID(this) << "with size " << _critter.size();
 }
@@ -549,7 +566,7 @@ void Critter::printPhenotype (const QString &filename) const {
 }
 
 QPixmap Critter::renderPhenotype(void) const {
-  static const float Z = config::Visualisation::viewZoom();
+  static const float Z = 10*config::Visualisation::viewZoom();
   const QRectF &r = _minimalBoundingRect;
   float W = r.height() * Z, H = r.width() * Z;
 
@@ -560,7 +577,7 @@ QPixmap Critter::renderPhenotype(void) const {
   painter.setRenderHint(QPainter::Antialiasing, true);
   painter.translate(.5*r.height()*Z, r.right()*Z);
   painter.rotate(-90);
-  painter.scale(Z, Z);
+  painter.scale(.5*Z, .5*Z);
   doPaint(&painter);
 
   return pixmap;

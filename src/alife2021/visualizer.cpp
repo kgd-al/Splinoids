@@ -12,6 +12,7 @@
 
 #include <QDebug>
 #include "../visu/config.h"
+#include <QPrinter>
 
 Q_DECLARE_METATYPE(BrainDead)
 
@@ -57,11 +58,14 @@ int main(int argc, char *argv[]) {
   int snapshots = -1;
   bool withTrace = false; /// TODO not used
 
-  bool annRender = false;
+  std::string annRender = ""; // no extension
   std::string annRenderingColors;
   float annAlphaThreshold = 0;
 
   bool v1scenarios = false;
+  int lesions = 0;
+
+  bool tag = false;
 
   cxxopts::Options options("Splinoids (pp-gui-evaluation)",
                            "2D simulation of minimal splinoids for the "
@@ -92,7 +96,7 @@ int main(int argc, char *argv[]) {
      cxxopts::value(withTrace)->implicit_value("-1"))
 
     ("ann-render", "Export qt-based visualisation of the phenotype's ANN",
-     cxxopts::value(annRender)->implicit_value("true"))
+     cxxopts::value(annRender)->implicit_value("png"))
     ("ann-colors", "Specifiy a collections of positions/colors for the ANN's"
      " nodes", cxxopts::value(annRenderingColors))
     ("ann-threshold", "Rendering threshold for provided alpha value"
@@ -100,6 +104,10 @@ int main(int argc, char *argv[]) {
 
     ("1,v1", "Use v1 scenarios",
      cxxopts::value(v1scenarios)->implicit_value("true"))
+    ("lesions", "Lesion type to apply (def: 0/none)", cxxopts::value(lesions))
+
+    ("tags", "Tag items to facilitate reading",
+     cxxopts::value(tag)->implicit_value("true"))
     ;
 
   auto result = options.parse(argc, argv);
@@ -137,15 +145,30 @@ int main(int argc, char *argv[]) {
     + ".desktop");
   QSettings settings;
 
+  // ===========================================================================
+  // == Config setup
+
+//    config::Simulation::setupConfig(configFile, verbosity);
+
 #define RESTORE(X, T) \
-  config::Visualisation::X.ref() = settings.value("hack::" #X).value<T>(); \
-  std::cerr << "Restoring " << #X << ": " << config::Visualisation::X() << "\n";
+  config::Visualisation::X.overrideWith(settings.value("hack::" #X).value<T>()); \
+  if (verbosity != Verbosity::QUIET) \
+    std::cerr << "Restoring " << #X << ": " << config::Visualisation::X() \
+              << "\n";
+  RESTORE(animateANN, bool)
   RESTORE(brainDeadSelection, BrainDead)
   RESTORE(selectionZoomFactor, bool)
   RESTORE(drawVision, int)
   RESTORE(drawAudition, bool)
 
 #undef RESTORE
+
+  if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
+  config::Simulation::verbosity.overrideWith(0);
+  if (configFile.empty()) config::Simulation::printConfig("");
+
+  // ===========================================================================
+  // == Window/layout setup
 
   QMainWindow w;
   gui::StatsView *stats = new gui::StatsView;
@@ -165,16 +188,13 @@ int main(int argc, char *argv[]) {
   // ===========================================================================
   // == Simulation setup
 
-  if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
-  if (configFile.empty()) config::Simulation::printConfig("");
-
   std::cout << "Reading splinoid genome from input file '"
             << cGenomeArg << "'" << std::endl;
   cGenome = simu::IndEvaluator::fromJsonFile(cGenomeArg).dna;
   cGenome.gdata.self.gid = std::max(cGenome.gdata.self.gid,
                                     phylogeny::GID(0));
 
-  scenario.init(cGenome);
+  scenario.init(cGenome, lesions);
 
   if (!outputFolder.empty()) {
     bool ok = simulation.setWorkPath(outputFolder,
@@ -187,6 +207,13 @@ int main(int argc, char *argv[]) {
 
   v->fitInView(simulation.bounds(), Qt::KeepAspectRatio);
   v->select(simulation.critters().at(scenario.subject()));
+  if (tag) {
+    simulation.visuCritter(scenario.subject())->tag = "S";
+    if (auto c = scenario.clone()) simulation.visuCritter(c)->tag = "A";
+    if (auto p = scenario.predator()) simulation.visuCritter(p)->tag = "E";
+    simulation.visuFoodlet(scenario.foodlet())->tag = "G";
+  }
+
 
   if (snapshots > 0) {
   // ===========================================================================
@@ -238,31 +265,66 @@ int main(int argc, char *argv[]) {
 
     return 0;
 
-  } else if (annRender) {
+  } else if (!annRender.empty()) {
     using ANNViewer = kgd::es_hyperneat::gui::ann::Viewer;
     ANNViewer *av = cs->brainPanel()->annViewer;
     av->stopAnimation();
 
-    const auto render = [av, cGenomeArg] (const std::string &name) {
-      QImage img (500, 500, QImage::Format_RGB32);
-      img.fill(Qt::white);
 
-      QPainter painter (&img);
+//    {
+
+//      using ANNViewer = kgd::es_hyperneat::gui::ann::Viewer;
+//      ANNViewer *av = cs->brainPanel()->annViewer;
+//      av->stopAnimation();
+
+
+//      QPainter painter (&printer);
+
+//      QRectF trect = img.rect();
+//      QRect srect = av->mapFromScene(av->sceneRect()).boundingRect();
+//      trect.adjust(.5*(srect.height() - srect.width()), 0, 0, 0);
+//      av->render(&painter, trect, srect);
+
+//      exit(42);
+//    }
+    const auto doRender = [av] (QPaintDevice *d, QRectF trect) {
+      QPainter painter (d);
       painter.setRenderHint(QPainter::Antialiasing, true);
 
-      av->render(&painter, QRectF(),
-                 av->mapFromScene(av->sceneRect()).boundingRect());
+      QRect srect = av->mapFromScene(av->sceneRect()).boundingRect();
+      trect.adjust(.5*(srect.height() - srect.width()), 0, 0, 0);
+      av->render(&painter, trect, srect);
+    };
 
-      auto path = stdfs::path(cGenomeArg).replace_extension() / name;
-      if (img.save(QString::fromStdString(path)))
-        std::cout << "Rendered subject brain into " << path << "\n";
-       else
-        std::cerr << "Failed to render subject brain into " << path << "\n";
+    const auto render =
+      [av, doRender] (const std::string &path, const std::string &ext) {
+      std::string fullPath = path + "." + ext;
+      QString qPath = QString::fromStdString(fullPath);
+
+      if (ext == "png") {
+        QImage img (500, 500, QImage::Format_RGB32);
+        img.fill(Qt::white);
+
+        doRender(&img, img.rect());
+
+        if (img.save(qPath))
+          std::cout << "Rendered subject brain into " << fullPath << "\n";
+         else
+          std::cerr << "Failed to render subject brain into " << fullPath
+                    << "\n";
+
+      } else if (ext == "pdf") {
+        QPrinter printer (QPrinter::HighResolution);
+        printer.setPageSize(QPageSize(av->sceneRect().size(), QPageSize::Point));
+        printer.setPageMargins(QMarginsF(0, 0, 0, 0));
+        printer.setOutputFileName(qPath);
+
+        doRender(&printer, printer.pageRect());
+      }
     };
 
     if (annRenderingColors.empty())
-      annRenderPath.replace_extension() /= "ann.png";
-      render("ann.png");
+      render(stdfs::path(cGenomeArg).replace_extension() / "ann", annRender);
 
     else {
       ANNViewer::CustomNodeColors colors;
@@ -288,18 +350,21 @@ int main(int argc, char *argv[]) {
         if (!list.isEmpty())  colors[pos] = list;
       }
 
-      std::cout << "Parsed color map:\n";
-      for (const auto &p: colors) {
-        std::cout << "\t" << std::setfill(' ') << std::setw(10) << p.first
-                  << ":\t";
-        for (const QColor &c: p.second)
-          std::cout << " #" << std::hex << std::setfill('0') << std::setw(8)
-                    << c.rgba() << std::dec;
-        std::cout << "\n";
+      if (verbosity != Verbosity::QUIET) {
+        std::cout << "Parsed color map:\n";
+        for (const auto &p: colors) {
+          std::cout << "\t" << std::setfill(' ') << std::setw(10) << p.first
+                    << ":\t";
+          for (const QColor &c: p.second)
+            std::cout << " #" << std::hex << std::setfill('0') << std::setw(8)
+                      << c.rgba() << std::dec;
+          std::cout << "\n";
+        }
       }
 
       av->setCustomColors(colors);
-      render("ann_clustered.png");
+      render(stdfs::path(annRenderingColors).parent_path()
+             / "ann_clustered", annRender);
     }
 
   } else {
@@ -327,6 +392,7 @@ int main(int argc, char *argv[]) {
   #define SAVE(X, T) \
     settings.setValue("hack::" #X, T(config::Visualisation::X())); \
     std::cerr << "Saving " << #X << ": " << config::Visualisation::X() << "\n";
+    SAVE(animateANN, bool)
     SAVE(brainDeadSelection, int)
     SAVE(selectionZoomFactor, float)
     SAVE(drawVision, int)

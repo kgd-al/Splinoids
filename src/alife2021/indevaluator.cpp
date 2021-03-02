@@ -58,8 +58,31 @@ void IndEvaluator::setScenarios(const std::string &s) {
   }
 }
 
+void IndEvaluator::setLesionTypes(const std::string &s) {
+  if (s.empty())
+    lesions = {0};
+
+  else if (s == "all")
+    lesions = {0,1,2,3};
+
+  else {
+    for (const std::string str: utils::split(s, ';')) {
+      int i;
+      if (std::istringstream (str) >> i)
+        lesions.push_back(i);
+    }
+  }
+}
+
 void IndEvaluator::operator() (Ind &ind, int) {
   float totalScore = 0;
+
+  const auto specToString = [this] (const Specs s, int lesion) {
+    std::ostringstream oss;
+    oss << Specs::toString(s);
+    if (lesion > 0) oss << "_l" << lesion;
+    return oss.str();
+  };
 
 #ifndef NDEBUG
   std::vector<phenotype::ANN> brains;
@@ -67,111 +90,115 @@ void IndEvaluator::operator() (Ind &ind, int) {
 
   bool brainless = false;
   for (const Specs &spec: currentScenarios) {
-    Simulation simulation;
-    Scenario scenario (spec, simulation);
+    for (int lesion: lesions) {
+      std::string specStr = specToString(spec, lesion);
 
-    scenario.init(ind.dna);
-    const Critter &s = *scenario.subject();
+      Simulation simulation;
+      Scenario scenario (spec, simulation);
 
-#ifndef NDEBUG
-    brains.push_back(s.brain());
-#endif
+      scenario.init(ind.dna, lesion);
+      const Critter &s = *scenario.subject();
 
-    brainless = s.brain().empty();
-    if (brainless)  break;
+  #ifndef NDEBUG
+      brains.push_back(s.brain());
+  #endif
 
-    std::bitset<3> tags;
-    std::ofstream tlog, alog, nlog;
-    if (!logsSavePrefix.empty()) {
-      stdfs::path savePath =
-        logsSavePrefix / Specs::toString(scenario.specs());
-      stdfs::create_directories(savePath);
+      brainless = s.brain().empty();
+      if (brainless)  break;
 
-      std::string stags = "GAE";
-
-      tlog.open(savePath / "trajectory.dat");
-      tlog << "Env size: " << simulation.environment().extent() << "\n"
-           << "Food_x Food_y Food_r\n";
-      if (auto f = scenario.foodlet())
-        tlog << f->x() << " " << f->y() << " " << f->radius() << "\n\n";
-
-      tlog << stags << " sx sy sa cx cy ca px py pa\n";
-
-      alog.open(savePath / "vocalisation.dat");
-      alog << "Noise";
-      for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
-        alog << " S" << i;
-      for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
-        alog << " C" << i;
-      alog << "\n";
-
-      nlog.open(savePath / "neurons.dat");
-      nlog << stags;
-      for (const auto &p: s.brain().neurons())
-        if (p.second->isHidden())
-          nlog << " (" << p.first.x() << "," << p.first.y() << ")";
-      nlog << "\n";
-    }
-
-    while (!simulation.finished() && !aborted) {
-      simulation.step();
-
+      std::bitset<3> tags;
+      std::ofstream tlog, alog, nlog;
       if (!logsSavePrefix.empty()) {
-        const auto r = s.retina();
-        tags[2] = std::any_of(r.begin(), r.end(),
-          [] (const auto &c) { return c[0] == 0 && c[1] > 0 && c[2] == 0; });
+        stdfs::path savePath = logsSavePrefix / specStr;
 
-        tags[1] = std::any_of(r.begin(), r.end(),
-          [] (const auto &c) { return std::all_of(c.begin(), c.end(),
-            [] (auto v) { return 0 < v && v < 1; }); });
+        stdfs::create_directories(savePath);
 
-        tags[0] = std::any_of(r.begin(), r.end(),
-          [] (const auto &c) { return c[0] == 1; });
-      }
+        std::string stags = "GAE";
 
-      if (tlog.is_open()) {
-        tlog << tags
-             << " " << s.x() << " " << s.y() << " " << s.rotation() << " ";
+        tlog.open(savePath / "trajectory.dat");
+        tlog << "Env size: " << simulation.environment().extent() << "\n"
+             << "Food_x Food_y Food_r\n";
+        if (auto f = scenario.foodlet())
+          tlog << f->x() << " " << f->y() << " " << f->radius() << "\n\n";
 
-        if (auto c = scenario.clone())
-          tlog << c->x() << " " << c->y() << " " << c->rotation();
-        else
-          tlog << "nan nan nan";
-        tlog << " ";
+        tlog << stags << " sx sy sa cx cy ca px py pa\n";
 
-        if (auto p = scenario.predator())
-          tlog << p->x() << " " << p->y() << " " << p->rotation();
-        else
-          tlog << "nan nan nan";
-
-        tlog << "\n";
-      }
-
-      if (alog.is_open()) {
-        for (float v: s.producedSound())  alog << v << " ";
-
-        if (auto c = scenario.clone())
-          for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
-            alog << c->producedSound()[i+1] << " ";
-        else
-          for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
-            alog << "nan ";
+        alog.open(savePath / "vocalisation.dat");
+        alog << "Noise";
+        for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
+          alog << " S" << i;
+        for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
+          alog << " C" << i;
         alog << "\n";
-      }
 
-      if (nlog.is_open()) {
-        nlog << tags;
+        nlog.open(savePath / "neurons.dat");
+        nlog << stags;
         for (const auto &p: s.brain().neurons())
           if (p.second->isHidden())
-            nlog << " " << p.second->value;
+            nlog << " (" << p.first.x() << "," << p.first.y() << ")";
         nlog << "\n";
       }
-    }
 
-    float score = scenario.score();
-    totalScore += score;
-    ind.stats[Specs::toString(spec)] = score;
-    assert(!brainless);
+      while (!simulation.finished() && !aborted) {
+        simulation.step();
+
+        if (!logsSavePrefix.empty()) {
+          const auto r = s.retina();
+          tags[2] = std::any_of(r.begin(), r.end(),
+            [] (const auto &c) { return c[0] == 0 && c[1] > 0 && c[2] == 0; });
+
+          tags[1] = std::any_of(r.begin(), r.end(),
+            [] (const auto &c) { return std::all_of(c.begin(), c.end(),
+              [] (auto v) { return 0 < v && v < 1; }); });
+
+          tags[0] = std::any_of(r.begin(), r.end(),
+            [] (const auto &c) { return c[0] == 1; });
+        }
+
+        if (tlog.is_open()) {
+          tlog << tags
+               << " " << s.x() << " " << s.y() << " " << s.rotation() << " ";
+
+          if (auto c = scenario.clone())
+            tlog << c->x() << " " << c->y() << " " << c->rotation();
+          else
+            tlog << "nan nan nan";
+          tlog << " ";
+
+          if (auto p = scenario.predator())
+            tlog << p->x() << " " << p->y() << " " << p->rotation();
+          else
+            tlog << "nan nan nan";
+
+          tlog << "\n";
+        }
+
+        if (alog.is_open()) {
+          for (float v: s.producedSound())  alog << v << " ";
+
+          if (auto c = scenario.clone())
+            for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
+              alog << c->producedSound()[i+1] << " ";
+          else
+            for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
+              alog << "nan ";
+          alog << "\n";
+        }
+
+        if (nlog.is_open()) {
+          nlog << tags;
+          for (const auto &p: s.brain().neurons())
+            if (p.second->isHidden())
+              nlog << " " << p.second->value;
+          nlog << "\n";
+        }
+      }
+
+      float score = scenario.score();
+      if (lesion == 0)  totalScore += score;
+      ind.stats[specStr] = score;
+      assert(!brainless);
+    }
   }
 
 #ifndef NDEBUG
@@ -207,9 +234,8 @@ void IndEvaluator::operator() (Ind &ind, int) {
 
   if (!logsSavePrefix.empty()) {
     std::ofstream ofs (logsSavePrefix / "scores.dat");
-    for (const Specs &spec: currentScenarios) {
-      auto s = Specs::toString(spec);
-      ofs << s << " " << ind.stats.at(s) << "\n";
+    for (auto &stat: ind.stats) {
+      ofs << stat.first << " " << stat.second << "\n";
     }
   }
 }

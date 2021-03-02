@@ -28,7 +28,7 @@ public:
   Scenario(const Specs &specs, Simulation &simulation);
   Scenario(const std::string &specs, Simulation &simulation);
 
-  void init (const Genome &genome);
+  void init (Genome genome, int lesions = 0);
   void postStep (void);
 
   const auto& specs (void) const {

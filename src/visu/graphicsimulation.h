@@ -73,7 +73,15 @@ public:
     return _critters.at(c);
   }
 
+  visu::Critter* visuCritter (const simu::Critter *c) {
+    return _critters.at(c);
+  }
+
   const visu::Foodlet* visuFoodlet (const simu::Foodlet *f) const {
+    return _foodlets.at(f);
+  }
+
+  visu::Foodlet* visuFoodlet (const simu::Foodlet *f) {
     return _foodlets.at(f);
   }
 

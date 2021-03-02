@@ -22,12 +22,16 @@ struct IndEvaluator {
   void selectCurrentScenarios (rng::AbstractDice &dice);
   void setScenarios (const std::string &s);
 
+  void setLesionTypes (const std::string &s);
+
   void operator() (Ind &ind, int);
 
   static Ind fromJsonFile (const std::string &path);
 
   const bool usingV0Scenarios;
   stdfs::path logsSavePrefix;
+
+  std::vector<int> lesions;
 
   static std::atomic<bool> aborted;
 };
