@@ -24,6 +24,8 @@ IndEvaluator::IndEvaluator (bool v0Scenarios): usingV0Scenarios(v0Scenarios) {
       allScenarios.back().push_back(Specs::fromValue(t, y));
 
   if (!v0Scenarios) setScenarios("all");
+
+  lesions = {0};
 }
 
 
@@ -60,7 +62,7 @@ void IndEvaluator::setScenarios(const std::string &s) {
 
 void IndEvaluator::setLesionTypes(const std::string &s) {
   if (s.empty())
-    lesions = {0};
+    return;
 
   else if (s == "all")
     lesions = {0,1,2,3};
@@ -90,6 +92,7 @@ void IndEvaluator::operator() (Ind &ind, int) {
 
   bool brainless = false;
   for (const Specs &spec: currentScenarios) {
+    using utils::operator<<;
     for (int lesion: lesions) {
       std::string specStr = specToString(spec, lesion);
 
