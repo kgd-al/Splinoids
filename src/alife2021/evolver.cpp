@@ -176,7 +176,8 @@ int main(int argc, char *argv[]) {
 
   simu::IndEvaluator eval (!v1scenarios);
 
-  simu::IndEvaluator::GA ga;
+  using GA = simu::IndEvaluator::GA;
+  GA ga;
   ga.setPopSize(popSize);
   ga.setNbThreads(threads);
   ga.setMutationRate(1);
@@ -203,6 +204,21 @@ int main(int argc, char *argv[]) {
 //  ga.setCrossoverMethod([](const CGenome&, const CGenome&) -> CGenome {assert(false);});
   ga.setEvaluator([&eval] (auto &i, auto p) { eval(i, p); },
                   "prey-maybe-predator");
+
+// -- -- -- -- -- -- SPECIFIC TO THE NOVELTY EXTENSION: -- -- -- -- -- -- --
+    GAGA::NoveltyExtension<GA> nov;  // novelty extension instance
+    // Distance function (compares 2 signatures). Here a simple Euclidian distance.
+    auto euclidianDist = [](const auto& fpA, const auto& fpB) {
+        double sum = 0;
+        for (size_t i = 0; i < fpA.size(); ++i) sum += std::pow(fpA[i] - fpB[i], 2);
+        return sqrt(sum);
+    };
+    nov.setComputeSignatureDistanceFunction(euclidianDist);
+    nov.K = 10;  // size of the neighbourhood to compute novelty.
+    //(Novelty = avg dist to the K Nearest Neighbors)
+
+    ga.useExtension(nov);  // we have to tell gaga we want to use this extension
+    // -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
   if (load.empty()) {
     ga.initPopulation([&dice] { return CGenome::random(dice); });

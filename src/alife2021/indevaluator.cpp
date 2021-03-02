@@ -90,7 +90,10 @@ void IndEvaluator::operator() (Ind &ind, int) {
   std::vector<phenotype::ANN> brains;
 #endif
 
+  ind.signature.fill(0);
+
   bool brainless = false;
+  uint sid = 0;
   for (const Specs &spec: currentScenarios) {
     using utils::operator<<;
     for (int lesion: lesions) {
@@ -201,6 +204,9 @@ void IndEvaluator::operator() (Ind &ind, int) {
       float score = scenario.score();
       if (lesion == 0)  totalScore += score;
       ind.stats[specStr] = score;
+      ind.signature[2*sid] = scenario.subject()->x();
+      ind.signature[2*sid+1] = scenario.subject()->y();
+      sid++;
       assert(!brainless);
     }
   }

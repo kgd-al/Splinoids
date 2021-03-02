@@ -3,6 +3,7 @@
 
 #include "kgd/external/json.hpp"
 #include "kgd/external/gaga.hpp"
+#include "kgd/external/novelty.hpp"
 #include "scenario.h"
 
 namespace simu {
@@ -10,8 +11,9 @@ namespace simu {
 struct IndEvaluator {
   using Specs = Scenario::Specs;
   using DNA = genotype::Critter;
-  using GA = GAGA::GA<DNA>;
-  using Ind = GA::Ind_t;
+  using Footprint = std::array<float, 16>;
+  using Ind = GAGA::NoveltyIndividual<DNA, Footprint>;
+  using GA = GAGA::GA<DNA, Ind>;
 
   static constexpr int S = 3;
   std::array<std::vector<Specs>, S+1> allScenarios;

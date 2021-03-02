@@ -28,7 +28,7 @@ fi
 ptype="with lines"
 # ptype="smooth bezier"
     
-c=$(head -n 1 $f | awk -F, '{print (NF-12)/3}')
+c=$(head -n 1 $f | awk -F, '{print (NF-15)/3}')
 layout=$(echo $(($c+1)) | awk '{a=int(sqrt($1)); printf "%d,%d", a, $1/a;}')
     
 cmd="
@@ -41,7 +41,7 @@ cmd="
     titles=system('head -n 1 '.f.' | tr \",\" \" \"');
     title(i)=word(titles, int(i));
 
-    type(j)=system('echo '.title(j).' | cut -d_ -f1');
+    type(j)=system('echo '.title(j).' | cut -d_ -f2');
     subtype(j)=system('echo '.title(j).' | cut -d_ -f2');
     
     set key above title 'aggregate';
@@ -56,7 +56,7 @@ cmd="
     do for [i=0:$c-1] {
       ix=3*i+2;
       set key above title type(ix);
-      plot for [j in '2 0 1'] f using 1:(column(ix+j)) $ptype title subtype(ix+j).(ix+j);
+      plot for [j in '2 0 1'] f using 1:(column(ix+j)) $ptype title subtype(ix+j);
     };
     unset multiplot;
 "
