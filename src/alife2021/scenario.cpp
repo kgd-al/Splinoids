@@ -373,9 +373,10 @@ void Scenario::postStep(void) {
     bool seeing = predator && std::any_of(r.begin(), r.end(), &splinoid);
 
     const auto &e = c->ears();
+    static constexpr auto predatorHearingThreshold = .5;
     bool hearing = predator &&
         std::any_of(std::next(e.begin()), e.end(), [] (float v) {
-          return v != 0;
+          return v > predatorHearingThreshold;
         });
 
     bool collision = nonSensorCollision(body);
@@ -404,7 +405,7 @@ void Scenario::postStep(void) {
       static constexpr auto E = Critter::VOCAL_CHANNELS+1;
       std::array<float, 2> em {0};
       for (uint i=0; i<e.size(); i++)
-        if (e[i] > .5)
+        if (e[i] > predatorHearingThreshold)
           em[i/E] = std::max(em[i/E], e[i]);
       if (debugAI)  std::cerr << "hearing: " << em[0] << ", " << em[1] << "\n";
       MO o {em[1]-em[0], em[0]-em[1]};
