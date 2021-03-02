@@ -119,7 +119,8 @@ void IndEvaluator::operator() (Ind &ind, int) {
         std::string stags = "GAE";
 
         tlog.open(savePath / "trajectory.dat");
-        tlog << "Env size: " << simulation.environment().extent() << "\n"
+        tlog << "Env size: " << simulation.environment().xextent()
+             << " " << simulation.environment().yextent() << "\n"
              << "Food_x Food_y Food_r\n";
         if (auto f = scenario.foodlet())
           tlog << f->x() << " " << f->y() << " " << f->radius() << "\n\n";

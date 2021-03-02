@@ -164,12 +164,15 @@ genotype::Environment Scenario::environmentGenome (Specs::Type t) {
   case Specs::V0_ALONE:
   case Specs::V0_CLONE:
   case Specs::V0_PREDATOR:
-    e.size = 20;  break;
+    e.width = e.height = 20;
+    break;
   case Specs::V1_ALONE:
   case Specs::V1_CLONE:
   case Specs::V1_PREDATOR:
   case Specs::V1_BOTH:
-    e.size = 10;  break;
+    e.width = 10. * (1 + sqrt(5)) / 2;
+    e.height = 10;
+    break;
   }
 
   return e;
@@ -183,7 +186,8 @@ Scenario::Scenario (const std::string &specs, Simulation &simulation)
 Scenario::Scenario (const Specs &specs, Simulation &simulation)
   : _specs(specs), _simulation(simulation), _subject(nullptr) {
   simulation.setupCallbacks({
-    { Simulation::POST_STEP, [this] { postStep(); } },
+    { Simulation::POST_ENV_STEP, [this] { postEnvStep(); } },
+    {     Simulation::POST_STEP, [this] { postStep();    } },
   });
 }
 
@@ -191,14 +195,15 @@ void Scenario::init(Genome genome, int lesions) {
   static constexpr auto E = Critter::maximalEnergyStorage(Critter::MAX_SIZE);
   _simulation.init(environmentGenome(_specs.type), {}, commonInitData);
 
-  float S = _simulation.environment().extent();
+  float W = _simulation.environment().xextent(),
+        H = _simulation.environment().yextent();
 
   genome.gdata.self.gid = phylogeny::GID(0);
   if (_specs.type <= Specs::V0_PREDATOR) {
     _subject = _simulation.addCritter(genome, 0, 0, 0, E, .5);
     _foodlet = _simulation.addFoodlet(BodyType::PLANT,
-                                      _specs.food.x * .5 * S,
-                                      _specs.food.y * .5 * S,
+                                      _specs.food.x * .5 * W,
+                                      _specs.food.y * .5 * H,
                                       Critter::RADIUS, E);
 
     if (_specs.type != Specs::V0_ALONE) {
@@ -214,7 +219,7 @@ void Scenario::init(Genome genome, int lesions) {
         _specs.type == Specs::V0_CLONE ? _specs.clone : _specs.predator;
 
       auto c = _simulation.addCritter(
-        g, pos.x * (.5 * S - 3*R), pos.y * S,
+        g, pos.x * (.5 * W - 3*R), pos.y * H,
         -pos.y * M_PI / 2., E, .5);
 
       if (_specs.type == Specs::V0_CLONE) {
@@ -228,9 +233,9 @@ void Scenario::init(Genome genome, int lesions) {
     }
 
   } else {
-    _subject = _simulation.addCritter(genome, -S+R, 0, 0, E, .5);
+    _subject = _simulation.addCritter(genome, -W+R, 0, 0, E, .5);
     _foodlet = _simulation.addFoodlet(BodyType::PLANT,
-                                      .5 * S, _specs.food.y * .5 * S,
+                                      .5 * W, _specs.food.y * .5 * H,
                                       Critter::RADIUS, E);
 
     if (_specs.type == Specs::V1_CLONE || _specs.type == Specs::V1_BOTH) {
@@ -239,8 +244,8 @@ void Scenario::init(Genome genome, int lesions) {
 
       auto c = _simulation.addCritter(
                 cloneGenome,
-                _specs.clone.x * (.5 * S - 3*R),
-                _specs.clone.y * (S - 3 * R),
+                _specs.clone.x * (.5 * W - 3*R),
+                _specs.clone.y * (H - 3 * R),
                 -_specs.clone.y * M_PI / 2., E, .5);
 
       c->brainDead = false;
@@ -253,8 +258,8 @@ void Scenario::init(Genome genome, int lesions) {
     if (_specs.type == Specs::V1_PREDATOR || _specs.type == Specs::V1_BOTH) {
       auto c = _simulation.addCritter(
                 predatorGenome(),
-                _specs.predator.x * (.5 * S - 3*R),
-                _specs.predator.y * (S - 3 * R),
+                _specs.predator.x * (.5 * W - 3*R),
+                _specs.predator.y * (H - 3 * R),
                 -_specs.predator.y * M_PI / 2., E, .5);
       c->brainDead = true;
 
@@ -262,7 +267,7 @@ void Scenario::init(Genome genome, int lesions) {
       motors(c, 1, 1);
     }
 
-    float width = .5, space = 1.5, length = S-space;
+    float width = .5, space = 1.5, length = W-space;
     _simulation.addObstacle(0, -.5*width, length, width);
   }
 
@@ -341,9 +346,14 @@ bool Scenario::predatorWon(void) const {
   return false;
 }
 
-void Scenario::postStep(void) {
-  static constexpr auto E = Critter::VOCAL_CHANNELS+1;
+void Scenario::postEnvStep(void) {
+  // Prevent predator from hearing clone
+  if (_others.size() == 2)
+    _simulation.environment().hearingEvents().erase(
+        std::make_pair(_others[0].critter, _others[1].critter));
+}
 
+void Scenario::postStep(void) {
   for (uint i=0; i<_others.size(); i++) {
     bool predator = (_specs.type == Specs::V0_PREDATOR)
                     || (_specs.type == Specs::V1_PREDATOR)
@@ -363,12 +373,10 @@ void Scenario::postStep(void) {
     bool seeing = predator && std::any_of(r.begin(), r.end(), &splinoid);
 
     const auto &e = c->ears();
-    bool hearing = false;
-    if (predator) {
-      for (uint i=0; i<e.size() && !hearing; i++)
-        if (i%E > 0 && e[i] > 0)
-          hearing = true;
-    }
+    bool hearing = predator &&
+        std::any_of(std::next(e.begin()), e.end(), [] (float v) {
+          return v != 0;
+        });
 
     bool collision = nonSensorCollision(body);
 
@@ -393,12 +401,13 @@ void Scenario::postStep(void) {
       motors(c, o);
 
     } else if (hearing) {
+      static constexpr auto E = Critter::VOCAL_CHANNELS+1;
       std::array<float, 2> em {0};
       for (uint i=0; i<e.size(); i++)
-        em[i/E] = std::max(em[i/E], e[i]);
+        if (e[i] > .5)
+          em[i/E] = std::max(em[i/E], e[i]);
       if (debugAI)  std::cerr << "hearing: " << em[0] << ", " << em[1] << "\n";
-      float s = em[0]+em[1];
-      MO o {em[1]/s, em[0]/s};
+      MO o {em[1]-em[0], em[0]-em[1]};
       motors(c, o);
       if (debugAI)  std::cerr << "\tapplying " << o.l << "," << o.r;
 
@@ -461,12 +470,16 @@ float Scenario::score (void) const {
   if (predatorWon())  return -e;
 
   if (!isSubjectFeeding()) {
-    float S = _simulation.environment().extent();
-    const P2D oppositeCorner (-_specs.food.x * S, -_specs.food.y * S);
+    float W = _simulation.environment().xextent(),
+          H = _simulation.environment().yextent();
+    const P2D oppositeCorner (-_specs.food.x * W, -_specs.food.y * H);
     const P2D fpos = (*_simulation._foodlets.begin())->pos();
     float distance = b2Distance(_subject->pos(), fpos),
           maxDistance = b2Distance(fpos, oppositeCorner);
-    return distance / maxDistance;
+//    std::cerr << "Food at " << fpos << ", opposite corner: "
+//              << oppositeCorner << ", max distance: " << maxDistance
+//              << ", distance: " << distance << "\n";
+    return 1 - distance / maxDistance;
 
   } else
     return 9*e+1;

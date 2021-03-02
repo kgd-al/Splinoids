@@ -258,8 +258,8 @@ void Simulation::init(const Environment::Genome &egenome,
 //  cenergy -= energyPerCritter * data.nCritters;
 //  energy += cenergy;
 
-  const float W = _environment->extent();
-  const float C = W * data.cRange;
+  const float W = _environment->xextent(), H = _environment->yextent();
+  const float CW = W * data.cRange, CH = H * data.cRange;
 
   _populations = cgenomes.size();
   auto &dice = _environment->dice();
@@ -271,8 +271,8 @@ void Simulation::init(const Environment::Genome &egenome,
     cg.gdata.generation = 0;
 
     float a = dice(0., 2*M_PI);
-    float x = dice(-C, C);
-    float y = dice(-C, C);
+    float x = dice(-CW, CW);
+    float y = dice(-CH, CH);
 
     // TODO
 //    if (i == 0) x = -.75, y = .25, a = 0;
@@ -291,7 +291,7 @@ void Simulation::init(const Environment::Genome &egenome,
 //  addFoodlet(BodyType::PLANT,
 //             0, 0,
 //             1, 2); // TODO
-  plantRenewal(W * data.pRange);
+  plantRenewal(std::min(W, H) * data.pRange);
 
   if (config::Simulation::logStatsEvery() > 0)
     _statsLogger.open(config::Simulation::logFile());
@@ -485,6 +485,7 @@ void Simulation::step (void) {
   if (_timeMs.level > 1)  _timeMs.spln = durationFrom(start),  start = now();
 
   _environment->step();
+  maybeCall(POST_ENV_STEP);
 
   if (_timeMs.level > 1)  _timeMs.env = durationFrom(start),  start = now();
 
@@ -663,11 +664,11 @@ Critter* Simulation::createChild(const Critter *parent, const CGenome &genome,
                                  decimal energy,
                                  rng::AbstractDice &dice) {
 
-  const auto W = _environment->extent();
+  const float W = _environment->xextent(), H = _environment->yextent();
   float r = parent->bodyRadius();
   P2D p = parent->pos() + fromPolar(dice(0., 2*M_PI), dice(r, 10*r));
   utils::clip(-W, p.x, W);
-  utils::clip(-W, p.y, W);
+  utils::clip(-H, p.y, H);
 
   Critter *c = addCritter(genome, p.x, p.y, dice(0., 2.*M_PI), energy);
 
@@ -720,8 +721,11 @@ void Simulation::plantRenewal(float bounds) {
     decimal e = std::min(
                   std::min(_environment->energy(), mvp-vp),
                   Foodlet::maxStorage(BodyType::PLANT, r));
-    float E = (bounds > 0 ? bounds : _environment->extent()) - r;
-    addFoodlet(BodyType::PLANT, dice(-E, E), dice(-E, E), r, e);
+
+    float W = _environment->xextent(), H = _environment->yextent();
+    if (bounds > 0) W = bounds-r, H = bounds-r;
+
+    addFoodlet(BodyType::PLANT, dice(-W, W), dice(-H, H), r, e);
 
     vp += e;
     assert(_environment->energy() >= 0);

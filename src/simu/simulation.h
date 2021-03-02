@@ -20,7 +20,7 @@ using SimulationCallback = std::function<void(void)>;
 
 class Simulation {
 public:
-  enum Callback { POST_STEP };
+  enum Callback { POST_ENV_STEP, POST_STEP };
 protected:
   std::unique_ptr<Environment> _environment;
 

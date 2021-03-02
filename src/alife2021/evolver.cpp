@@ -183,7 +183,7 @@ int main(int argc, char *argv[]) {
   ga.setCrossoverRate(0);
   ga.setSelectionMethod(GAGA::SelectionMethod::paretoTournament);
   ga.setTournamentSize(4);
-  ga.setNbElites(4);
+  ga.setNbElites(1);
   ga.setEvaluateAllIndividuals(true);
   ga.setVerbosity(gagaVerbosity);
   ga.setSaveFolder(outputFolder);

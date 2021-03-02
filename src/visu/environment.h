@@ -45,9 +45,8 @@ public:
   }
 
   QRectF simuBoundingRect (void) const {
-    const auto S = _environment.size();
-    const auto HS = .5 * S;
-    return QRectF(-HS, -HS, S, S);
+    return QRectF(-_environment.xextent(), -_environment.yextent(),
+                  _environment.width(), _environment.height());
   }
 
   QRectF boundingRect(void) const {

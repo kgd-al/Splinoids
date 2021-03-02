@@ -29,6 +29,7 @@ public:
   Scenario(const std::string &specs, Simulation &simulation);
 
   void init (Genome genome, int lesions = 0);
+  void postEnvStep (void);
   void postStep (void);
 
   const auto& specs (void) const {

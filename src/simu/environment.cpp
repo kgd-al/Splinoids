@@ -378,7 +378,7 @@ b2Body* Environment::createObstacle(float x, float y, float w, float h) {
 
 void Environment::createEdges(void) {
   static constexpr float W = 10, W2 = 2*W;
-  real HS = extent();
+  real HW = xextent(), HH = yextent();
 
   b2BodyDef edgesBodyDef;
   edgesBodyDef.type = b2_staticBody;
@@ -388,7 +388,7 @@ void Environment::createEdges(void) {
 
   if (!boxEdges) { // Linear edges
     P2D edgesVertices [4] {
-      { HS, HS }, { -HS, HS }, { -HS, -HS }, { HS, -HS }
+      { HW, HH }, { -HW, HH }, { -HW, -HH }, { HW, -HH }
     };
 
     b2ChainShape edgesShape;
@@ -403,10 +403,10 @@ void Environment::createEdges(void) {
 
   } else {  // Box edges
     b2PolygonShape boxes [4];
-    boxes[0].SetAsBox(W, HS+W2, {  HS+W,     0}, 0);
-    boxes[1].SetAsBox(HS+W2, W, {     0,  HS+W}, 0);
-    boxes[2].SetAsBox(W, HS+W2, { -HS-W,     0}, 0);
-    boxes[3].SetAsBox(HS+W2, W, {     0, -HS-W}, 0);
+    boxes[0].SetAsBox(W, HH+W2, {  HW+W,     0}, 0);
+    boxes[1].SetAsBox(HW+W2, W, {     0,  HH+W}, 0);
+    boxes[2].SetAsBox(W, HH+W2, { -HW-W,     0}, 0);
+    boxes[3].SetAsBox(HW+W2, W, {     0, -HH-W}, 0);
 
     for (b2PolygonShape &s: boxes) {
       b2FixtureDef edgeDef;
@@ -517,11 +517,11 @@ void Environment::maybeTeleport(Critter *c) {
 
 //  std::cerr << CID(c, "Critter ") << " touching edges at " << p0 << std::endl;
 
-  if (p1.x < -extent())      p1.x += size();
-  else if (p1.x > extent())  p1.x -= size();
+  if (p1.x < -xextent())      p1.x += width();
+  else if (p1.x > xextent())  p1.x -= width();
 
-  if (p1.y < -extent())      p1.y += size();
-  else if (p1.y > extent())  p1.y -= size();
+  if (p1.y < -yextent())      p1.y += height();
+  else if (p1.y > yextent())  p1.y -= height();
 
   if (p0 != p1) b.SetTransform(p1, a);
 

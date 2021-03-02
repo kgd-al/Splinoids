@@ -89,12 +89,20 @@ public:
     return _genome;
   }
 
-  auto size (void) const {
-    return _genome.size;
+  auto width (void) const {
+    return _genome.width;
   }
 
-  auto extent (void) const {
-    return .5f * size();
+  auto height (void) const {
+    return _genome.height;
+  }
+
+  auto xextent (void) const {
+    return .5f * width();
+  }
+
+  auto yextent (void) const {
+    return .5f * height();
   }
 
   bool isTaurus (void) const {
@@ -127,11 +135,15 @@ public:
     return _matingEvents;
   }
 
+  const auto& hearingEvents (void) const {
+    return _hearingEvents;
+  }
+
   const auto& matingEvents (void) const {
     return _matingEvents;
   }
 
-  const auto& hearingEvents (void) const {
+  auto& hearingEvents (void) {
     return _hearingEvents;
   }
 
