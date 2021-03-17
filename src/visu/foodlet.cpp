@@ -42,6 +42,7 @@ void Foodlet::paint(QPainter *painter,
     painter->setPen(Qt::black);
     auto rect = boundingRect().translated(0, .4).adjusted(0, -.25, 0, 0);
     QFont f = painter->font();
+    f.setWeight(QFont::Bold);
     f.setPointSizeF(.1*f.pointSizeF());
     painter->setFont(f);
 

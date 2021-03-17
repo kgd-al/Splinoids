@@ -36,6 +36,8 @@ struct CONFIG_FILE(Visualisation) {
   DECLARE_PARAMETER(float, selectionZoomFactor)
   DECLARE_PARAMETER(uint, substepsSpeed)
 
+  DECLARE_PARAMETER(int, trace)
+
   DECLARE_DEBUG_PARAMETER(bool, ghostMode, false)
   DECLARE_DEBUG_PARAMETER(int, drawFightingDebug, 0)
 

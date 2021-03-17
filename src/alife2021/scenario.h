@@ -9,9 +9,19 @@ class Scenario {
   using Genome = Simulation::CGenome;
 public:  
   struct Specs {
-    enum Type {
-      V0_ALONE, V0_CLONE, V0_PREDATOR,
-      V1_ALONE, V1_CLONE, V1_PREDATOR, V1_BOTH
+    enum Type : uint {
+      ERROR = 0,
+
+      V0_ALONE = 1, V0_CLONE = 2, V0_PREDATOR = 3,
+      V1_ALONE = 4, V1_CLONE = 5, V1_PREDATOR = 6, V1_BOTH = 7,
+
+      EVAL = 1<<3,
+      EVAL_PREDATOR = 1<<4,
+      EVAL_CLONE = 1<<5,
+      EVAL_FOOD = 1<<6,
+
+      EVAL_CLONE_INVISIBLE = 1<<7,
+      EVAL_CLONE_MUTE = 1<<8
     };
     Type type;
     P2D food, clone, predator;
@@ -28,9 +38,11 @@ public:
   Scenario(const Specs &specs, Simulation &simulation);
   Scenario(const std::string &specs, Simulation &simulation);
 
-  void init (Genome genome, int lesions = 0);
+  void init (Genome genome);
   void postEnvStep (void);
   void postStep (void);
+
+  void applyLesions (int lesions);
 
   const auto& specs (void) const {
     return _specs;
@@ -45,6 +57,10 @@ public:
   }
 
   const Critter* clone (void) const {
+    if (_specs.type & (Specs::EVAL | Specs::EVAL_CLONE))
+      if (!_others.empty())
+        return _others[0].critter;
+
     switch (_specs.type) {
     case Specs::V0_CLONE:
     case Specs::V1_CLONE:
@@ -56,6 +72,10 @@ public:
   }
 
   const Critter* predator (void) const {
+    if (_specs.type & (Specs::EVAL | Specs::EVAL_PREDATOR))
+      if (!_others.empty())
+        return _others[0].critter;
+
     switch (_specs.type) {
     case Specs::V0_PREDATOR:
     case Specs::V1_PREDATOR:
@@ -65,6 +85,10 @@ public:
     default:
       return nullptr;
     }
+  }
+
+  Critter* predator (void) {
+    return const_cast<Critter*>(const_cast<const Scenario*>(this)->predator());
   }
 
   float score (void) const;
@@ -107,6 +131,7 @@ private:
   bool isSubjectFeeding (void) const;
   bool predatorWon (void) const;
 
+  static Genome cloneGenome (Genome g);
   static const Genome& predatorGenome (void);
 
   static genotype::Environment environmentGenome (Specs::Type t);

@@ -59,13 +59,15 @@ int main(int argc, char *argv[]) {
   bool withTrace = false; /// TODO not used
 
   std::string annRender = ""; // no extension
-  std::string annRenderingColors;
+  std::string annNeuralTags;
   float annAlphaThreshold = 0;
+  bool annAggregateNeurons = false;
 
   bool v1scenarios = false;
   int lesions = 0;
 
   bool tag = false;
+  int trace = -1;
 
   cxxopts::Options options("Splinoids (pp-gui-evaluation)",
                            "2D simulation of minimal splinoids for the "
@@ -97,10 +99,12 @@ int main(int argc, char *argv[]) {
 
     ("ann-render", "Export qt-based visualisation of the phenotype's ANN",
      cxxopts::value(annRender)->implicit_value("png"))
-    ("ann-colors", "Specifiy a collections of positions/colors for the ANN's"
-     " nodes", cxxopts::value(annRenderingColors))
+    ("ann-tags", "Specifiy a collections of position -> tag for the ANN nodes",
+     cxxopts::value(annNeuralTags))
     ("ann-threshold", "Rendering threshold for provided alpha value"
                       " (inclusive)", cxxopts::value(annAlphaThreshold))
+    ("ann-aggregate", "Group neurons into behavioral modules",
+     cxxopts::value(annAggregateNeurons)->implicit_value("true"))
 
     ("1,v1", "Use v1 scenarios",
      cxxopts::value(v1scenarios)->implicit_value("true"))
@@ -108,6 +112,9 @@ int main(int argc, char *argv[]) {
 
     ("tags", "Tag items to facilitate reading",
      cxxopts::value(tag)->implicit_value("true"))
+
+    ("trace", "Render trajectories through alpha-increasing traces",
+     cxxopts::value(trace))
     ;
 
   auto result = options.parse(argc, argv);
@@ -157,15 +164,15 @@ int main(int argc, char *argv[]) {
               << "\n";
   RESTORE(animateANN, bool)
   RESTORE(brainDeadSelection, BrainDead)
-  RESTORE(selectionZoomFactor, bool)
+  RESTORE(selectionZoomFactor, float)
   RESTORE(drawVision, int)
   RESTORE(drawAudition, bool)
 
 #undef RESTORE
 
-  if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
+  if (verbosity != Verbosity::QUIET) config::Visualisation::printConfig(std::cout);
   config::Simulation::verbosity.overrideWith(0);
-  if (configFile.empty()) config::Simulation::printConfig("");
+  if (configFile.empty()) config::Visualisation::printConfig("");
 
   // ===========================================================================
   // == Window/layout setup
@@ -194,7 +201,12 @@ int main(int argc, char *argv[]) {
   cGenome.gdata.self.gid = std::max(cGenome.gdata.self.gid,
                                     phylogeny::GID(0));
 
-  scenario.init(cGenome, lesions);
+  scenario.init(cGenome);
+  if (!annNeuralTags.empty() && snapshots == -1 && annRender.empty()) {
+    phenotype::ANN &ann = scenario.subject()->brain();
+    simu::IndEvaluator::applyNeuralFlags(ann, annNeuralTags);
+  }
+  if (lesions > 0)  scenario.applyLesions(lesions);
 
   if (!outputFolder.empty()) {
     bool ok = simulation.setWorkPath(outputFolder,
@@ -265,28 +277,34 @@ int main(int argc, char *argv[]) {
 
     return 0;
 
+  } else if (trace > 0) {
+    config::Visualisation::trace.overrideWith(trace);
+
+    config::Visualisation::brainDeadSelection.ref() = BrainDead::UNSET;
+    config::Visualisation::drawVision.ref() = 0;
+    config::Visualisation::drawAudition.ref() = 0;
+
+    stdfs::path savefolder = cGenomeArg;
+    stdfs::path savepath = savefolder.replace_extension();
+    savepath /= scenarioArg;
+    if (lesions > 0) {
+      std::ostringstream oss;
+      oss << "_l" << lesions;
+      savepath += oss.str();
+    }
+    savepath /= "ptrajectory.png";
+    stdfs::create_directories(savepath.parent_path());
+
+    while (!simulation.finished())  simulation.step();
+
+    simulation.render(QString::fromStdString(savepath));
+    std::cout << "Saved to: " << savepath << "\n";
+
   } else if (!annRender.empty()) {
     using ANNViewer = kgd::es_hyperneat::gui::ann::Viewer;
     ANNViewer *av = cs->brainPanel()->annViewer;
     av->stopAnimation();
 
-
-//    {
-
-//      using ANNViewer = kgd::es_hyperneat::gui::ann::Viewer;
-//      ANNViewer *av = cs->brainPanel()->annViewer;
-//      av->stopAnimation();
-
-
-//      QPainter painter (&printer);
-
-//      QRectF trect = img.rect();
-//      QRect srect = av->mapFromScene(av->sceneRect()).boundingRect();
-//      trect.adjust(.5*(srect.height() - srect.width()), 0, 0, 0);
-//      av->render(&painter, trect, srect);
-
-//      exit(42);
-//    }
     const auto doRender = [av] (QPaintDevice *d, QRectF trect) {
       QPainter painter (d);
       painter.setRenderHint(QPainter::Antialiasing, true);
@@ -323,48 +341,32 @@ int main(int argc, char *argv[]) {
       }
     };
 
-    if (annRenderingColors.empty())
+    if (annNeuralTags.empty())
       render(stdfs::path(cGenomeArg).replace_extension() / "ann", annRender);
 
     else {
-      ANNViewer::CustomNodeColors colors;
-      std::ifstream ifs (annRenderingColors);
-      if (!ifs)
-        utils::doThrow<std::invalid_argument>(
-          "Failed to open color mapping '", annRenderingColors, "'");
+      phenotype::ANN &ann = scenario.subject()->brain();
+      simu::IndEvaluator::applyNeuralFlags(ann, annNeuralTags);
 
-      for (std::string line; std::getline(ifs, line); ) {
-        if (line.empty() || line[0] == '/') continue;
-        std::istringstream iss (line);
-        ANNViewer::CustomNodeColors::key_type pos;
-        iss >> pos;
+      av->updateCustomColors();
+      render(stdfs::path(annNeuralTags).parent_path() / "ann_colored",
+             annRender);
 
-        ANNViewer::CustomNodeColors::mapped_type list;
-        std::string color;
-        while (iss >> color) {
-          QColor c (QString::fromStdString(color));
-          if (c.isValid() && c.alphaF() >= annAlphaThreshold)
-            list.push_back(c);
+      if (annAggregateNeurons) {
+        // Also aggregate similar inputs
+        for (auto &p: ann.neurons()) {
+          phenotype::ANN::Point pos = p.first;
+          phenotype::ANN::Neuron &n = *p.second;
+          if (n.type == phenotype::ANN::Neuron::I)
+            n.flags = (pos.x() < 0)<<1 | (pos.y() < -.75)<<2 | 1<<3;
         }
 
-        if (!list.isEmpty())  colors[pos] = list;
+        phenotype::ModularANN annAgg (ann);
+        av->setGraph(annAgg);
+        av->updateCustomColors();
+        render(stdfs::path(annNeuralTags).parent_path() / "ann_clustered",
+               annRender);
       }
-
-      if (verbosity != Verbosity::QUIET) {
-        std::cout << "Parsed color map:\n";
-        for (const auto &p: colors) {
-          std::cout << "\t" << std::setfill(' ') << std::setw(10) << p.first
-                    << ":\t";
-          for (const QColor &c: p.second)
-            std::cout << " #" << std::hex << std::setfill('0') << std::setw(8)
-                      << c.rgba() << std::dec;
-          std::cout << "\n";
-        }
-      }
-
-      av->setCustomColors(colors);
-      render(stdfs::path(annRenderingColors).parent_path()
-             / "ann_clustered", annRender);
     }
 
   } else {
@@ -391,7 +393,9 @@ int main(int argc, char *argv[]) {
 
   #define SAVE(X, T) \
     settings.setValue("hack::" #X, T(config::Visualisation::X())); \
-    std::cerr << "Saving " << #X << ": " << config::Visualisation::X() << "\n";
+    if (verbosity != Verbosity::QUIET) \
+      std::cerr << "Saving " << #X << ": " << config::Visualisation::X() \
+                << "\n";
     SAVE(animateANN, bool)
     SAVE(brainDeadSelection, int)
     SAVE(selectionZoomFactor, float)

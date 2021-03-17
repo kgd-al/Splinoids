@@ -65,7 +65,10 @@ QRectF squarify (const QRectF &r) {
 
 void Critter::update (void) {
   CritterState newState (_critter);
+
   if (newState.pos != _prevState.pos) updatePosition();
+
+  if (config::Visualisation::trace() > 0) trace.push_back(pos());
 
   _bcolor = toQt(_critter.currentBodyColor());
 
@@ -211,6 +214,26 @@ void Critter::paint(QPainter *painter,
   doPaint(painter);
   painter->restore();
 
+  if (!trace.isEmpty()) {
+    QPointF currPos = pos();
+    float s = (tag == "S" ? .66 : .33);
+    int step = std::max(1, trace.size() / config::Visualisation::trace());
+    for (int i=0; i<trace.size(); i+= step) {
+      QColor c = bodyColor();
+      c.setAlphaF(.5*float(i) / trace.size());
+      painter->save();
+        painter->translate(trace[i].x() - currPos.x(),
+                           trace[i].y() - currPos.y());
+
+        painter->scale(s, s);
+
+        painter->fillPath(_body, c);
+      painter->restore();
+//      qDebug() << i << trace[i] << pos() <<
+    }
+    setPos(currPos);
+  }
+
   if (!tag.isEmpty()) {
     painter->save();
     painter->scale(1, -1);
@@ -218,6 +241,7 @@ void Critter::paint(QPainter *painter,
     painter->setPen(Qt::black);
     auto rect = boundingRect().translated(0, .25);
     QFont f = painter->font();
+    f.setWeight(QFont::Bold);
     f.setPointSizeF(.1*f.pointSizeF());
     painter->setFont(f);
 

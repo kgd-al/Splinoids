@@ -5,6 +5,8 @@
 #include "../gui/statsview.h"
 
 #include <QPainter>
+#include <QFileDialog>
+#include <QtPrintSupport/QPrinter>
 
 #include <QDebug>
 
@@ -201,22 +203,41 @@ b2Body* GraphicSimulation::addObstacle(float x, float y, float w, float h) {
   return b;
 }
 
-QPixmap GraphicSimulation::render (void) const {
+void GraphicSimulation::render (QPaintDevice *d, QRectF trect) const {
   static const float Z = config::Visualisation::viewZoom();
-  QRectF r = _scene->sceneRect();
-  QPixmap p (r.width() * Z, r.height() * Z);
-  QPainter painter (&p);
+  QRectF srect = _scene->sceneRect();
+
+  QPainter painter (d);
   painter.setRenderHint(QPainter::Antialiasing, true);
 
-  painter.translate(0, Z * r.height());
+  painter.translate(0, Z * srect.height());
   painter.scale(1, -1);
-  _scene->render(&painter);
-
-  return p;
+  _scene->render(&painter, trect, srect);
 }
 
-void GraphicSimulation::render (const QString &filename) const {
-  render().save(filename);
+void GraphicSimulation::render (QString filename) const {
+  if (filename.isEmpty())
+    filename = QFileDialog::getSaveFileName(
+        nullptr, "Print simulation to...", "",
+        "Rasterized (*.png);;Vectoriel (*.pdf)");
+  if (filename.isEmpty()) return;
+
+  static const float Z = config::Visualisation::viewZoom();
+  QRectF srect = QTransform::fromScale(Z,Z).mapRect(_scene->sceneRect());
+  if (filename.split(".").back() == "pdf") {
+    QPrinter printer (QPrinter::HighResolution);
+    printer.setPageSize(QPageSize(srect.size(), QPageSize::Point));
+    printer.setPageMargins(QMarginsF(0, 0, 0, 0));
+    printer.setOutputFileName(filename);
+    render(&printer, printer.pageRect());
+
+  } else {
+    QImage img (srect.size().toSize(), QImage::Format_RGB32);
+    img.fill(Qt::white);
+
+    render(&img, img.rect());
+    img.save(filename);
+  }
 }
 
 void GraphicSimulation::load (const std::string &file, GraphicSimulation &s,

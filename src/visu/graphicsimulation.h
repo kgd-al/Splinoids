@@ -124,8 +124,8 @@ public:
     _selection = c;
   }
 
-  QPixmap render (void) const;
-  void render (const QString &filename) const;
+  void render(QPaintDevice *d, QRectF trect) const;
+  void render (QString filename) const;
 
   static void load (const std::string &file, GraphicSimulation &s,
                     const std::string &constraints,

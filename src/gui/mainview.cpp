@@ -157,6 +157,7 @@ void MainView::buildActions(void) {
   addAction(mVisu, "print", "Print", "",
             Qt::ControlModifier + Qt::Key_P, [this] {
     _simu.render("foo.png");
+    _simu.render("foo.pdf");
   });
 
   QMenu *mGui = _mbar->addMenu("GUI");
@@ -537,9 +538,9 @@ void MainView::selectionChanged(visu::Critter *c) {
 void MainView::focusOnSelection (void) {
   if (!selection()) return;
 
-  float S = config::Visualisation::selectionZoomFactor();
+  static const float &S = config::Visualisation::selectionZoomFactor();
   QRectF r = selection()->critterBoundingRect().translated(selection()->pos());
-//  qDebug() << r;
+//  qDebug() << S << r;
   if (S != 1) {
     QPointF d (.5*S*r.width(), .5*S*r.height());
     QPointF center = r.center();

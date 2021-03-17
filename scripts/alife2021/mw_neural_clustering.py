@@ -63,7 +63,7 @@ with open(infile) as file:
     for c in range(len(row[0])):
       t=basetags[c]+row[0][c]
       for i in range(0, columns):
-        data[t][i].append(row[i+1]);
+        data[t][i].append(abs(float(row[i+1])));
 
   for t in basetags:
     if len(data[t+'0'][0]) >= minGroupSize and len(data[t+'1'][0]) >= minGroupSize:
@@ -72,6 +72,10 @@ with open(infile) as file:
       print("Tag {} does not have enough data in each group [{}, {}] <= {}"
             .format(t, len(data[t+'0'][0]), len(data[t+'1'][0]), minGroupSize))
 
+if len(validtags) == 0:
+  print("All provided groups are too small...")
+  exit(42)
+  
 correctedThreshold = threshold / columns
   
 outfile = filebase + "_groups.dat"
@@ -117,7 +121,7 @@ for h in range(0, columns):
     #print(rhs)
     [U, p] = [0, 1]
     if not identical(lhs, rhs):
-      [U, p] = scipy.stats.mannwhitneyu(lhs, rhs, alternative='two-sided')
+      [U, p] = scipy.stats.mannwhitneyu(lhs, rhs, alternative='less')
     of.write(" {:d}".format(p < correctedThreshold))
       
     if verbose:

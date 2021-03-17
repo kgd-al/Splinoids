@@ -130,6 +130,8 @@ Critter::Critter (const Genome &g, b2Body *b) : _genotype(g), _body(*b) {
   _body.SetUserData(&_objectUserData);
 
   brainDead = false;
+  immobile = false;
+  mute = false;
 }
 
 Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
@@ -435,27 +437,31 @@ void Critter::neuralStep(void) {
   }
 
   // Apply requested motor output
-  for (auto &m: _motors) {
-    float s = config::Simulation::critterBaseSpeed()
-        * m.second * _clockSpeed * _efficiency * _size;
-    P2D f = _body.GetWorldVector({s,0}),
-        p = _body.GetWorldPoint({0, int(m.first)*.5f*bodyRadius()});
-    _body.ApplyForce(f, p, true);
+  if (!immobile) {
+    for (auto &m: _motors) {
+      float s = config::Simulation::critterBaseSpeed()
+          * m.second * _clockSpeed * _efficiency * _size;
+      P2D f = _body.GetWorldVector({s,0}),
+          p = _body.GetWorldPoint({0, int(m.first)*.5f*bodyRadius()});
+      _body.ApplyForce(f, p, true);
 
-    if (debugMotors)
-      std::cerr << CID(this) << " Applied motor force for " << m.first
-                << " of " << s << " = "
-                << config::Simulation::critterBaseSpeed() << " * "
-                << m.second << " * " << _clockSpeed << " * "
-                << _efficiency << " * " << _size << std::endl;
+      if (debugMotors)
+        std::cerr << CID(this) << " Applied motor force for " << m.first
+                  << " of " << s << " = "
+                  << config::Simulation::critterBaseSpeed() << " * "
+                  << m.second << " * " << _clockSpeed << " * "
+                  << _efficiency << " * " << _size << std::endl;
+    }
   }
 
   // Emit sounds (requested and otherwise)
-  _sounds.fill(0);
-  uint vi = VOCAL_CHANNELS * .5 * (_voice[1]+1);
-  _sounds[0] = std::min(1.f, _body.GetLinearVelocity().Length());
-  _sounds[1+vi] = _voice[0];
-  assert(0 <= _sounds[1+vi] && _sounds[1+vi] <= 1);
+  if (!mute) {
+    _sounds.fill(0);
+    uint vi = VOCAL_CHANNELS * .5 * (_voice[1]+1);
+    _sounds[0] = std::min(1.f, _body.GetLinearVelocity().Length());
+    _sounds[1+vi] = _voice[0];
+    assert(0 <= _sounds[1+vi] && _sounds[1+vi] <= 1);
+  }
 
 #undef DEBUG
 }
@@ -1185,6 +1191,10 @@ void Critter::setVocalisation(float v, float c) {
   _voice[0] = v;
   assert(-1 <= c && c <= 1);
   _voice[1] = c;
+}
+
+void Critter::setNoisy(bool n) {
+  _sounds[0] = n;
 }
 
 bool Critter::applyHealthDamage (const FixtureData &d, float amount,

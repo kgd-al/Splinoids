@@ -48,6 +48,8 @@ int main(int argc, char *argv[]) {
   bool v1scenarios = false;
   std::string lesions;
 
+  std::string annNeuralTags;
+
   cxxopts::Options options("Splinoids (pp-evaluator)",
                            "Evaluation of minimal splinoids evolved according"
                            " to evaluator class");
@@ -71,6 +73,9 @@ int main(int argc, char *argv[]) {
     ("1,v1", "Use v1 scenarios",
      cxxopts::value(v1scenarios)->implicit_value("true"))
     ("lesions", "Lesion type to apply (def: {})", cxxopts::value(lesions))
+
+    ("ann-aggregate", "Specifiy a collections of position -> tag for the ANN"
+     " nodes", cxxopts::value(annNeuralTags))
     ;
 
   auto result = options.parse(argc, argv);
@@ -154,6 +159,7 @@ int main(int argc, char *argv[]) {
     auto prevFitnesses = ind.fitnesses;
 
     eval.logsSavePrefix = p.first;
+    eval.annTagsFile = annNeuralTags;
     eval(ind, 0);
 
     diffStats(prevStats, ind.stats);

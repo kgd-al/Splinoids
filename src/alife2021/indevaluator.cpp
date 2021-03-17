@@ -16,7 +16,7 @@ IndEvaluator::IndEvaluator (bool v0Scenarios): usingV0Scenarios(v0Scenarios) {
       for (int fy: pos)
         for (int ox: pos)
           for (int oy: pos)
-            allScenarios[int(t)].push_back(
+            allScenarios[int(t)-1].push_back(
               Specs::fromValues(t, fx, fy, ox, oy));
 
   for (auto t=Specs::V1_ALONE; t<=Specs::V1_BOTH; t=Specs::Type(int(t)+1))
@@ -76,6 +76,39 @@ void IndEvaluator::setLesionTypes(const std::string &s) {
   }
 }
 
+void IndEvaluator::applyNeuralFlags(phenotype::ANN &ann,
+                                    const std::string &tagsfile) {
+  auto &n = ann.neurons();
+
+  std::ifstream ifs (tagsfile);
+  if (!ifs)
+    utils::doThrow<std::invalid_argument>(
+      "Failed to open neural tags file '", tagsfile, "'");
+
+  for (std::string line; std::getline(ifs, line); ) {
+    if (line.empty() || line[0] == '/') continue;
+    std::istringstream iss (line);
+    phenotype::ANN::Point pos;
+    iss >> pos;
+
+    auto it = n.find(pos);
+    if (it == n.end())
+      utils::doThrow<std::invalid_argument>(
+        "No neuron at position {", pos.x(), ", ", pos.y(), "}");
+
+    iss >> it->second->flags;
+  }
+
+  if (config::Simulation::verbosity() > 0) {
+    std::cout << "Neural flags:\n";
+    for (const auto &p: n)
+      std::cout << "\t" << std::setfill(' ') << std::setw(10) << p.first
+                << ":\t"
+                << std::bitset<8*sizeof(p.second->flags)>(p.second->flags)
+                << "\n";
+  }
+}
+
 void IndEvaluator::operator() (Ind &ind, int) {
   float totalScore = 0;
 
@@ -97,29 +130,40 @@ void IndEvaluator::operator() (Ind &ind, int) {
   for (const Specs &spec: currentScenarios) {
     using utils::operator<<;
     for (int lesion: lesions) {
+//      if (lesion != 0 && spec.type != Specs::V1_BOTH) continue;
+
       std::string specStr = specToString(spec, lesion);
 
       Simulation simulation;
       Scenario scenario (spec, simulation);
 
-      scenario.init(ind.dna, lesion);
+      scenario.init(ind.dna);
       const Critter &s = *scenario.subject();
+      const auto &brain = s.brain();
 
   #ifndef NDEBUG
-      brains.push_back(s.brain());
+      if (lesion == 0)  brains.push_back(brain);
   #endif
 
-      brainless = s.brain().empty();
+      brainless = brain.empty();
       if (brainless)  break;
 
-      std::bitset<3> tags;
+      std::unique_ptr<phenotype::ModularANN> mann;
+      if (!logsSavePrefix.empty() && !annTagsFile.empty()) {
+        applyNeuralFlags(scenario.subject()->brain(), annTagsFile);
+        mann = std::make_unique<phenotype::ModularANN>(brain);
+      }
+      scenario.applyLesions(lesion);
+
+      std::bitset<5> tags;
       std::ofstream tlog, alog, nlog;
+      std::ofstream olog, mlog;
       if (!logsSavePrefix.empty()) {
         stdfs::path savePath = logsSavePrefix / specStr;
 
         stdfs::create_directories(savePath);
 
-        std::string stags = "GAE";
+        std::string stags = "GAENV";
 
         tlog.open(savePath / "trajectory.dat");
         tlog << "Env size: " << simulation.environment().xextent()
@@ -140,26 +184,76 @@ void IndEvaluator::operator() (Ind &ind, int) {
 
         nlog.open(savePath / "neurons.dat");
         nlog << stags;
-        for (const auto &p: s.brain().neurons())
+        for (const auto &p: brain.neurons())
           if (p.second->isHidden())
             nlog << " (" << p.first.x() << "," << p.first.y() << ")";
         nlog << "\n";
+
+        if (!annTagsFile.empty()) {
+          olog.open(savePath / "outputs.dat");
+          olog << "ML MR CS VV VC\n";
+
+          mlog.open(savePath / "modules.dat");
+          mlog << stags;
+          for (const auto &p: mann->modules()) {
+            if (p.second->type() == phenotype::ANN::Neuron::H) {
+              auto f = p.second->flags;
+              mlog << " " << f << "M " << f << "S";
+            }
+          }
+          mlog << "\n";
+
+          std::ofstream slog (savePath / "nstats");
+          std::array<uint, 3> n {0};
+          uint c = 0;
+          float s = 0;
+          for (const auto &p: brain.neurons()) {
+            n[p.second->type]++;
+            c += p.second->links().size();
+            s += p.first.x();
+          }
+          slog << "INeurons: " << n[0] << "\n"
+               << "ONeurons: " << n[1] << "\n"
+               << "HNeurons: " << n[2] << "\n"
+               << "Connections: " << c << "\n";
+          slog << "Skewdness: " << s / brain.neurons().size() << "\n";
+          n.fill(0);
+          c = 0;
+          for (const auto &p: mann->modules()) {
+            n[p.second->type()]++;
+            c += p.second->links.size();
+          }
+          slog << "IModules: " << n[0] << "\n"
+               << "OModules: " << n[1] << "\n"
+               << "HModules: " << n[2] << "\n"
+               << "MConnections: " << c << "\n";
+        }
       }
 
       while (!simulation.finished() && !aborted) {
         simulation.step();
 
+        // Update modules values (if modular ann is used)
+        if (mann) for (const auto &p: mann->modules()) p.second->update();
+
         if (!logsSavePrefix.empty()) {
-          const auto r = s.retina();
-          tags[2] = std::any_of(r.begin(), r.end(),
+          tags.reset();
+          const auto &r = s.retina();
+          tags[4] = std::any_of(r.begin(), r.end(),
             [] (const auto &c) { return c[0] == 0 && c[1] > 0 && c[2] == 0; });
 
-          tags[1] = std::any_of(r.begin(), r.end(),
+          tags[3] = std::any_of(r.begin(), r.end(),
             [] (const auto &c) { return std::all_of(c.begin(), c.end(),
               [] (auto v) { return 0 < v && v < 1; }); });
 
-          tags[0] = std::any_of(r.begin(), r.end(),
+          tags[2] = std::any_of(r.begin(), r.end(),
             [] (const auto &c) { return c[0] == 1; });
+
+          const auto &e = s.ears();
+          for (uint i=0; i<e.size(); i++) {
+            uint ti = (i%(Critter::VOCAL_CHANNELS+1) == 0) ? 1 : 0;
+            tags[ti] = tags[ti] | (e[i] > 0);
+          }
         }
 
         if (tlog.is_open()) {
@@ -194,19 +288,38 @@ void IndEvaluator::operator() (Ind &ind, int) {
 
         if (nlog.is_open()) {
           nlog << tags;
-          for (const auto &p: s.brain().neurons())
+          for (const auto &p: brain.neurons())
             if (p.second->isHidden())
               nlog << " " << p.second->value;
           nlog << "\n";
+        }
+
+        if (olog.is_open()) {
+          for (const auto &v: s.neuralOutputs())
+            olog << v << " ";
+          olog << "\n";
+        }
+
+        if (mlog.is_open()) {
+          mlog << tags;
+          for (const auto &p: mann->modules()) {
+            if (p.second->type() == phenotype::ANN::Neuron::H) {
+              const auto &v = p.second->value();
+              mlog << " " << v.mean << " " << v.stddev;
+            }
+          }
+          mlog << "\n";
         }
       }
 
       float score = scenario.score();
       if (lesion == 0)  totalScore += score;
       ind.stats[specStr] = score;
-      ind.signature[2*sid] = scenario.subject()->x();
-      ind.signature[2*sid+1] = scenario.subject()->y();
-      sid++;
+      if (lesions.empty() && !(scenario.specs().type & Specs::EVAL)) {
+        ind.signature[2*sid] = scenario.subject()->x();
+        ind.signature[2*sid+1] = scenario.subject()->y();
+        sid++;
+      }
       assert(!brainless);
     }
   }

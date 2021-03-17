@@ -43,6 +43,7 @@ private:
 
 public:
   QString tag;
+  QVector<QPointF> trace;
 
   Critter(simu::Critter &critter);
 

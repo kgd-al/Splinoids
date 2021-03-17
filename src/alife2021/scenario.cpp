@@ -50,12 +50,16 @@ Scenario::Specs::fromValue(Type t, int y) {
 
 Scenario::Specs Scenario::Specs::fromString(const std::string &s) {
   std::ostringstream oss;
-  if (s.size() < 3)
+  if (s.size() < 2)
     utils::doThrow<std::invalid_argument>(
       "Argument '", s, "' is too small to be a scenario specification");
 
-  auto type = Type((s[0] - '0') * V1_ALONE + (s[1] - '0'));
-  if (type < V0_ALONE || V1_BOTH < type)
+  Type type = ERROR;
+  if (s[0] == '0' || s[0] == '1')
+    type = Type((s[0] - '0') * V1_ALONE + (s[1] - '0'));
+  else if (s[0] == 'E')
+    type = EVAL;
+  if (type == ERROR)
     oss << "Type '" << s[0] << s[1] << "' is not recognized";
 
   if (type == V0_ALONE && s.size() != 4)
@@ -74,21 +78,55 @@ Scenario::Specs Scenario::Specs::fromString(const std::string &s) {
   };
 
   Specs spec;
-  if (type <= V0_PREDATOR && oss.str().empty()) {
-    int fx = 0, fy = 0, ox = 0, oy = 0;
-    if (oss.str().empty()) {
-      fx = toInt(s[2]);
-      fy = toInt(s[3]);
-      if (s.size() > 4) {
-        ox = toInt(s[4]);
-        oy = toInt(s[5]);
+  spec.type = type;
+
+  if (oss.str().empty()) {
+    if (type <= V0_PREDATOR) {
+      int fx = 0, fy = 0, ox = 0, oy = 0;
+      if (oss.str().empty()) {
+        fx = toInt(s[2]);
+        fy = toInt(s[3]);
+        if (s.size() > 4) {
+          ox = toInt(s[4]);
+          oy = toInt(s[5]);
+        }
       }
+
+      spec = fromValues(type, fx, fy, ox, oy);
+
+    } else if (type <= V1_BOTH)
+      spec = fromValue(type, toInt(s[2]));
+
+    else {
+      P2D pos {1,0};
+      spec.food = spec.clone = spec.predator = nanPos;
+      switch (s[1]) {
+      case 'E': spec.predator = pos;  break;
+      case 'A': spec.clone = pos;  break;
+      case 'G': spec.food = pos;  break;
+      default:  break;
+      }
+
+      Type stype = ERROR;
+      switch (s[1]) {
+      case 'E': stype = EVAL_PREDATOR;  break;
+      case 'A': stype = EVAL_CLONE;  break;
+      case 'G': stype = EVAL_FOOD;  break;
+      case 'B': stype = Type(uint(EVAL_PREDATOR)|uint(EVAL_CLONE)); break;
+      default:
+        break;
+      }
+
+      if (s.size() == 3) {
+        if (s[2] == 'I')
+          stype = Type(uint(stype) | uint(EVAL_CLONE_INVISIBLE));
+        else if (s[2] == 'M')
+          stype = Type(uint(stype) | uint(EVAL_CLONE_MUTE));
+      }
+
+      spec.type = Type(uint(spec.type) | uint(stype));
     }
-
-    spec = fromValues(type, fx, fy, ox, oy);
-
-  } else if (oss.str().empty())
-    spec = fromValue(type, toInt(s[2]));
+  }
 
   if (!oss.str().empty())
     utils::doThrow<std::invalid_argument>(
@@ -106,8 +144,25 @@ std::string Scenario::Specs::toString(const Specs &s) {
     oss << sgn(s.food.x) << sgn(s.food.y);
     if (s.type == V0_CLONE)  oss << sgn(s.clone.x) << sgn(s.clone.y);
     if (s.type == V0_PREDATOR)  oss << sgn(s.predator.x) << sgn(s.predator.y);
-  } else {
+
+  } else if (s.type <= V1_BOTH){
     oss << "1" << (s.type - V0_PREDATOR - 1) << sgn(s.food.y);
+
+  } else {
+    oss << "E";
+    if (s.type & EVAL_PREDATOR && s.type & EVAL_CLONE)
+      oss << "B";
+    else if (s.type & EVAL_PREDATOR)
+      oss << "E";
+    else if (s.type & EVAL_CLONE)
+      oss << "A";
+    else if (s.type & EVAL_FOOD)
+      oss << "G";
+    else
+      oss << "?";
+
+    if (s.type & EVAL_CLONE_INVISIBLE)  oss << "I";
+    if (s.type & EVAL_CLONE_MUTE)  oss << "M";
   }
   return oss.str();
 }
@@ -156,6 +211,11 @@ const Scenario::Genome& Scenario::predatorGenome (void) {
   return g;
 }
 
+Scenario::Genome Scenario::cloneGenome (Scenario::Genome g) {
+  g.gdata.self.gid = phylogeny::GID(1);
+  return g;
+}
+
 genotype::Environment Scenario::environmentGenome (Specs::Type t) {
   genotype::Environment e;
   e.maxVegetalPortion = 1;
@@ -173,6 +233,8 @@ genotype::Environment Scenario::environmentGenome (Specs::Type t) {
     e.width = 10. * (1 + sqrt(5)) / 2;
     e.height = 10;
     break;
+  default:
+    e.width = e.height = 100;
   }
 
   return e;
@@ -184,14 +246,15 @@ Scenario::Scenario (const std::string &specs, Simulation &simulation)
   : Scenario(Specs::fromString(specs), simulation) {}
 
 Scenario::Scenario (const Specs &specs, Simulation &simulation)
-  : _specs(specs), _simulation(simulation), _subject(nullptr) {
+  : _specs(specs), _simulation(simulation),
+    _foodlet(nullptr), _subject(nullptr) {
   simulation.setupCallbacks({
     { Simulation::POST_ENV_STEP, [this] { postEnvStep(); } },
     {     Simulation::POST_STEP, [this] { postStep();    } },
   });
 }
 
-void Scenario::init(Genome genome, int lesions) {
+void Scenario::init(Genome genome) {
   static constexpr auto E = Critter::maximalEnergyStorage(Critter::MAX_SIZE);
   _simulation.init(environmentGenome(_specs.type), {}, commonInitData);
 
@@ -232,18 +295,15 @@ void Scenario::init(Genome genome, int lesions) {
       motors(c, 1, 1);
     }
 
-  } else {
+  } else if (_specs.type <= Specs::V1_BOTH) {
     _subject = _simulation.addCritter(genome, -W+R, 0, 0, E, .5);
     _foodlet = _simulation.addFoodlet(BodyType::PLANT,
                                       .5 * W, _specs.food.y * .5 * H,
                                       Critter::RADIUS, E);
 
     if (_specs.type == Specs::V1_CLONE || _specs.type == Specs::V1_BOTH) {
-      auto cloneGenome = genome;
-      cloneGenome.gdata.self.gid = phylogeny::GID(1);
-
       auto c = _simulation.addCritter(
-                cloneGenome,
+                cloneGenome(genome),
                 _specs.clone.x * (.5 * W - 3*R),
                 _specs.clone.y * (H - 3 * R),
                 -_specs.clone.y * M_PI / 2., E, .5);
@@ -269,22 +329,36 @@ void Scenario::init(Genome genome, int lesions) {
 
     float width = .5, space = 1.5, length = W-space;
     _simulation.addObstacle(0, -.5*width, length, width);
+
+  } else if (_specs.type & Specs::EVAL) {
+    _simulation._systemExpectedEnergy = -1;
+    _subject = _simulation.addCritter(genome, -1+R, 0, 0, E, .5);
+
+    // Deactivate motion
+    _subject->immobile = true;
   }
+}
 
-  if (lesions > 0) {
-    std::cout << "Applying lesion type: " << lesions << "\n";
+void Scenario::applyLesions(int lesions) {
+  if (lesions == 0) return;
+  std::cout << "Applying lesion type: " << lesions << "\n";
 
-    for (auto &pair: _subject->brain().neurons()) {
-      phenotype::ANN::Neuron &n = *pair.second;
-      for (auto it=n.links().begin(); it!=n.links().end(); ) {
-        phenotype::ANN::Neuron &tgt = *(it->in.lock());
-        if (tgt.type == phenotype::ANN::Neuron::I
-            && (lesions == 3
-              || (lesions == 1 && tgt.pos.y() < -.75)
-              || (lesions == 2 && tgt.pos.y() >= -.75)))
-          it = n.links().erase(it);
-        else
-          ++it;
+  for (auto &pair: _subject->brain().neurons()) {
+    phenotype::ANN::Neuron &n = *pair.second;
+    for (auto it=n.links().begin(); it!=n.links().end(); ) {
+      phenotype::ANN::Neuron &tgt = *(it->in.lock());
+      if (tgt.type == phenotype::ANN::Neuron::I
+          && (lesions == 3
+            || (lesions == 1 && tgt.pos.y() < -.75)   // deactivate vision
+            || (lesions == 2 && tgt.pos.y() >= -.75)  // deactivate audition
+            || (n.flags == 1024 && ( // deactivate amygdala inputs
+                 (lesions == 4 && tgt.pos.y() == -1)    // deactivate red
+              || (lesions == 5 && tgt.pos.y() == -.75))))) { // deactivate noise audition
+        it = n.links().erase(it);
+//        std::cerr << "Deactivated " << tgt.pos << " -> " << n.pos << "\n";
+      } else {
+        ++it;
+//        std::cerr << "Kept " << tgt.pos << " -> " << n.pos << " (" << n.flags << ")\n";
       }
     }
   }
@@ -354,6 +428,62 @@ void Scenario::postEnvStep(void) {
 }
 
 void Scenario::postStep(void) {
+  if (_specs.type & Specs::EVAL) {
+    static constexpr auto E = Critter::maximalEnergyStorage(Critter::MAX_SIZE);
+    static constexpr auto PERIOD = 100;
+
+    const auto makeCritter = [this] (bool predator) {
+      auto g = predator ? predatorGenome() : cloneGenome(_subject->genotype());
+      if (!predator && (_specs.type & Specs::EVAL_CLONE_INVISIBLE))
+        g.colors.fill({0});
+
+      auto c = _simulation.addCritter(g, 1 + R, 0, -M_PI, E, .5);
+
+      c->brainDead = predator;
+      c->immobile = true;
+      c->mute = predator || (_specs.type & Specs::EVAL_CLONE_MUTE);
+      c->setNoisy(predator);
+      _others.push_back(InstrumentalizedCritter(c));
+      motors(c, 0, 0);
+      return c;
+    };
+
+    const auto t = _simulation.currTime().timestamp();
+    if (t % PERIOD == 0) {
+      const auto step = t / PERIOD;
+//      std::cerr << "Update period: " << step << "\n";
+
+      // Zaelous cleaning
+      for (auto &c: _others)  _simulation.delCritter(c.critter);
+      _others.clear();
+
+      _simulation._finished = (step >= 6);
+      if (_simulation._finished)  return;
+
+      if (step%2 == 0) {
+        if (_specs.type & Specs::EVAL_FOOD && _foodlet) {
+          _simulation.delFoodlet(_foodlet);
+          _foodlet = nullptr;
+        }
+
+        if ((_specs.type & Specs::EVAL_PREDATOR)
+            && (_specs.type & Specs::EVAL_CLONE) && step > 0)
+          makeCritter(false);
+
+      } else {
+        if (_specs.type & Specs::EVAL_PREDATOR)
+          makeCritter(true);
+        else if (_specs.type & Specs::EVAL_CLONE)
+          makeCritter(false);
+        else if (_specs.type & Specs::EVAL_FOOD)
+          _foodlet = _simulation.addFoodlet(BodyType::PLANT,
+                                            1 + R, 0, R, E);
+      }
+    }
+
+    return;
+  }
+
   for (uint i=0; i<_others.size(); i++) {
     bool predator = (_specs.type == Specs::V0_PREDATOR)
                     || (_specs.type == Specs::V1_PREDATOR)
@@ -463,6 +593,8 @@ void Scenario::postStep(void) {
 }
 
 float Scenario::score (void) const {
+  if (_specs.type & Specs::EVAL)  return 0;
+
   assert(_simulation.finished());
   float e = (_subject->usableEnergy() / _subject->maxUsableEnergy());
   e = std::max(0.f, (e - TARGET_ENERGY) / (1 - TARGET_ENERGY));

@@ -26,12 +26,15 @@ struct IndEvaluator {
 
   void setLesionTypes (const std::string &s);
 
+  static void applyNeuralFlags (phenotype::ANN &ann,
+                                const std::string &tagsfile);
+
   void operator() (Ind &ind, int);
 
   static Ind fromJsonFile (const std::string &path);
 
   const bool usingV0Scenarios;
-  stdfs::path logsSavePrefix;
+  stdfs::path logsSavePrefix, annTagsFile;
 
   std::vector<int> lesions;
 

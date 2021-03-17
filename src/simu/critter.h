@@ -223,6 +223,7 @@ public:
 
   bool brainDead; // TODO for external control
   std::vector<bool> selectiveBrainDead; // deactivate specific neural outputs
+  bool immobile, mute;
 
   uint userIndex;  // To monitor source population
 
@@ -620,6 +621,7 @@ public:
   }
 
   void setVocalisation(float v, float c);
+  void setNoisy (bool n);
 
   const auto& producedSound (void) const {
     return _sounds;
