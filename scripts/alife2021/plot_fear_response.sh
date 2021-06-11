@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# resfolder=results
+resfolder=tmp/results
+
 # if [ ! -f "$1" ]
 # then
 #   echo "Provided strategies log '$1' is not valid"
@@ -55,8 +58,8 @@
 # 
 # 
 # tmp=.fmrtmp
-# c=results/alife2021/v2n/classes.dat
-# paste -d ' ' <(head -n 1 $c; tail -n +2 $c | sort -k2,2g) results/alife2021/v2n/module_sizes | cut -d ' ' -f 2,3,4,9- | nl -w 1 -s ' ' -v 0 > $tmp
+# c=$resfolder/alife2021/v2n/classes.dat
+# paste -d ' ' <(head -n 1 $c; tail -n +2 $c | sort -k2,2g) $resfolder/alife2021/v2n/module_sizes | cut -d ' ' -f 2,3,4,9- | nl -w 1 -s ' ' -v 0 > $tmp
 # 
 # (head -n1 $tmp; tail -n +2 $tmp | sort -k7,7gr) | cut -d ' ' -f 1-3,5- > $tmp~
 # mv $tmp~ $tmp
@@ -100,16 +103,16 @@ then
   enfilter=1
   mtmp=.mtmp
   echo "ID m m_l4 m_l5" > $mtmp
-  for r in results/alife2021/v2n/5*/
+  for r in $resfolder/alife2021/v2n/5*/
   do
     f=$r/*/*/*/*/
     id=$(basename $r)
-    [ -z $(grep -m1 $id results/alife2021/v2n/module_sizes | cut -d ' ' -f8 | awk '{print ($1 > 0) ? "ok" : "";}') ] && continue
+    [ -z $(grep -m1 $id $resfolder/alife2021/v2n/module_sizes | cut -d ' ' -f8 | awk '{print ($1 > 0) ? "ok" : "";}') ] && continue
     
     printf "%s" $id >> $mtmp
     
-    for t in '12[-+]' 'selective_lesions/12[-+]_l4' 'selective_lesions/12[-+]_l5'
-#     for t in 'eval_canonical_with_lesions/E[EB]'{,_l4,_l5} 
+#     for t in '12[-+]' 'selective_lesions/12[-+]_l4' 'selective_lesions/12[-+]_l5'
+    for t in 'eval_canonical_with_lesions/E[EB]'{,_l4,_l5} 
     do
       awk -venfilter=$enfilter '
         FNR==1 {
@@ -137,13 +140,13 @@ fi
 if false
 then
   enfilter=1
-  out=results/alife2021/v2n/modular_amygdala
+  out=$resfolder/alife2021/v2n/modular_amygdala
   echo "ID |m| m_l4<m m_l5<m" > $out
-  for r in results/alife2021/v2n/5*
+  for r in $resfolder/alife2021/v2n/5*
   do
     f=$r/*/*/*/*/
     id=$(basename $r)
-    ms=$(grep -m1 $id results/alife2021/v2n/module_sizes | cut -d ' ' -f8)
+    ms=$(grep -m1 $id $resfolder/alife2021/v2n/module_sizes | cut -d ' ' -f8)
     
     rtmp=.rtmp
     awk -venfilter=$enfilter '

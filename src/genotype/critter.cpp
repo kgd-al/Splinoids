@@ -309,7 +309,7 @@ struct genotype::MutationRatesPrinter<Ss, GENOME, &GENOME::splines> {
 
 template <>
 struct genotype::Extractor<Ss> {
-  std::string operator() (const Ss &ls, const std::string &field) {
+  std::string operator() (const Ss &/*ls*/, const std::string &/*field*/) {
 //    if (field.size() != 1 || !LSystem<L>::Rule::isValidNonTerminal(field[0]))
 //      utils::doThrow<std::invalid_argument>(
 //        "'", field, "' is not a valid non terminal");
@@ -320,39 +320,6 @@ struct genotype::Extractor<Ss> {
 //    else
 //      return it->second.rhs;
     return "Not implemented";
-  }
-};
-
-template <>
-struct genotype::Aggregator<Ss, Critter> {
-  void operator() (std::ostream &os, const std::vector<Critter> &genomes,
-                   std::function<const Ss& (const Critter&)> access,
-                   uint /*verbosity*/) {
-//    std::set<grammar::NonTerminal> nonTerminals;
-//    for (const Plant &p: genomes)
-//      for (const auto &pair: access(p).rules)
-//        nonTerminals.insert(pair.first);
-
-//    os << "\n";
-//    utils::IndentingOStreambuf indent(os);
-//    for (grammar::NonTerminal s: nonTerminals) {
-//      std::map<grammar::Successor, uint> counts;
-//      for (const Plant &p: genomes) {
-//        const auto &map = access(p).rules;
-//        auto it = map.find(s);
-//        if (it != map.end())
-//          counts[it->second.rhs]++;
-//      }
-
-//      uint i=0;
-//      for (const auto &p: counts) {
-//        if (i++ == 0)
-//          os << s << " -> ";
-//        else
-//          os << "     ";
-//        os << "(" << p.second << ") " << p.first << "\n";
-//      }
-//    }
   }
 };
 
@@ -373,18 +340,10 @@ struct genotype::MutationRatesPrinter<Dm, GENOME, &GENOME::dimorphism> {
 
 template <>
 struct genotype::Extractor<Dm> {
-  std::string operator() (const Dm &ls, const std::string &field) {
+  std::string operator() (const Dm &/*ls*/, const std::string &/*field*/) {
     return "Not implemented";
   }
 };
-
-template <>
-struct genotype::Aggregator<Dm, Critter> {
-  void operator() (std::ostream &os, const std::vector<Critter> &genomes,
-                   std::function<const Dm& (const Critter&)> access,
-                   uint /*verbosity*/) {}
-};
-
 
 template <>
 struct genotype::MutationRatesPrinter<Cs, GENOME, &GENOME::colors> {
@@ -402,16 +361,9 @@ struct genotype::MutationRatesPrinter<Cs, GENOME, &GENOME::colors> {
 
 template <>
 struct genotype::Extractor<Cs> {
-  std::string operator() (const Cs &ls, const std::string &field) {
+  std::string operator() (const Cs &/*ls*/, const std::string &/*field*/) {
     return "Not implemented";
   }
-};
-
-template <>
-struct genotype::Aggregator<Cs, Critter> {
-  void operator() (std::ostream &os, const std::vector<Critter> &genomes,
-                   std::function<const Cs& (const Critter&)> access,
-                   uint /*verbosity*/) {}
 };
 
 #undef GENOME
@@ -442,4 +394,3 @@ DEFINE_PARAMETER(CFILE::BC, color_bounds,
                  CFILE::COLOR_MAX, CFILE::COLOR_MAX)
 
 #undef CFILE
-

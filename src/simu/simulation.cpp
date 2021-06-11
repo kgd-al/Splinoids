@@ -1029,7 +1029,7 @@ void Simulation::save (stdfs::path file) const {
 }
 
 void Simulation::load (const stdfs::path &file, Simulation &s,
-                       const std::string &constraints,
+                       const std::string &/*constraints*/,
                        const std::string &fields) {
 
   std::set<std::string> requestedFields;  // Default to all

@@ -88,7 +88,7 @@ void IndEvaluator::applyNeuralFlags(phenotype::ANN &ann,
   for (std::string line; std::getline(ifs, line); ) {
     if (line.empty() || line[0] == '/') continue;
     std::istringstream iss (line);
-    phenotype::ANN::Point pos;
+    phenotype::Point pos;
     iss >> pos;
 
     auto it = n.find(pos);

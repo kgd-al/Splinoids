@@ -355,7 +355,7 @@ int main(int argc, char *argv[]) {
       if (annAggregateNeurons) {
         // Also aggregate similar inputs
         for (auto &p: ann.neurons()) {
-          phenotype::ANN::Point pos = p.first;
+          phenotype::Point pos = p.first;
           phenotype::ANN::Neuron &n = *p.second;
           if (n.type == phenotype::ANN::Neuron::I)
             n.flags = (pos.x() < 0)<<1 | (pos.y() < -.75)<<2 | 1<<3;
