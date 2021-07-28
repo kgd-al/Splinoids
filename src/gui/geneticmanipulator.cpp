@@ -873,7 +873,7 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
       for (uint j=0; j<SD_v; j++)
         _sSliders[i][j]->setGeneValue(g.splines[i].data[j]);
       for (uint j=0; j<2; j++)
-        _dSliders[i][j]->setGeneValue(g.dimorphism[4*j+i]);
+        _dSliders[i][j]->setGeneValue(g.dimorphism[S_v*j+i]);
 
       for (uint j=0; j<2; j++)
         _sPickers[i][j]->setGeneValue(g.colors[j*(S_v+1)+i+1]);

@@ -171,6 +171,7 @@ int main(int argc, char *argv[]) {
   const auto nextGen = [&] (QWidget *object) {
     SplinoidButton *sender = static_cast<SplinoidButton*>(object);
     const Genome base = sender->critter->object().genotype();
+    std::cout << "Generation " << base.gdata.generation << std::endl;
 
     buttons[mid][mid]->setGenome(s, base);
     manip->setSubject(buttons[mid][mid]->female->critter);
@@ -188,8 +189,7 @@ int main(int argc, char *argv[]) {
   };
 
   QSignalMapper mapper;
-  QObject::connect(&mapper, qOverload<QWidget*>(&QSignalMapper::mapped),
-                   nextGen);
+  QObject::connect(&mapper, &QSignalMapper::mappedWidget, nextGen);
 
   for (uint i=0; i<N; i++) {
     for (uint j=0; j<N; j++) {

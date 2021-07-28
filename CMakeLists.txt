@@ -154,34 +154,38 @@ find_package(OpenMP)
 #  target_link_libraries(timelines ${CORE_LIBS} OpenMP::OpenMP_CXX)
 #endif()
 
-################################################################################
-## Target (alife2021 ga evolution)
-################################################################################
-set(PP_SRC
-    "scenario.cpp"
-    "scenario.h"
-    "indevaluator.cpp"
-    "indevaluator.h"
-)
-PREPEND(PP_SRC "src/alife2021")
-add_library(PP_OBJS OBJECT ${PP_SRC})
-add_executable(
-  pp-evolver
-  $<TARGET_OBJECTS:SIMU_OBJS>
-  $<TARGET_OBJECTS:PP_OBJS>
-  "src/alife2021/evolver.cpp")
-target_link_libraries(pp-evolver ${CORE_LIBS} pthread)
+if (EXP_ALIFE2021)
+    ############################################################################
+    ## Target (alife2021 ga evolution)
+    ############################################################################
+    set(PP_SRC
+        "scenario.cpp"
+        "scenario.h"
+        "indevaluator.cpp"
+        "indevaluator.h"
+    )
+    PREPEND(PP_SRC "src/alife2021")
+    add_library(PP_OBJS OBJECT ${PP_SRC})
+    add_executable(
+      pp-evolver
+      $<TARGET_OBJECTS:SIMU_OBJS>
+      $<TARGET_OBJECTS:PP_OBJS>
+      "src/alife2021/evolver.cpp")
+    target_link_libraries(pp-evolver ${CORE_LIBS} pthread)
+
+    ############################################################################
+    ## Target (alife2021 evaluation)
+    ############################################################################
+    add_executable(
+      pp-evaluator
+      $<TARGET_OBJECTS:SIMU_OBJS>
+      $<TARGET_OBJECTS:PP_OBJS>
+      "src/alife2021/evaluator.cpp")
+    target_link_libraries(pp-evaluator ${CORE_LIBS})
+endif()
 
 ################################################################################
-## Target (alife2021 evaluation)
-################################################################################
-add_executable(
-  pp-evaluator
-  $<TARGET_OBJECTS:SIMU_OBJS>
-  $<TARGET_OBJECTS:PP_OBJS>
-  "src/alife2021/evaluator.cpp")
-target_link_libraries(pp-evaluator ${CORE_LIBS})
-
+## Graphics
 if (NOT CLUSTER_BUILD)
     ############################################################################
     ## Shut gcc9/Qt deprecated-copy QVariant-related warnings
@@ -260,30 +264,34 @@ if (NOT CLUSTER_BUILD)
 ### Targets (Watchmaker)
 ################################################################################
 
-#    add_executable(
-#      watchmaker
-#      $<TARGET_OBJECTS:SIMU_OBJS>
-#      $<TARGET_OBJECTS:VISU_OBJS>
-#      "src/misc/watchmaker_classes.h"
-#      "src/misc/watchmaker_classes.cpp"
-#      "src/watchmaker.cpp"
-#    )
-#    set_property(TARGET watchmaker PROPERTY AUTOMOC ON)
-#    target_link_libraries(watchmaker ${CORE_LIBS} ${GUI_LIBS})
+    if (EXP_WATCHMAKER)
+        add_executable(
+          watchmaker
+          $<TARGET_OBJECTS:SIMU_OBJS>
+          $<TARGET_OBJECTS:VISU_OBJS>
+          "src/misc/watchmaker_classes.h"
+          "src/misc/watchmaker_classes.cpp"
+          "src/watchmaker.cpp"
+        )
+        set_property(TARGET watchmaker PROPERTY AUTOMOC ON)
+        target_link_libraries(watchmaker ${CORE_LIBS} ${GUI_LIBS})
+    endif()
 
-################################################################################
-### Targets (alife2021 visualizer)
-################################################################################
+    if (EXP_ALIFE2021)
+    ############################################################################
+    ### Targets (alife2021 visualizer)
+    ############################################################################
 
-    add_executable(
-        pp-visualizer
-        $<TARGET_OBJECTS:SIMU_OBJS>
-        $<TARGET_OBJECTS:VISU_OBJS>
-        $<TARGET_OBJECTS:PP_OBJS>
-        "src/alife2021/visualizer.cpp"
-    )
-    set_property(TARGET pp-visualizer PROPERTY AUTOMOC ON)
-    target_link_libraries(pp-visualizer ${CORE_LIBS} ${GUI_LIBS})
+        add_executable(
+            pp-visualizer
+            $<TARGET_OBJECTS:SIMU_OBJS>
+            $<TARGET_OBJECTS:VISU_OBJS>
+            $<TARGET_OBJECTS:PP_OBJS>
+            "src/alife2021/visualizer.cpp"
+        )
+        set_property(TARGET pp-visualizer PROPERTY AUTOMOC ON)
+        target_link_libraries(pp-visualizer ${CORE_LIBS} ${GUI_LIBS})
+    endif()
 
 ################################################################################
 ### Targets (Visu tool)
@@ -331,6 +339,15 @@ message("> Cluster building mode is " ${CLUSTER_BUILD})
 if(CLUSTER_BUILD)
     add_definitions(-DCLUSTER_BUILD)
 endif()
+
+option(EXP_WATCHMAKER "Whether or not to build these targets" OFF)
+message("> Building watchamker target: " ${EXP_WATCHMAKER})
+
+option(EXP_ALIFE2021 "Whether or not to build these targets" OFF)
+message("> Building ALife2021 targets: " ${EXP_ALIFE2021})
+
+option(EXP_COMBAT "Whether or not to build these targets" OFF)
+message("> Building combat targets: " ${EXP_COMBAT})
 
 #option(UPDATE_DEPENDENCIES "Whether or not to keep dependency data up-to-date
 #                            (implies extra compilation time)" ON)

@@ -191,6 +191,7 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
   for (uint i=0; i<SPLINES_COUNT; i++)
     for (Side s: {Side::LEFT, Side::RIGHT})
       _currHealth[1+splineIndex(i, s)] = splineMaxHealth(i, s);
+  _previousHealth = bodyHealth();
 
   _destroyed.reset();
 
@@ -230,8 +231,9 @@ void Critter::buildBrain(void) {
 //  _genotype.connectivity.BuildHyperNEATPhenotype(_brain, substrate);
 
   using Coordinates = phenotype::ANN::Coordinates;
-  static const auto add = [] (auto &v, float x, float y) {
-    v.emplace_back(Coordinates::value_type({x,y}));
+  using Point = Coordinates::value_type;
+  static const auto add = [] (auto &v, auto... coords) {
+    v.emplace_back(Point({coords...}));
   };
 
   Coordinates inputs, outputs;
@@ -245,29 +247,59 @@ void Critter::buildBrain(void) {
 //  add(inputs,  .0,  -.25, -.5); // energy
 //  add(inputs,  .0,   .25, -.5); // health
 
+  add(inputs, 0.f, -1.f, - .5f);  // health ratio
+  add(inputs, 0.f, -1.f, -1.f);   // health variation
+
   // Vision
   for (const simu::P2D &r: _raysEnd) {
     float a = std::atan2(r.y, r.x);
     assert(-M_PI <= a && a <= M_PI);
     float x = -a / M_PI;
     assert(-1 <= x && x <= 1);
+
+#if ESHN_SUBSTRATE_DIMENSION == 2
     for (uint i=0; i<3; i++) add(inputs, x, -1+i*.25f / 3.f);
+#elif ESHN_SUBSTRATE_DIMENSION == 3
+    for (uint i=0; i<3; i++) add(inputs, x, -1.f, 1 - i / 3.f);
+#endif
   }
 
   // Audition
-  for (int i: {-1,1})
-    for (uint j=0; j<VOCAL_CHANNELS+1; j++)
-      add(inputs, i*.5, -.75 + .25 * j / (VOCAL_CHANNELS+1));
+  for (int i: {-1,1}) {
+    for (uint j=0; j<VOCAL_CHANNELS+1; j++) {
+#if ESHN_SUBSTRATE_DIMENSION == 2
+      add(inputs, i*.5f, -.75f + .25f * j / (VOCAL_CHANNELS+1));
+#elif ESHN_SUBSTRATE_DIMENSION == 3
+      add(inputs, i*.5f, -1.f, -1.f + j / float(VOCAL_CHANNELS+1));
+#endif
+    }
+  }
 
   // ========
   // = Outputs
-  add(outputs, -.5, .75); // motors:  left
-  add(outputs, +.5, .75); //          right
+#if ESHN_SUBSTRATE_DIMENSION == 2
+  add(outputs, -.5f, .75f); // motors:  left
+  add(outputs, +.5f, .75f); //          right
 
-  add(outputs,  .0, .75); // clock speed
+  add(outputs,  .0f, .75f); // clock speed
 
-  add(outputs,  .0, 1.0); // vocalisation:  volume
-  add(outputs,  .0,  .9); //                frequency
+  add(outputs,  .0f, 1.0f); // vocalisation:  volume
+  add(outputs,  .0f,  .9f); //                frequency
+#elif ESHN_SUBSTRATE_DIMENSION == 3
+
+  /// TODO Make this safer!!!!
+  std::array<Point, EnumUtils<MotorOutput>::size()> mcoords;
+  mcoords[uint(MotorOutput::FORWARD_LEFT)] =   { -.5f, 1.f,  .25f};
+  mcoords[uint(MotorOutput::FORWARD_RIGHT)] =  { +.5f, 1.f,  .25f};
+  mcoords[uint(MotorOutput::BACKWARD_LEFT)] =  { -.5f, 1.f, -.25f};
+  mcoords[uint(MotorOutput::BACKWARD_RIGHT)] = { +.5f, 1.f, -.25f};
+  for (const Point &p: mcoords) add(outputs, p);
+
+  add(outputs,  .0f, 1.f, -1.f);  // clock speed
+
+  add(outputs,  .0f, 1.f,  1.f);  // vocalisation:  volume
+  add(outputs,  .0f, 1.f,   .5f); //                frequency
+#endif
 
 /// TODO Integrate remaining actions
 //  add(outputs, ?, ?); // reproduction
@@ -300,6 +332,9 @@ void Critter::step(Environment &env) {
 
   // Udate appearance
   _currentBodyColor = computeCurrentColor();
+
+  // Miscellaneous updates
+  _previousHealth = bodyHealth();
 
   // TODO Smell?
 }
@@ -415,6 +450,9 @@ void Critter::neuralStep(void) {
 //    inputs[i++] = reproductionReadiness(reproductionType());
 //    inputs[i++] = usableEnergy() / maxUsableEnergy();
 //    inputs[i++] = bodyHealthness();
+    inputs[i++] = bodyHealthness();
+    inputs[i++] = std::max(decimal(0), bodyHealth() - _previousHealth);
+
     for (const auto &c: _retina) for (float v: c) inputs[i++] = v;
     for (const auto &e: _ears)  inputs[i++] = e;
 
@@ -423,14 +461,19 @@ void Critter::neuralStep(void) {
 
     // Collect outputs
 #ifndef NDEBUG
-    for (auto &v: _neuralOutputs)  assert(-1 <= v && v <= 1);
+    for (auto &v: _neuralOutputs)  assert(0 <= v && v <= 1);
 #endif
-    if (!selectiveBrainDead[0]) _motors[Motor::LEFT] = _neuralOutputs[0];
-    if (!selectiveBrainDead[1]) _motors[Motor::RIGHT] = _neuralOutputs[1];
-    if (!selectiveBrainDead[2])
-      _clockSpeed = clockSpeed(.5*(1+_neuralOutputs[2]));
+    if (!selectiveBrainDead[0])
+      _motors[Motor::LEFT] = _neuralOutputs[uint(MotorOutput::FORWARD_LEFT)]
+                           - _neuralOutputs[uint(MotorOutput::BACKWARD_LEFT)];
+    if (!selectiveBrainDead[1])
+      _motors[Motor::RIGHT] = _neuralOutputs[uint(MotorOutput::FORWARD_RIGHT)]
+                            - _neuralOutputs[uint(MotorOutput::BACKWARD_RIGHT)];
 
-    if (!selectiveBrainDead[3]) _voice[0] = std::max(0.f, _neuralOutputs[3]);
+    if (!selectiveBrainDead[2])
+      _clockSpeed = clockSpeed(_neuralOutputs[2]);
+
+    if (!selectiveBrainDead[3]) _voice[0] = _neuralOutputs[3];
     if (!selectiveBrainDead[4]) _voice[1] = _neuralOutputs[4];
 
 //    _reproduction = _neuralOutputs[?];
@@ -457,7 +500,8 @@ void Critter::neuralStep(void) {
   // Emit sounds (requested and otherwise)
   if (!mute) {
     _sounds.fill(0);
-    uint vi = VOCAL_CHANNELS * .5 * (_voice[1]+1);
+    uint vi =
+        _voice[1] == 1 ? VOCAL_CHANNELS - 1 : VOCAL_CHANNELS * _voice[1];
     _sounds[0] = std::min(1.f, _body.GetLinearVelocity().Length());
     _sounds[1+vi] = _voice[0];
     assert(0 <= _sounds[1+vi] && _sounds[1+vi] <= 1);
@@ -467,20 +511,30 @@ void Critter::neuralStep(void) {
 }
 
 void Critter::energyConsumption (Environment &env) {
+  static const auto &M = config::Simulation::motorEnergyConsumption();
+  static const auto &N = config::Simulation::neuronEnergyConsumption();
+  static const auto &A = config::Simulation::axonEnergyConsumption();
+
   decimal dt = env.dt();
   decimal de = 0;
 
   de += baselineEnergyConsumption(_size, _clockSpeed);
-  de += config::Simulation::motorEnergyConsumption()
-        * (std::fabs(_motors[Motor::LEFT]) + std::fabs(_motors[Motor::RIGHT]))
+  de += M * (std::fabs(_motors[Motor::LEFT]) + std::fabs(_motors[Motor::RIGHT]))
         * _clockSpeed * _size;
-  de *= dt;
+  de += _brain.neurons().size() * N + _brain.stats().axons * A;
 
   if (debugMetabolism)
-    std::cerr << CID(this) << " de = " << de << " = "
-              << baselineEnergyConsumption(_size, _clockSpeed) << " + "
-              << config::Simulation::motorEnergyConsumption() << " * "
-              << _clockSpeed << " * " << _size << " * " << dt << std::endl;
+    std::cerr << CID(this) << " de = " << de
+              << "\n\t = " << baselineEnergyConsumption(_size, _clockSpeed)
+              << "\n\t + " << M
+                << " * (" << std::fabs(_motors[Motor::LEFT])
+                << " + " << std::fabs(_motors[Motor::RIGHT]) << ") * "
+                << _clockSpeed << " * " << _size
+              << "\n\t + " << _brain.neurons().size() * N
+              << "\n\t + " << _brain.stats().axons * A
+              << std::endl;
+
+  de *= dt;
 
   de = std::min(de, _energy);
   _energy -= de;

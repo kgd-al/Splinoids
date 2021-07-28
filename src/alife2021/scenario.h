@@ -21,7 +21,7 @@ public:
       EVAL_FOOD = 1<<6,
 
       EVAL_CLONE_INVISIBLE = 1<<7,
-      EVAL_CLONE_MUTE = 1<<8
+      EVAL_CLONE_MUTE = 1<<8,
     };
     Type type;
     P2D food, clone, predator;

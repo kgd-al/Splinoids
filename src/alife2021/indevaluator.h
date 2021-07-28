@@ -33,6 +33,8 @@ struct IndEvaluator {
 
   static Ind fromJsonFile (const std::string &path);
 
+  static std::string specToString (const Specs s, int lesion);
+
   const bool usingV0Scenarios;
   stdfs::path logsSavePrefix, annTagsFile;
 

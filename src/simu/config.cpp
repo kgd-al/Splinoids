@@ -66,9 +66,11 @@ DEFINE_PARAMETER(float, reproductionRequestThreshold, .9)
 
 DEFINE_PARAMETER(float, baselineAgingSpeed, .001)
 DEFINE_PARAMETER(decimal, baselineEnergyConsumption, .0005)
+DEFINE_PARAMETER(decimal, motorEnergyConsumption, .00025)
+DEFINE_PARAMETER(decimal, neuronEnergyConsumption, .00005)
+DEFINE_PARAMETER(decimal, axonEnergyConsumption, .0001)
 DEFINE_PARAMETER(decimal, baselineRegenerationRate, .01)
 DEFINE_PARAMETER(decimal, baselineGametesGrowth, .001)
-DEFINE_PARAMETER(decimal, motorEnergyConsumption, .00025)
 DEFINE_PARAMETER(decimal, energyAbsorptionRate, .025)
 
 DEFINE_PARAMETER(bool, b2FixedBodyCOM, true)

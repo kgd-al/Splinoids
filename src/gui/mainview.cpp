@@ -539,7 +539,13 @@ void MainView::focusOnSelection (void) {
   if (!selection()) return;
 
   static const float &S = config::Visualisation::selectionZoomFactor();
+  if (S == 0) {
+    showAll();
+    return;
+  }
+
   QRectF r = selection()->critterBoundingRect().translated(selection()->pos());
+
 //  qDebug() << S << r;
   if (S != 1) {
     QPointF d (.5*S*r.width(), .5*S*r.height());

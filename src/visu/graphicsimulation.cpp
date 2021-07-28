@@ -229,7 +229,8 @@ void GraphicSimulation::render (QString filename) const {
     printer.setPageSize(QPageSize(srect.size(), QPageSize::Point));
     printer.setPageMargins(QMarginsF(0, 0, 0, 0));
     printer.setOutputFileName(filename);
-    render(&printer, printer.pageRect());
+    render(&printer,
+           printer.pageLayout().paintRectPixels(printer.resolution()));
 
   } else {
     QImage img (srect.size().toSize(), QImage::Format_RGB32);

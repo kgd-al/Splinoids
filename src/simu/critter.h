@@ -13,6 +13,9 @@
 #include "../enumarray.hpp"
 
 DEFINE_PRETTY_ENUMERATION(Motor, LEFT = 1, RIGHT = -1)
+DEFINE_PRETTY_ENUMERATION(MotorOutput,
+                            FORWARD_LEFT = 0,  FORWARD_RIGHT = 1,
+                            BACKWARD_LEFT = 2, BACKWARD_RIGHT = 3)
 
 namespace simu {
 
@@ -197,6 +200,7 @@ private:
    */
   std::array<decimal, 1+2*SPLINES_COUNT> _currHealth;
   std::bitset<2*SPLINES_COUNT> _destroyed;
+  decimal _previousHealth;
 
   // Cached-data for sounds emitted into the environment
   // 0 -> Involuntary (motion, feeding, ...)
@@ -256,7 +260,7 @@ public:
   }
 
   static auto dimorphism (uint i, const Genome &g) {
-    return g.dimorphism[4*g.sex()+i];
+    return g.dimorphism[SPLINES_COUNT*g.sex()+i];
   }
 
   // Dimorphism coefficient for current sex and specified spline

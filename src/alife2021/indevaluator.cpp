@@ -96,28 +96,28 @@ void IndEvaluator::applyNeuralFlags(phenotype::ANN &ann,
       utils::doThrow<std::invalid_argument>(
         "No neuron at position {", pos.x(), ", ", pos.y(), "}");
 
-    iss >> it->second->flags;
+    iss >> (*it)->flags;
   }
 
   if (config::Simulation::verbosity() > 0) {
     std::cout << "Neural flags:\n";
     for (const auto &p: n)
-      std::cout << "\t" << std::setfill(' ') << std::setw(10) << p.first
+      std::cout << "\t" << std::setfill(' ') << std::setw(10) << p->pos
                 << ":\t"
-                << std::bitset<8*sizeof(p.second->flags)>(p.second->flags)
+                << std::bitset<8*sizeof(p->flags)>(p->flags)
                 << "\n";
   }
 }
 
+std::string IndEvaluator::specToString (const Specs s, int lesion) {
+  std::ostringstream oss;
+  oss << Specs::toString(s);
+  if (lesion > 0) oss << "_l" << lesion;
+  return oss.str();
+}
+
 void IndEvaluator::operator() (Ind &ind, int) {
   float totalScore = 0;
-
-  const auto specToString = [this] (const Specs s, int lesion) {
-    std::ostringstream oss;
-    oss << Specs::toString(s);
-    if (lesion > 0) oss << "_l" << lesion;
-    return oss.str();
-  };
 
 #ifndef NDEBUG
   std::vector<phenotype::ANN> brains;
@@ -185,8 +185,8 @@ void IndEvaluator::operator() (Ind &ind, int) {
         nlog.open(savePath / "neurons.dat");
         nlog << stags;
         for (const auto &p: brain.neurons())
-          if (p.second->isHidden())
-            nlog << " (" << p.first.x() << "," << p.first.y() << ")";
+          if (p->isHidden())
+            nlog << " (" << p->pos.x() << "," << p->pos.y() << ")";
         nlog << "\n";
 
         if (!annTagsFile.empty()) {
@@ -208,9 +208,9 @@ void IndEvaluator::operator() (Ind &ind, int) {
           uint c = 0;
           float s = 0;
           for (const auto &p: brain.neurons()) {
-            n[p.second->type]++;
-            c += p.second->links().size();
-            s += p.first.x();
+            n[p->type]++;
+            c += p->links().size();
+            s += p->pos.x();
           }
           slog << "INeurons: " << n[0] << "\n"
                << "ONeurons: " << n[1] << "\n"
@@ -289,8 +289,8 @@ void IndEvaluator::operator() (Ind &ind, int) {
         if (nlog.is_open()) {
           nlog << tags;
           for (const auto &p: brain.neurons())
-            if (p.second->isHidden())
-              nlog << " " << p.second->value;
+            if (p->isHidden())
+              nlog << " " << p->value;
           nlog << "\n";
         }
 

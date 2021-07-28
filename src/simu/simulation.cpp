@@ -274,10 +274,17 @@ void Simulation::init(const Environment::Genome &egenome,
     float x = dice(-CW, CW);
     float y = dice(-CH, CH);
 
-    // TODO
+    /// TODO Test array army
+//    uint n = data.nCritters / 2;
+//    float a = M_PI * (1-bindex);
+//    float x = (bindex ? -1 : +1) * W * (((i/2)%3) + 1) / 4;
+//    float y = -.95 * H + 1.9 * H * int(i / 2) / n;
+
+    // TODO Test 1
 //    if (i == 0) x = -.75, y = .25, a = 0;
 //    if (i == 1) x = -.75, y = -.25, a = 0;
 
+    // TODO Test 2
 //    if (i == 0) x = 49, y = 49, a = M_PI/4;
 //    if (i == 1) x = 47, y = 50-sqrt(2), a = M_PI/2;
 //    if (i == 2) x = 50-sqrt(2), y = 47, a = 0;

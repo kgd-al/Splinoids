@@ -36,7 +36,9 @@ int main(int argc, char *argv[]) {
   std::cerr << config::PTree::rsetSize() << std::endl;
 //  std::cerr << phylogeny::SID::INVALID << std::endl;
 
+  using ANNViewer = kgd::es_hyperneat::gui::ann::Viewer;
   using CGenome = genotype::Critter;
+  using utils::operator<<;
 
   // ===========================================================================
   // == Command line arguments parsing
@@ -56,7 +58,13 @@ int main(int argc, char *argv[]) {
   char overwrite = simu::Simulation::ABORT;
 
   int snapshots = -1;
-  bool withTrace = false; /// TODO not used
+  bool noRestore = false;
+
+  static const std::vector<std::string> validSnapshotViews {
+    "simu", "ann", "mann", "io"
+  };
+  std::vector<std::string> snapshotViews;
+  std::string background;
 
   std::string annRender = ""; // no extension
   std::string annNeuralTags;
@@ -94,8 +102,19 @@ int main(int argc, char *argv[]) {
 
     ("snapshots", "Generate simu+ann snapshots of provided size (batch)",
      cxxopts::value(snapshots)->implicit_value("25"))
-    ("with-trace", "Splinoids leave a trace of their trajectory",
-     cxxopts::value(withTrace)->implicit_value("-1"))
+    ("snapshots-views",
+      ((std::ostringstream&)
+        (std::ostringstream()
+          << "Specifies which views to render. Valid values: "
+          << validSnapshotViews)).str(),
+     cxxopts::value(snapshotViews))
+    ("no-restore", "Don't restore interactive view options",
+     cxxopts::value(noRestore)->implicit_value("true"))
+    ("background", "Override color for the views background",
+     cxxopts::value(background))
+
+    ("trace", "Render trajectories through alpha-increasing traces",
+     cxxopts::value(trace))
 
     ("ann-render", "Export qt-based visualisation of the phenotype's ANN",
      cxxopts::value(annRender)->implicit_value("png"))
@@ -113,8 +132,6 @@ int main(int argc, char *argv[]) {
     ("tags", "Tag items to facilitate reading",
      cxxopts::value(tag)->implicit_value("true"))
 
-    ("trace", "Render trajectories through alpha-increasing traces",
-     cxxopts::value(trace))
     ;
 
   auto result = options.parse(argc, argv);
@@ -162,11 +179,14 @@ int main(int argc, char *argv[]) {
   if (verbosity != Verbosity::QUIET) \
     std::cerr << "Restoring " << #X << ": " << config::Visualisation::X() \
               << "\n";
-  RESTORE(animateANN, bool)
-  RESTORE(brainDeadSelection, BrainDead)
-  RESTORE(selectionZoomFactor, float)
-  RESTORE(drawVision, int)
-  RESTORE(drawAudition, bool)
+
+  if (!noRestore) {
+    RESTORE(animateANN, bool)
+    RESTORE(brainDeadSelection, BrainDead)
+    RESTORE(selectionZoomFactor, float)
+    RESTORE(drawVision, int)
+    RESTORE(drawAudition, bool)
+  }
 
 #undef RESTORE
 
@@ -202,7 +222,7 @@ int main(int argc, char *argv[]) {
                                     phylogeny::GID(0));
 
   scenario.init(cGenome);
-  if (!annNeuralTags.empty() && snapshots == -1 && annRender.empty()) {
+  if (!annNeuralTags.empty() /*&& snapshots == -1 && annRender.empty()*/) {
     phenotype::ANN &ann = scenario.subject()->brain();
     simu::IndEvaluator::applyNeuralFlags(ann, annNeuralTags);
   }
@@ -221,9 +241,20 @@ int main(int argc, char *argv[]) {
   v->select(simulation.critters().at(scenario.subject()));
   if (tag) {
     simulation.visuCritter(scenario.subject())->tag = "S";
-    if (auto c = scenario.clone()) simulation.visuCritter(c)->tag = "A";
+    if (auto c = scenario.clone())    simulation.visuCritter(c)->tag = "A";
     if (auto p = scenario.predator()) simulation.visuCritter(p)->tag = "E";
-    simulation.visuFoodlet(scenario.foodlet())->tag = "G";
+    if (auto f = scenario.foodlet())  simulation.visuFoodlet(f)->tag = "G";
+  }
+
+  if (!background.empty()) {
+    auto p = a.palette();
+    QColor c = QColor(QString::fromStdString(background));
+    if (c.isValid()) {
+      p.setColor(QPalette::Base, c);
+      a.setPalette(p);
+    } else
+      std::cerr << "WARNING: " << background
+                << " is not a valid QColor specification. Ignoring\n";
   }
 
 
@@ -232,40 +263,95 @@ int main(int argc, char *argv[]) {
   // Batch snapshot mode
 
     stdfs::path savefolder = cGenomeArg;
-    savefolder = savefolder.replace_extension() / scenarioArg / "screenshots";
+    savefolder = savefolder.replace_extension()
+                / simu::IndEvaluator::specToString(scenario.specs(), lesions)
+                / "screenshots";
     stdfs::create_directories(savefolder);
 
     config::Visualisation::brainDeadSelection.overrideWith(BrainDead::UNSET);
-    config::Visualisation::drawVision.overrideWith(2);
+//    config::Visualisation::drawVision.overrideWith(2);
     config::Visualisation::drawAudition.overrideWith(0);
 
-    // Create ad-hock widget for rendering
-    QWidget *renderer = new QWidget;
-    renderer->setContentsMargins(0, 0, 0, 0);
-    QGridLayout *layout = new QGridLayout;
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->addWidget(v, 0, 0, 2, 1);
-    layout->addWidget(cs->brainIO(), 0, 1);
-    layout->addWidget(cs->brainPanel()->annViewer, 1, 1);
-    renderer->setLayout(layout);
+//    config::Visualisation::printConfig(std::cout);
 
-    const auto generate = [v, &simulation, &savefolder, renderer, snapshots] {
+    if (snapshotViews.empty())  snapshotViews = validSnapshotViews;
+
+    // Build list of views requested for rendering
+    std::map<std::string, QWidget*> views;
+    std::unique_ptr<phenotype::ModularANN> mann;
+    for (const std::string &v_name: snapshotViews) {
+      QWidget *view = nullptr;
+      if (v_name == "simu") {
+        view = v;
+        v->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        v->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+        QRectF b = simulation.bounds();
+        view->setFixedSize(snapshots, snapshots * b.height() / b.width());
+
+      } else if (v_name == "ann") {
+        view = cs->brainPanel()->annViewerWidget;
+        view->setMinimumSize(snapshots, snapshots);
+
+      } else if (v_name == "io") {
+        view = cs->brainIO();
+        view->setMaximumWidth(snapshots);
+
+      } else if (v_name == "mann" && !annNeuralTags.empty()
+               && annAggregateNeurons) {
+        phenotype::ANN &ann = scenario.subject()->brain();
+        simu::IndEvaluator::applyNeuralFlags(ann, annNeuralTags);
+
+        ANNViewer *av = cs->brainPanel()->annViewer;
+        av->updateCustomColors();
+
+        // Also aggregate similar inputs
+        for (auto &p: ann.neurons()) {
+          phenotype::Point pos = p->pos;
+          phenotype::ANN::Neuron &n = *p;
+          if (n.type == phenotype::ANN::Neuron::I)
+            n.flags = (pos.x() < 0)<<1 | (pos.y() < -.75)<<2 | 1<<3;
+        }
+
+        mann.reset(new phenotype::ModularANN(ann));
+        auto mav = new ANNViewer;
+        mav->setGraph(*mann);
+        mav->updateCustomColors();
+        mav->startAnimation();
+
+        view = mav;
+        view->setMinimumSize(snapshots, snapshots);
+      }
+
+      if (view) views[v_name] = view;
+    }
+
+    // On each step, render all views
+    const auto generate =
+      [v, &simulation, &savefolder, &views, &mann, snapshots] {
       v->focusOnSelection();
       v->characterSheet()->readCurrentStatus();
 
-      std::ostringstream oss;
-      oss << savefolder.string() << "/" << std::setfill('0') << std::setw(5)
-          << simulation.currTime().timestamp() << ".png";
-      auto savepath = oss.str();
-      auto qsavepath = QString::fromStdString(savepath);
+      for (const auto &p: views) {
+        if (p.first == "mann") {
+          mann->update();
+          static_cast<ANNViewer*>(p.second)->updateAnimation();
+        }
 
-      std::cout << "Saving to " << savepath << ": ";
-      if (renderer->grab().scaledToHeight(snapshots, Qt::SmoothTransformation)
-          .save(qsavepath))
-        std::cout << "OK\r";
-      else {
-        std::cout << "FAILED !";
-        exit (1);
+        std::ostringstream oss;
+        oss << savefolder.string() << "/" << std::setfill('0') << std::setw(5)
+            << simulation.currTime().timestamp() << "_" << p.first << ".png";
+        auto savepath = oss.str();
+        auto qsavepath = QString::fromStdString(savepath);
+
+        std::cout << "Saving to " << savepath << ": ";
+        if (p.second->grab()/*.scaledToHeight(snapshots, Qt::SmoothTransformation)*/
+            .save(qsavepath))
+          std::cout << "OK     \r";
+        else {
+          std::cout << "FAILED !";
+          exit (1);
+        }
       }
     };
 
@@ -280,9 +366,9 @@ int main(int argc, char *argv[]) {
   } else if (trace > 0) {
     config::Visualisation::trace.overrideWith(trace);
 
-    config::Visualisation::brainDeadSelection.ref() = BrainDead::UNSET;
-    config::Visualisation::drawVision.ref() = 0;
-    config::Visualisation::drawAudition.ref() = 0;
+    config::Visualisation::brainDeadSelection.overrideWith(BrainDead::UNSET);
+    config::Visualisation::drawVision.overrideWith(0);
+    config::Visualisation::drawAudition.overrideWith(0);
 
     stdfs::path savefolder = cGenomeArg;
     stdfs::path savepath = savefolder.replace_extension();
@@ -301,7 +387,6 @@ int main(int argc, char *argv[]) {
     std::cout << "Saved to: " << savepath << "\n";
 
   } else if (!annRender.empty()) {
-    using ANNViewer = kgd::es_hyperneat::gui::ann::Viewer;
     ANNViewer *av = cs->brainPanel()->annViewer;
     av->stopAnimation();
 
@@ -337,7 +422,8 @@ int main(int argc, char *argv[]) {
         printer.setPageMargins(QMarginsF(0, 0, 0, 0));
         printer.setOutputFileName(qPath);
 
-        doRender(&printer, printer.pageRect());
+        doRender(&printer,
+                 printer.pageLayout().paintRectPixels(printer.resolution()));
       }
     };
 
@@ -355,8 +441,8 @@ int main(int argc, char *argv[]) {
       if (annAggregateNeurons) {
         // Also aggregate similar inputs
         for (auto &p: ann.neurons()) {
-          phenotype::Point pos = p.first;
-          phenotype::ANN::Neuron &n = *p.second;
+          phenotype::Point pos = p->pos;
+          phenotype::ANN::Neuron &n = *p;
           if (n.type == phenotype::ANN::Neuron::I)
             n.flags = (pos.x() < 0)<<1 | (pos.y() < -.75)<<2 | 1<<3;
         }

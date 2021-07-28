@@ -341,10 +341,11 @@ void Scenario::init(Genome genome) {
 
 void Scenario::applyLesions(int lesions) {
   if (lesions == 0) return;
-  std::cout << "Applying lesion type: " << lesions << "\n";
+  std::cout << "Applying lesion type: " << lesions;
 
-  for (auto &pair: _subject->brain().neurons()) {
-    phenotype::ANN::Neuron &n = *pair.second;
+  uint count = 0;
+  for (auto &ptr: _subject->brain().neurons()) {
+    phenotype::ANN::Neuron &n = *ptr;
     for (auto it=n.links().begin(); it!=n.links().end(); ) {
       phenotype::ANN::Neuron &tgt = *(it->in.lock());
       if (tgt.type == phenotype::ANN::Neuron::I
@@ -355,6 +356,7 @@ void Scenario::applyLesions(int lesions) {
                  (lesions == 4 && tgt.pos.y() == -1)    // deactivate red
               || (lesions == 5 && tgt.pos.y() == -.75))))) { // deactivate noise audition
         it = n.links().erase(it);
+        count++;
 //        std::cerr << "Deactivated " << tgt.pos << " -> " << n.pos << "\n";
       } else {
         ++it;
@@ -362,6 +364,8 @@ void Scenario::applyLesions(int lesions) {
       }
     }
   }
+
+  std::cout << " (" << count << " links deleted)\n";
 }
 
 bool splinoid (const Color &c) {

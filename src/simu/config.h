@@ -114,9 +114,11 @@ struct CONFIG_FILE(Simulation) {
   // Splinoid metabolic constants (per second, affected by clock speed)
   DECLARE_PARAMETER(float, baselineAgingSpeed)
   DECLARE_PARAMETER(decimal, baselineEnergyConsumption)
+  DECLARE_PARAMETER(decimal, motorEnergyConsumption)
+  DECLARE_PARAMETER(decimal, neuronEnergyConsumption)   // Per neuron
+  DECLARE_PARAMETER(decimal, axonEnergyConsumption)     // For 1 meter
   DECLARE_PARAMETER(decimal, baselineRegenerationRate)  // Portion of energy
   DECLARE_PARAMETER(decimal, baselineGametesGrowth)  // Portion of energy
-  DECLARE_PARAMETER(decimal, motorEnergyConsumption)
   DECLARE_PARAMETER(decimal, energyAbsorptionRate)
 
   // Durations of world and physics
