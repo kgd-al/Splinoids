@@ -19,9 +19,6 @@ private:
   QPainterPath _body;
   std::array<QPainterPath, SPLINES_COUNT> _artifacts;
 
-  QColor _bcolor;
-  std::array<QColor, SPLINES_COUNT> _acolors;
-
   QPainterPath _visionCone;
 
 #ifndef NDEBUG

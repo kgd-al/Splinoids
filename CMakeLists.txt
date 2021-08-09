@@ -184,6 +184,36 @@ if (EXP_ALIFE2021)
     target_link_libraries(pp-evaluator ${CORE_LIBS})
 endif()
 
+if (EXP_KOMBAT)
+    ############################################################################
+    ## Target (Mortal Kombat ga evolution)
+    ############################################################################
+    set(MK_SRC
+        "scenario.cpp"
+        "scenario.h"
+        "indevaluator.cpp"
+        "indevaluator.h"
+    )
+    PREPEND(MK_SRC "src/mkombat")
+    add_library(MK_OBJS OBJECT ${MK_SRC})
+    add_executable(
+      mk-evolver
+      $<TARGET_OBJECTS:SIMU_OBJS>
+      $<TARGET_OBJECTS:MK_OBJS>
+      "src/mkombat/evolver.cpp")
+    target_link_libraries(mk-evolver ${CORE_LIBS} pthread)
+
+    ############################################################################
+    ## Target (Mortal Kombat evaluation)
+    ############################################################################
+    add_executable(
+      mk-evaluator
+      $<TARGET_OBJECTS:SIMU_OBJS>
+      $<TARGET_OBJECTS:MK_OBJS>
+      "src/mkombat/evaluator.cpp")
+    target_link_libraries(mk-evaluator ${CORE_LIBS})
+endif()
+
 ################################################################################
 ## Graphics
 if (NOT CLUSTER_BUILD)
@@ -293,6 +323,22 @@ if (NOT CLUSTER_BUILD)
         target_link_libraries(pp-visualizer ${CORE_LIBS} ${GUI_LIBS})
     endif()
 
+    if (EXP_KOMBAT)
+    ############################################################################
+    ### Targets (mortal kombat visualizer)
+    ############################################################################
+
+        add_executable(
+            mk-visualizer
+            $<TARGET_OBJECTS:SIMU_OBJS>
+            $<TARGET_OBJECTS:VISU_OBJS>
+            $<TARGET_OBJECTS:MK_OBJS>
+            "src/mkombat/visualizer.cpp"
+        )
+        set_property(TARGET mk-visualizer PROPERTY AUTOMOC ON)
+        target_link_libraries(mk-visualizer ${CORE_LIBS} ${GUI_LIBS})
+    endif()
+
 ################################################################################
 ### Targets (Visu tool)
 ################################################################################
@@ -340,14 +386,49 @@ if(CLUSTER_BUILD)
     add_definitions(-DCLUSTER_BUILD)
 endif()
 
+option(USE_DIMORPHISM "Whether or not model sexual dimorphism" ON)
+message("> Sexual dimorphism is " ${USE_DIMORPHISM})
+if(USE_DIMORPHISM)
+    add_definitions(-DUSE_DIMORPHISM)
+endif()
+if (EXP_ALIFE2021)
+    ############################################################################
+    ## Target (alife2021 ga evolution)
+    ############################################################################
+    set(PP_SRC
+        "scenario.cpp"
+        "scenario.h"
+        "indevaluator.cpp"
+        "indevaluator.h"
+    )
+    PREPEND(PP_SRC "src/alife2021")
+    add_library(PP_OBJS OBJECT ${PP_SRC})
+    add_executable(
+      pp-evolver
+      $<TARGET_OBJECTS:SIMU_OBJS>
+      $<TARGET_OBJECTS:PP_OBJS>
+      "src/alife2021/evolver.cpp")
+    target_link_libraries(pp-evolver ${CORE_LIBS} pthread)
+
+    ############################################################################
+    ## Target (alife2021 evaluation)
+    ############################################################################
+    add_executable(
+      pp-evaluator
+      $<TARGET_OBJECTS:SIMU_OBJS>
+      $<TARGET_OBJECTS:PP_OBJS>
+      "src/alife2021/evaluator.cpp")
+    target_link_libraries(pp-evaluator ${CORE_LIBS})
+endif()
+
 option(EXP_WATCHMAKER "Whether or not to build these targets" OFF)
 message("> Building watchamker target: " ${EXP_WATCHMAKER})
 
 option(EXP_ALIFE2021 "Whether or not to build these targets" OFF)
 message("> Building ALife2021 targets: " ${EXP_ALIFE2021})
 
-option(EXP_COMBAT "Whether or not to build these targets" OFF)
-message("> Building combat targets: " ${EXP_COMBAT})
+option(EXP_KOMBAT "Whether or not to build these targets" OFF)
+message("> Building Mortal Kombat targets: " ${EXP_KOMBAT})
 
 #option(UPDATE_DEPENDENCIES "Whether or not to keep dependency data up-to-date
 #                            (implies extra compilation time)" ON)

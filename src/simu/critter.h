@@ -94,7 +94,7 @@ private:
 
   b2Body &_body;
   b2BodyUserData _objectUserData;
-  Color _currentBodyColor;
+  std::array<Color, 1+2*SPLINES_COUNT> _currentColors;
 
   struct SplineData {
     // Central spline
@@ -259,6 +259,7 @@ public:
     return genotype().sex();
   }
 
+#ifdef USE_DIMORPHISM
   static auto dimorphism (uint i, const Genome &g) {
     return g.dimorphism[SPLINES_COUNT*g.sex()+i];
   }
@@ -267,6 +268,7 @@ public:
   auto dimorphism (uint i) const {
     return dimorphism(i, _genotype);
   }
+#endif
 
   auto pos (void) const {
     return _body.GetPosition();
@@ -480,7 +482,8 @@ public:
   }
 
   auto splineHealthness (uint i, Side s) const {
-    return splineHealth(i, s) / splineMaxHealth(i, s);
+    auto m = splineMaxHealth(i, s);
+    return m == 0 ? 0 : splineHealth(i, s) / m;
   }
 
   const auto& healthArray (void) const {
@@ -540,15 +543,24 @@ public:
   void feed (Foodlet *f, float dt);
 
   const Color& currentBodyColor (void) const {
-    return _currentBodyColor;
+    return _currentColors[0];
   }
 
+#ifdef USE_DIMORPHISM
+#define DIMORPHISM_OFFSET (SPLINES_COUNT+1)*sex()
+#else
+#define DIMORPHISM_OFFSET 0
+#endif
   const Color& initialBodyColor (void) const {
-    return _genotype.colors[(SPLINES_COUNT+1)*sex()];
+    return _genotype.colors[DIMORPHISM_OFFSET];
   }
 
-  const Color& splineColor (uint i) const {
-    return _genotype.colors[(SPLINES_COUNT+1)*sex()+i+1];
+  const Color& currentSplineColor (uint i, Side s) const {
+    return _currentColors[1+SPLINES_COUNT*uint(s)+i];
+  }
+
+  const Color& initialSplineColor (uint i) const {
+    return _genotype.colors[DIMORPHISM_OFFSET+i+1];
   }
 
   bool tooOld (void) const {
@@ -689,7 +701,7 @@ public:
 private:
   Critter (const Genome &g, b2Body *b);
 
-  Color computeCurrentColor(void) const;
+  void updateColors(void);
 
   // ===========================================================================
   // == Iteration substeps

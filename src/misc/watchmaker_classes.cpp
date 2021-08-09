@@ -22,7 +22,8 @@ visu::Critter* SimulationPlaceholder::wmMakeCritter (const Genome &genome) {
   b2Body *body = critterBody(0, 0, 0);
 
   float age = .5 * (genome.matureAge + genome.oldAge);
-  simu::decimal energy = simu::Critter::energyForCreation();
+  simu::decimal energy =
+    simu::Critter::maximalEnergyStorage(simu::Critter::MAX_SIZE);
   simu::Critter *sc = new simu::Critter (genome, body, energy, age);
   simu::Simulation::_critters.insert(sc);
 
@@ -77,7 +78,12 @@ void SplinoidButton::paintEvent (QPaintEvent *e) {
   critter->doPaint(&p);
 }
 
+void SplinoidButton::focusInEvent(QFocusEvent *e) {
+  QToolButton::focusInEvent(e);
+  emit focused();
+}
 
+#ifdef USE_DIMORPHISM
 Splinoids::Splinoids (void) {
   male = new SplinoidButton;
   female = new SplinoidButton;
@@ -94,6 +100,10 @@ void Splinoids::paintEvent(QPaintEvent*) {
   p.drawRect(rect().adjusted(0, 0, -1, -1));
 }
 
+void Splinoids::setFocus(bool female) {
+  (female ? this->female : this->male)->setFocus();
+}
+
 void Splinoids::setGenome (SimulationPlaceholder &s, const Genome &g) {
   Genome gmale = g, gfemale = g;
   gmale.cdata.sex = simu::Critter::Sex::MALE;
@@ -101,4 +111,33 @@ void Splinoids::setGenome (SimulationPlaceholder &s, const Genome &g) {
 
   male->setCritter(s.wmMakeCritter(gmale));
   female->setCritter(s.wmMakeCritter(gfemale));
+
+  phenotype::ANN b = female->critter->object().brain();
+  std::cerr << std::setw(4) << b.neurons().size()
+            << " neurons " << std::setw(6) << b.stats().edges
+            << " edges" << std::endl;
 }
+#else
+Splinoids::Splinoids (void) {
+  button = new SplinoidButton;
+
+  QHBoxLayout *layout = new QHBoxLayout;
+  layout->addWidget(button);
+  layout->setSpacing(0);
+  layout->setContentsMargins(0, 0, 0, 0);
+  setLayout(layout);
+}
+
+void Splinoids::setFocus(bool) {
+  button->setFocus();
+}
+
+void Splinoids::setGenome (SimulationPlaceholder &s, const Genome &g) {
+  button->setCritter(s.wmMakeCritter(g));
+
+  phenotype::ANN b = button->critter->object().brain();
+  std::cerr << std::setw(4) << b.neurons().size()
+            << " neurons " << std::setw(6) << b.stats().edges
+            << " edges" << std::endl;
+}
+#endif

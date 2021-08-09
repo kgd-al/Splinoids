@@ -32,6 +32,8 @@ static const QMap<Sex, QColor> sexColors {
   { Sex::FEMALE, QColor::fromRgbF(1.,  .6,  .6) },
 };
 
+using Side = simu::Critter::Side;
+
 Critter::Critter(simu::Critter &critter)
   : _critter(critter), _prevState(critter) {
 
@@ -40,10 +42,6 @@ Critter::Critter(simu::Critter &critter)
   setZValue(2);
   updatePosition();
   updateShape();
-
-  _bcolor = toQt(critter.currentBodyColor());
-  for (uint i=0; i<SPLINES_COUNT; i++)
-    _acolors[i] = toQt(critter.splineColor(i));
 }
 
 void Critter::updatePosition (void) {
@@ -69,8 +67,6 @@ void Critter::update (void) {
   if (newState.pos != _prevState.pos) updatePosition();
 
   if (config::Visualisation::trace() > 0) trace.push_back(pos());
-
-  _bcolor = toQt(_critter.currentBodyColor());
 
   bool changed = false;
   for (uint i=0; i<_prevState.masses.size() && !changed; i++)
@@ -252,15 +248,13 @@ void Critter::paint(QPainter *painter,
 
 QColor Critter::bodyColor(void) const {
   switch (config::Visualisation::renderType()) {
-  case RenderingType::REGULAR:  return _bcolor;
+  case RenderingType::REGULAR:  return toQt(_critter.currentBodyColor());
   case RenderingType::ENERGY: {
     float r = float(_critter.usableEnergy() / _critter.maxUsableEnergy());
     return QColor::fromRgbF(r, r, 0);
   }
-  case RenderingType::HEALTH: {
-    float r = float(_critter.bodyHealth() / _critter.bodyMaxHealth());
-    return QColor::fromRgbF(r, 0, 0);
-  }
+  case RenderingType::HEALTH:
+    return QColor::fromRgbF(_critter.bodyHealthness(), 0, 0);
   }
   assert(false);
   return QColor();
@@ -268,12 +262,10 @@ QColor Critter::bodyColor(void) const {
 
 QColor Critter::splineColor(uint i, Side s) const {
   switch (config::Visualisation::renderType()) {
-  case RenderingType::REGULAR:  return _acolors[i];
+  case RenderingType::REGULAR:  return toQt(_critter.currentSplineColor(i,s));
   case RenderingType::ENERGY:   return QColor(Qt::black);
-  case RenderingType::HEALTH: {
-    float r = float(_critter.splineHealth(i, s) / _critter.splineMaxHealth(i, s));
-    return QColor::fromRgbF(r, 0, 0);
-  }
+  case RenderingType::HEALTH:
+    return QColor::fromRgbF(_critter.splineHealthness(i, s), 0, 0);
   }
   assert(false);
   return QColor();
@@ -609,9 +601,9 @@ QPixmap Critter::renderPhenotype(void) const {
 
 void Critter::printPhenotypePng (const QString &filename) const {
   QPixmap pixmap = renderPhenotype();
-  qDebug() << "Critter bounding rects are:";
-  qDebug() << "\tminimal: " << _minimalBoundingRect;
-  qDebug() << "Pixmap size is" << pixmap.size();
+//  qDebug() << "Critter bounding rects are:";
+//  qDebug() << "\tminimal: " << _minimalBoundingRect;
+//  qDebug() << "Pixmap size is" << pixmap.size();
   bool ok = pixmap.save(filename);
   qDebug().nospace() << (ok ? "Saved" : " Failed to save") << " C"
                      << uint(_critter.id()) << " to " << filename;

@@ -9,6 +9,12 @@ QColor toQt (const simu::Color &c) {
   return QColor::fromRgbF(c[0], c[1], c[2], 1);
 }
 
+simu::Color fromQt (const QColor &qc) {
+  return simu::Color {
+    float(qc.redF()), float(qc.greenF()), float(qc.blueF())
+  };
+}
+
 namespace config {
 #define CFILE Visualisation
 

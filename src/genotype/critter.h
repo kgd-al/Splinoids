@@ -33,8 +33,6 @@ public:
 
   Spline (void);
   Spline (const Data &data) : data(data) {}
-
-  static Spline zero (void);
 };
 
 DECLARE_GENOME_FIELD(Spline, Spline::Data, data)
@@ -65,10 +63,14 @@ public:
   using Splines = std::array<Spline, SPLINES_COUNT>;
   Splines splines;
 
+#ifdef USE_DIMORPHISM
   using Dimorphism = std::array<float, 2*SPLINES_COUNT>;
   Dimorphism dimorphism;
 
   using Colors = std::array<Color, 2*(SPLINES_COUNT+1)>;
+#else
+  using Colors = std::array<Color, SPLINES_COUNT+1>;
+#endif
   Colors colors;
 
   Vision vision;
@@ -160,7 +162,9 @@ public:
 };
 
 DECLARE_GENOME_FIELD(Critter, Critter::Splines, splines)
+#ifdef USE_DIMORPHISM
 DECLARE_GENOME_FIELD(Critter, Critter::Dimorphism, dimorphism)
+#endif
 DECLARE_GENOME_FIELD(Critter, Critter::Colors, colors)
 DECLARE_GENOME_FIELD(Critter, Vision, vision)
 DECLARE_GENOME_FIELD(Critter, BOCData, cdata)
@@ -198,10 +202,13 @@ template <>
 struct EDNA_CONFIG_FILE(Critter) {
   DECLARE_PARAMETER(MutationRates, dimorphism_mutationRates)
 
-  using BC = Bounds<genotype::Color::value_type>;
+//  using BC = Bounds<genotype::Color::value_type>;
+//  DECLARE_PARAMETER(BC, color_bounds)
+//  static constexpr float COLOR_MIN = .25f;
+//  static constexpr float COLOR_MAX = .75f;
+
+  using BC = Bounds<genotype::Color>;
   DECLARE_PARAMETER(BC, color_bounds)
-  static constexpr float COLOR_MIN = .25f;
-  static constexpr float COLOR_MAX = .75f;
 
   DECLARE_PARAMETER(MutationRates, colors_mutationRates)
 
@@ -213,6 +220,7 @@ struct EDNA_CONFIG_FILE(Critter) {
 
   using Crossover = genotype::BOCData::config_t;
   DECLARE_SUBCONFIG(Crossover, configCrossover)
+  DECLARE_SUBCONFIG(genotype::Spline::config_t, configSplines)
   DECLARE_SUBCONFIG(genotype::Vision::config_t, configVision)
   DECLARE_SUBCONFIG(config::EvolvableSubstrate, configBrain)
 

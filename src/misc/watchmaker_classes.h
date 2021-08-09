@@ -30,8 +30,15 @@ public:
   QSize sizeHint (void) const override;
 
   void paintEvent (QPaintEvent *e);
+
+signals:
+  void focused (void);
+
+protected:
+  void focusInEvent(QFocusEvent *e);
 };
 
+#ifdef USE_DIMORPHISM
 struct Splinoids : public QWidget {
   Q_OBJECT
 public:
@@ -41,5 +48,20 @@ public:
 
   void setGenome (SimulationPlaceholder &s, const Genome &g);
 
+  void setFocus (bool female = true);
+
   void paintEvent(QPaintEvent *e);
 };
+#else
+struct Splinoids : public QWidget {
+  Q_OBJECT
+public:
+  SplinoidButton *button;
+
+  Splinoids (void);
+
+  void setGenome (SimulationPlaceholder &s, const Genome &g);
+
+  void setFocus (bool = true);
+};
+#endif

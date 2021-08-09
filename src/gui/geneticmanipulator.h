@@ -42,10 +42,16 @@ public:
 
   using SplineDataSliders = std::array<GeneSlider*, SD_v>;
   using SplineSliders = std::array<SplineDataSliders, S_v>;
+
+#ifdef USE_DIMORPHISM
   using DimorphismSliders = std::array<std::array<GeneSlider*, 2>, S_v>;
 
   using SplineColorPickers = std::array<std::array<GeneColorPicker*, 2>, S_v>;
   using BodyColorPickers = std::array<GeneColorPicker*, 2>;
+#else
+  using SplineColorPickers = std::array<GeneColorPicker*, S_v>;
+  using BodyColorPicker = GeneColorPicker*;
+#endif
 
   using VisionSliders = std::array<GeneSlider*, 4>;
 
@@ -57,10 +63,18 @@ private:
   visu::Critter *_subject;
 
   SplineSliders _sSliders;
+
+#ifdef USE_DIMORPHISM
   DimorphismSliders _dSliders;
+#endif
 
   SplineColorPickers _sPickers;
+
+#ifdef USE_DIMORPHISM
   BodyColorPickers _bPickers;
+#else
+  BodyColorPicker _bPicker;
+#endif
 
   VisionSliders _vSliders;
 
@@ -122,6 +136,8 @@ public:
 
   void printSubjectPhenotype (void);
   void printSubjectPhenotype (const QString &filename) const;
+
+  void updateVisu (void);
 
 signals:
   void keyReleased (QKeyEvent *e);

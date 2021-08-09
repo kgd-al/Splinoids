@@ -13,24 +13,64 @@ Spline::Spline (void)
     0, 0, 0
   } {}
 
-Spline Spline::zero(void) {
-  return Spline ();
-}
+using I = Spline::Index;
+struct SplineMaker {
+  Spline::Data d;
+  SplineMaker (void) {
+    d.fill(NAN);
+  }
+  SplineMaker& operator() (I i, float v) {
+    d[i] = v;
+    return *this;
+  }
+  auto operator() (void) {
+    if (std::any_of(d.begin(), d.end(),
+                    static_cast<bool(*)(float)>(std::isnan)))
+      utils::doThrow<std::invalid_argument>(
+        "Uninitialized field in spline: ", d, "!");
+    return d;
+  }
+};
+
 
 #define GENOME Spline
 
 using D = GENOME::Data;
 DEFINE_GENOME_FIELD_WITH_BOUNDS(D, data, "",
-  D {    0,
-     -M_PI/2., 0,
-         0, -1, 0, -1,
-         0, 0, 0 },
-//  S { 0, -M_PI, 1, 0, 1, 0, 1, 0, 0, 0 },
-//  S { 0, -M_PI, 1, 0, 1, 0, 1, 0, 0, 0 },
-  D { M_PI,
-      M_PI/2., 1,
-      1, 1, 1, 1,
-      .5, .5, .5 }
+  SplineMaker()
+    (I::SA, 0)
+    (I::EA, -M_PI/2) (I::EL, 0)
+    (I::DX0, 0)(I::DY0, -1)(I::DX1, 0)(I::DY1, -1)
+    (I::W0, 0) (I::W1, 0) (I::W2, 0)
+    (),
+
+  SplineMaker()
+    (I::SA, 0)
+    (I::EA, 0) (I::EL, 0)
+    (I::DX0, 0)(I::DY0, 0)(I::DX1, 0)(I::DY1, 0)
+    (I::W0, 0) (I::W1, 0) (I::W2, 0)
+    (),
+
+  SplineMaker()
+    (I::SA, M_PI)
+    (I::EA, 0) (I::EL, 0)
+    (I::DX0, 1)(I::DY0, 0)(I::DX1, 1)(I::DY1, 0)
+    (I::W0, 0) (I::W1, 0) (I::W2, 0)
+    (),
+
+  SplineMaker()
+    (I::SA, M_PI)
+    (I::EA, M_PI/2) (I::EL, 1)
+    (I::DX0, 1)(I::DY0, 1)(I::DX1, 1)(I::DY1, 1)
+    (I::W0, .5) (I::W1, .5) (I::W2, .5)
+    (),
+
+  config::MutationSettings::stddev_t<D>::type {
+      1e-2,
+      1e-1, 1e-1,
+      2e-1, 2e-1, 2e-1, 2e-1,
+      1e-1, 1e-1, 1e-1
+  }
 )
 
 DEFINE_GENOME_MUTATION_RATES({
@@ -87,8 +127,7 @@ auto sexualityFunctor = [] {
     return Critter::ASEXUAL;
   };
 
-  functor.mutate = [] (auto &/*a*/, auto &/*dice*/) {
-  };
+  functor.mutate = [] (auto &/*a*/, auto &/*dice*/) { (void)log; };
 
   functor.cross = [] (auto &lhs, auto &rhs, auto &dice) {
     return dice.toss(lhs, rhs);
@@ -114,13 +153,17 @@ using S = Ss::value_type;
 auto splinesFunctor = [] {
   GENOME_FIELD_FUNCTOR(Ss, splines) functor;
 
-  functor.random = [] (auto&) {
-    return Ss {};
+  functor.random = [] (auto &dice) {
+    Ss set;
+    for (S &s: set) s = S::random(dice);
+    return set;
   };
 
   functor.mutate = [] (auto &set, auto &dice) {
-    auto &s = *dice(set.begin(), set.end());
-    for (uint i=0; i<10; i++) s.mutate(dice);
+    auto it = dice(set.begin(), set.end());
+    if (log())
+      std::cerr << " at index " << std::distance(set.begin(), it) << "\n\t";
+    it->mutate(dice);
   };
 
   functor.cross = [] (auto &lhs, auto &rhs, auto &dice) {
@@ -147,6 +190,7 @@ auto splinesFunctor = [] {
 };
 DEFINE_GENOME_FIELD_WITH_FUNCTOR(Ss, splines, "", splinesFunctor())
 
+#ifdef USE_DIMORPHISM
 using Dm = GENOME::Dimorphism;
 auto dimorphismFunctor = [] {
   GENOME_FIELD_FUNCTOR(Dm, dimorphism) functor;
@@ -161,6 +205,7 @@ auto dimorphismFunctor = [] {
     auto dmRates = Config::dimorphism_mutationRates();
     std::string field = dice.pickOne(dmRates);
     uint i = dice(uint(0), 2*C-1);
+    if (log()) std::cerr << " no log for dimorphism mutations";
     if (field == "zero")        set[i] = 0;
     else if (field == "one")    set[i] = 1;
     else if (field == "equal")  set[i] = set[(i+C)%(2*C)];
@@ -190,7 +235,7 @@ auto dimorphismFunctor = [] {
   return functor;
 };
 DEFINE_GENOME_FIELD_WITH_FUNCTOR(Dm, dimorphism, "", dimorphismFunctor())
-
+#endif
 
 using Cs = GENOME::Colors;
 auto colorsFunctor = [] {
@@ -204,8 +249,8 @@ auto colorsFunctor = [] {
     static const Config::BC &bounds = Config::color_bounds();
     Cs colors;
     for (Color &c: colors)
-      for (Color::value_type &v: c)
-        v = dice(bounds.rndMin, bounds.rndMax);
+      for (uint j=0; j<Cn; j++)
+        c[j] = dice(bounds.rndMin[j], bounds.rndMax[j]);
     return colors;
   };
 
@@ -214,19 +259,27 @@ auto colorsFunctor = [] {
     static const auto &dmRates = Config::colors_mutationRates();
     std::string field = dice.pickOne(dmRates);
     uint i = dice(Cs::size_type(0), colors.size()-1);
-    if (field == "monomorphism")
+    if (field == "monomorphism") {
       colors[i] = colors[(i+Csn)%(2*Csn)];
+      if (log()) std::cerr << " sexual monomorphism at index " << i;
 
-    else if (field == "homogeneous") {
+    } else if (field == "homogeneous") {
       uint j = i;
       while (j == i) {
         j = dice(Csn*floor(j/Csn), Csn*(1+floor(j/Csn))-1);
       }
       colors[i] = colors[j];
+      if (log()) std::cerr << " color[" << i << "] <- color[" << j << "]";
 
     } else if (field == "mutate") {
-      uint j = dice(Color::size_type(0), Cn-1);
-      MO::mutate(colors[i][j], bounds.min, bounds.max, dice);
+      /// TODO Deactivated red component mutation
+      uint j = dice(Color::size_type(1), Cn-1);
+      if (log())
+        std::cerr << " mutating color[" << i << "][" << j << "] from "
+                  << colors[i][j];
+      MO::mutate(colors[i][j], bounds.min[j], bounds.max[j], bounds.stddev[j],
+                 dice);
+      if (log())  std::cerr << " to " << colors[i][j];
     }
   };
 
@@ -243,7 +296,7 @@ auto colorsFunctor = [] {
       float d = 0;
     for (uint i=0; i<2*Csn; i++)
       for (uint j=0; j<Cn; j++)
-        d += MO::distance(lhs[i][j], rhs[i][j], bounds.min, bounds.max);
+        d += MO::distance(lhs[i][j], rhs[i][j], bounds.min[j], bounds.max[j]);
     return d;
   };
 
@@ -251,8 +304,8 @@ auto colorsFunctor = [] {
     static const Config::BC &bounds = Config::color_bounds();
     bool ok = true;
     for (auto &c: colors)
-      for (auto &v: c)
-        ok &= MO::check(v, bounds.min, bounds.max);
+      for (uint j=0; j<Cn; j++)
+        ok &= MO::check(c[j], bounds.min[j], bounds.max[j]);
     return ok;
   };
 
@@ -260,9 +313,19 @@ auto colorsFunctor = [] {
 };
 DEFINE_GENOME_FIELD_WITH_FUNCTOR(Cs, colors, "", colorsFunctor())
 
+#ifdef USE_DIMORPHISM
+#define DIMORPHISM_MR EDNA_PAIR(   dimorphism, 1.5 * std::tuple_size_v<Dm>),
+#define DIMORPHISM_DW EDNA_PAIR(   dimorphism, std::tuple_size_v<Dm> + 1),
+#else
+#define DIMORPHISM_MR
+#define DIMORPHISM_DW
+#endif
+
 DEFINE_GENOME_MUTATION_RATES({
   EDNA_PAIR(      splines, std::tuple_size_v<Ss> * std::tuple_size_v<D>),
-  EDNA_PAIR(   dimorphism, 1.5 * std::tuple_size_v<Dm>),
+
+  DIMORPHISM_MR
+
   EDNA_PAIR(       colors, .5*std::tuple_size_v<Cs>),
   EDNA_PAIR(       vision, 4),
   EDNA_PAIR(minClockSpeed, 1),
@@ -277,7 +340,9 @@ DEFINE_GENOME_MUTATION_RATES({
 })
 DEFINE_GENOME_DISTANCE_WEIGHTS({
   EDNA_PAIR(      splines, std::tuple_size_v<Ss> * std::tuple_size_v<D>),
-  EDNA_PAIR(   dimorphism, std::tuple_size_v<Dm> + 1),
+
+  DIMORPHISM_DW
+
   EDNA_PAIR(       colors, std::tuple_size_v<Cs>),
   EDNA_PAIR(       vision, 4),
   EDNA_PAIR(minClockSpeed, 1),
@@ -323,6 +388,7 @@ struct genotype::Extractor<Ss> {
   }
 };
 
+#ifdef USE_DIMORPHISM
 template <>
 struct genotype::MutationRatesPrinter<Dm, GENOME, &GENOME::dimorphism> {
   static constexpr bool recursive = true;
@@ -344,6 +410,7 @@ struct genotype::Extractor<Dm> {
     return "Not implemented";
   }
 };
+#endif
 
 template <>
 struct genotype::MutationRatesPrinter<Cs, GENOME, &GENOME::colors> {
@@ -352,8 +419,10 @@ struct genotype::MutationRatesPrinter<Cs, GENOME, &GENOME::colors> {
     const auto &r = Config::colors_mutationRates();
 
 #define F(X) r.at(X), X
-    prettyPrintMutationRate(os, width, depth, ratio, F("homogeneous"), false);
+#ifdef USE_DIMORPHISM
     prettyPrintMutationRate(os, width, depth, ratio, F("monomorphism"), false);
+#endif
+    prettyPrintMutationRate(os, width, depth, ratio, F("homogeneous"), false);
     prettyPrintMutationRate(os, width, depth, ratio, F("mutate"), false);
 #undef F
   }
@@ -370,10 +439,12 @@ struct genotype::Extractor<Cs> {
 
 #define CFILE genotype::Critter::config_t
 
+DEFINE_SUBCONFIG(genotype::Spline::config_t, configSplines)
 DEFINE_SUBCONFIG(genotype::Vision::config_t, configVision)
 DEFINE_SUBCONFIG(Config::Crossover, configCrossover)
 DEFINE_SUBCONFIG(config::EvolvableSubstrate, configBrain)
 
+#ifdef USE_DIMORPHISM
 DEFINE_CONTAINER_PARAMETER(CFILE::MutationRates, dimorphism_mutationRates,
                            utils::normalizeRates({
   {  "zero",  .5f },
@@ -382,15 +453,24 @@ DEFINE_CONTAINER_PARAMETER(CFILE::MutationRates, dimorphism_mutationRates,
   {   "mut", 7.f  },
 }))
 
+#define COLOR_DIMORPHISM_MUTATION_RATES { "monomorphism", 9.f  },
+#else
+#define COLOR_DIMORPHISM_MUTATION_RATES
+#endif
+
+
 DEFINE_CONTAINER_PARAMETER(CFILE::MutationRates, colors_mutationRates,
                            utils::normalizeRates({
   {  "homogeneous", Critter::SPLINES_COUNT > 0 ? 1 : 0  },
-  { "monomorphism", 9.f  },
+  COLOR_DIMORPHISM_MUTATION_RATES
   {       "mutate", 490.f  },
 }))
 
+genotype::Color color (float g, float b) {
+  return {0,g,b};
+}
 DEFINE_PARAMETER(CFILE::BC, color_bounds,
-                 CFILE::COLOR_MIN, CFILE::COLOR_MIN,
-                 CFILE::COLOR_MAX, CFILE::COLOR_MAX)
+                 color(.1,.1),    color(.25,.25),
+                 color(.75,.75),  color(1,1))
 
 #undef CFILE

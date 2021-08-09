@@ -168,7 +168,6 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
 
   _masses.fill(0);
   _currHealth.fill(0);
-  _currentBodyColor = computeCurrentColor();
 
   updateShape();  
 
@@ -220,6 +219,7 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
 //  std::cerr << std::endl;
   generateVisionRays();
   buildBrain();
+  updateColors();
 
   _feedingSources.fill(0);
 
@@ -251,12 +251,28 @@ void Critter::buildBrain(void) {
   add(inputs, 0.f, -1.f, -1.f);   // health variation
 
   // Vision
+  std::set<float> tmpXCoords;
+//  std::cerr << "VRays\n";
   for (const simu::P2D &r: _raysEnd) {
     float a = std::atan2(r.y, r.x);
     assert(-M_PI <= a && a <= M_PI);
-    float x = -a / M_PI;
+    float x = int(Point::RATIO * (-a / M_PI)) / float(Point::RATIO);
     assert(-1 <= x && x <= 1);
 
+//    std::cerr << "\t" << x << "\n";
+    auto res = tmpXCoords.insert(x);
+    if (!res.second) {
+//      std::cerr << "\t\tduplicate\n";
+      auto x_ = *res.first;
+      tmpXCoords.erase(res.first);
+      tmpXCoords.insert(x_ + Point::EPSILON);
+      x -= Point::EPSILON;
+      auto res2 = tmpXCoords.insert(x);
+      assert(res2.second);
+    }
+  }
+
+  for (const float &x: tmpXCoords) {
 #if ESHN_SUBSTRATE_DIMENSION == 2
     for (uint i=0; i<3; i++) add(inputs, x, -1+i*.25f / 3.f);
 #elif ESHN_SUBSTRATE_DIMENSION == 3
@@ -331,7 +347,7 @@ void Critter::step(Environment &env) {
   aging(env);
 
   // Udate appearance
-  _currentBodyColor = computeCurrentColor();
+  updateColors();
 
   // Miscellaneous updates
   _previousHealth = bodyHealth();
@@ -749,7 +765,10 @@ void Critter::generateSplinesData (float r, float e, const Genome &g,
   for (uint i=0; i<SPLINES_COUNT; i++) {
     const genotype::Spline::Data &d = g.splines[i].data;
     SplineData &sd = sda[i];
-    float w = dimorphism(i, g) * e;
+    float w = e;
+#ifdef USE_DIMORPHISM
+    w *= dimorphism(i, g);
+#endif
 
     P2D p0 = fromPolar(d[S::SA], r); SET(sd.p0, p0)
 
@@ -987,7 +1006,7 @@ b2Fixture* Critter::addBodyFixture (void) {
   fd.filter.categoryBits = uint16(CollisionFlag::CRITTER_BODY_FLAG);
   fd.filter.maskBits = uint16(CollisionFlag::CRITTER_BODY_MASK);
 
-  FixtureData cfd (FixtureType::BODY, _currentBodyColor);
+  FixtureData cfd (FixtureType::BODY, currentBodyColor());
 
   return addFixture(fd, cfd);
 }
@@ -1038,7 +1057,7 @@ b2Fixture* Critter::addPolygonFixture (uint splineIndex, Side side,
   fd.filter.categoryBits = uint16(CollisionFlag::CRITTER_SPLN_FLAG);
   fd.filter.maskBits = uint16(CollisionFlag::CRITTER_SPLN_MASK);
 
-  FixtureData cfd (FixtureType::ARTIFACT, splineColor(splineIndex),
+  FixtureData cfd (FixtureType::ARTIFACT, currentSplineColor(splineIndex, side),
                    splineIndex, side, artifactIndex);
 
   return addFixture(fd, cfd);
@@ -1118,7 +1137,10 @@ void Critter::updateObjects(void) {
   _masses[0] = massData.mass;
 
   for (uint i=0; i<SPLINES_COUNT; i++) {
+#ifdef USE_DIMORPHISM
     if (dimorphism(i) == 0) continue;
+#endif
+
     if (destroyedSpline(i, Side::LEFT) && destroyedSpline(i, Side::RIGHT))
       continue;
 
@@ -1221,17 +1243,23 @@ void Critter::updateObjects(void) {
 // =============================================================================
 // == Unsorted stuff
 
-Color Critter::computeCurrentColor(void) const {
-  Color color = initialBodyColor();
-  static constexpr auto CM = Genome::config_t::COLOR_MIN;
-  float h = bodyHealthness();
-  if (h < 1)  for (float &v: color) v = CM + h * (v-CM);
-  if (requestingMating(reproductionType())) color[0] = 1;
+void Critter::updateColors(void) {
+  _currentColors[0] = initialBodyColor();
+  _currentColors[0][0] = 1-bodyHealthness();
+
+  for (Side s: {Side::LEFT, Side::RIGHT}) {
+    for (uint i=0; i<SPLINES_COUNT; i++) {
+      auto c = initialSplineColor(i);
+      c[0] = 1 - splineHealthness(i, s);
+      _currentColors[1+SPLINES_COUNT*uint(s)+i] = c;
+    }
+  }
+
+  /// TODO Decide
+//  if (requestingMating(reproductionType())) color[0] = 1;
 
 //  using utils::operator <<;
 //  std::cerr << CID(this) << " body color: " << color << std::endl;
-
-  return color;
 }
 
 void Critter::setMotorOutput(float i, Motor m) {
@@ -1456,7 +1484,7 @@ Critter* Critter::load (const nlohmann::json &j, b2Body *body) {
   return c;
 }
 
-void Critter::saveBrain (const std::string &prefix) const {
+void Critter::saveBrain (const std::string &/*prefix*/) const {
 //  std::string cppn_f = prefix + "_cppn.dot";
 //  std::ofstream cppn_ofs (cppn_f);
 //  _genotype.brain.toDot(cppn_ofs);
@@ -1473,8 +1501,10 @@ Critter* Critter::clone(const Critter *c, b2Body *b) {
   const auto cloneFixtureData =
       [] (Critter *newC, const Critter *oldC, b2Fixture *oldFixture) {
     const FixtureData &d = oldC->_b2FixturesUserData.at(oldFixture);
-    const Color &c = (d.type == FixtureType::BODY ? newC->currentBodyColor()
-                                                  : newC->splineColor(d.sindex));
+    const Color &c =
+      (d.type == FixtureType::BODY ? newC->currentBodyColor()
+                                   : newC->currentSplineColor(d.sindex,
+                                                              d.sside));
     return FixtureData (d.type, c, d.sindex, d.sside, d.aindex);
   };
 
@@ -1487,7 +1517,7 @@ Critter* Critter::clone(const Critter *c, b2Body *b) {
   COPY(_size);
 
   COPY(_objectUserData);
-  COPY(_currentBodyColor);
+  COPY(_currentColors);
 
   COPY(_splinesData);
 
@@ -1572,7 +1602,7 @@ void assertEqual (const Critter &lhs, const Critter &rhs, bool deepcopy) {
   ASRT(_size);
   ASRT(_body);
   ASRT(_objectUserData);
-  ASRT(_currentBodyColor);
+  ASRT(_currentColors);
   ASRT(_splinesData);
   ASRT(_b2Body);
   ASRT(_b2Artifacts);

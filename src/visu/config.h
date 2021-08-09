@@ -7,7 +7,9 @@
 #include <QColor>
 
 QPointF toQt (const simu::P2D &p);
+
 QColor toQt (const simu::Color &c);
+simu::Color fromQt (const QColor &qc);
 
 DEFINE_PRETTY_ENUMERATION(RenderingType, REGULAR, ENERGY, HEALTH)
 DEFINE_PRETTY_ENUMERATION(BrainDead, IGNORE = -1, UNSET = 0, SET = 1)

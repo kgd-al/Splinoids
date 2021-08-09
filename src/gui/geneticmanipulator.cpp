@@ -178,8 +178,10 @@ static constexpr const char *snames [] {
   "EA", "EL",
   "DX0", "DY0", "DX1", "DY1",
   "W0", "W1", "W2",
+#ifdef USE_DIMORPHISM
   "",
   "XX", "XY"
+#endif
 };
 
 using SData = GeneticManipulator::SData;
@@ -234,10 +236,13 @@ private:
 
 // =============================================================================
 
-static constexpr const char *cnames [] {
-  "SXX", "BXX", "SXY", "BXY"
-};
-
+#ifdef USE_DIMORPHISM
+static constexpr uint cnames_count = 4;
+static constexpr const char *cnames [] {  "SXX", "BXX", "SXY", "BXY"  };
+#else
+static constexpr uint cnames_count = 2;
+static constexpr const char *cnames [] {  "S", "B"  };
+#endif
 
 struct ColorLabel : public QLabel {
   using Color = genotype::Color;
@@ -323,7 +328,7 @@ public:
 struct GeneColorPicker : public ColorLabel {
   template <typename B>
   GeneColorPicker (const B &b, uint i, uint j)
-    : i(i), j(j), min(b.min), max(b.max), readonly(false) {}
+    : i(i), j(j), /*min(b.min), max(b.max),*/ readonly(false) {}
 
   void setReadOnly (bool r) {
     readonly = r;
@@ -335,6 +340,10 @@ struct GeneColorPicker : public ColorLabel {
     setEnabled(false);
   }
 
+  Color geneValue (void) {
+    return fromQt(color);
+  }
+
   void setGeneValue (const Color &c) {
     setColorValue(c);
     setEnabled(true && !readonly);
@@ -344,11 +353,18 @@ struct GeneColorPicker : public ColorLabel {
     auto selected = QColorDialog::getColor(color, this);
     qDebug() << "requested color change from" << color << "to"
              << selected;
+    if (selected.isValid()) {
+      setColorValue(selected);
+//      emit valueChanged(geneValue());
+    }
   }
+
+signals:
+  void valueChanged (const Color &c);
 
 private:
   const uint i, j;
-  const Color::value_type min, max;
+//  const Color::value_type min, max;
   bool readonly;
 };
 
@@ -716,11 +732,12 @@ void GeneticManipulator::buildGenesLayout(void) {
     for (uint j=0; j<SD_v; j++) {
       GeneSlider *s;
       splinesLayout->addWidget(s = _sSliders[i][j]
-                                = new GeneSlider(sBounds, i, j), j, i);
+                                 = new GeneSlider(sBounds, i, j), j, i);
       connect(s, &GeneSlider::valueChanged,
               this, &GeneticManipulator::updateGeneValue);
     }
 
+#ifdef USE_DIMORPHISM
     for (uint j=0; j<2; j++) {
       GeneSlider *s;
       splinesLayout->addWidget(s = _dSliders[i][j]
@@ -728,12 +745,15 @@ void GeneticManipulator::buildGenesLayout(void) {
       connect(s, &GeneSlider::valueChanged,
               this, &GeneticManipulator::updateGeneValue);
     }
+#endif
   }
 
-  for (uint j=0; j<SD_v+3; j++)
+  for (uint j=0; j<sizeof(snames) / sizeof(char*); j++)
     splinesLayout->addWidget(new QLabel(snames[j]), j, S_v);
 
+#ifdef USE_DIMORPHISM
   splinesLayout->addWidget(line("Dimorphism"), SD_v, 0, 1, -1);
+#endif
 #endif
 
   QGridLayout *colorsLayout = new QGridLayout;
@@ -742,23 +762,34 @@ void GeneticManipulator::buildGenesLayout(void) {
 
   // Splines colors
   for (uint i=0; i<S_v; i++) {
+#ifdef USE_DIMORPHISM
     for (uint j=0; j<2; j++) {
       GeneColorPicker *p;
       colorsLayout->addWidget(p = _sPickers[i][j]
                                 = new GeneColorPicker (cBounds, i, j), 2*j, i);
     }
+#else
+    GeneColorPicker *p;
+    colorsLayout->addWidget(p = _sPickers[i]
+                              = new GeneColorPicker (cBounds, i, 0), 0, i);
+#endif
   }
 
   // Body colors
   uint lx = std::max(1u, S_v);
+#ifdef USE_DIMORPHISM
   for (uint j=0; j<2; j++) {
     GeneColorPicker *p;
     colorsLayout->addWidget(p = _bPickers[j]
                               = new GeneColorPicker (cBounds, 0, j+S_v),
                             2*j+1, 0, 1, lx);
   }
+#else
+  colorsLayout->addWidget(_bPicker = new GeneColorPicker (cBounds, 0, S_v),
+                          1, 0, 1, lx);
+#endif
 
-  for (uint j=0; j<4; j++) {
+  for (uint j=0; j<cnames_count; j++) {
     if (j%2 == 0 && S_v == 0) continue;
     QLabel *n = new QLabel(cnames[j]);
     n->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
@@ -814,9 +845,14 @@ void GeneticManipulator::updateWindowName (void) {
 
 void GeneticManipulator::setReadOnly(bool r) {
   for (auto &sd: _sSliders) for (auto *s: sd) s->setReadOnly(r);
+#ifdef USE_DIMORPHISM
   for (auto &da: _dSliders) for (auto *s: da) s->setReadOnly(r);
   for (auto &sc: _sPickers) for (auto *p: sc) p->setReadOnly(r);
   for (auto *p: _bPickers)  p->setReadOnly(r);
+#else
+  for (auto &p: _sPickers) p->setReadOnly(r);
+  _bPicker->setReadOnly(r);
+#endif
   _bSex->setEnabled(!r);
 
   _editButton->setText(r ? "Edit" : "Ok");
@@ -872,15 +908,24 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     for (uint i=0; i<S_v; i++) {
       for (uint j=0; j<SD_v; j++)
         _sSliders[i][j]->setGeneValue(g.splines[i].data[j]);
+
+#ifdef USE_DIMORPHISM
       for (uint j=0; j<2; j++)
         _dSliders[i][j]->setGeneValue(g.dimorphism[S_v*j+i]);
 
       for (uint j=0; j<2; j++)
         _sPickers[i][j]->setGeneValue(g.colors[j*(S_v+1)+i+1]);
+#else
+      _sPickers[i]->setGeneValue(g.colors[i+1]);
+#endif
     }
 
+#ifdef USE_DIMORPHISM
     for (uint j=0; j<2; j++)
       _bPickers[j]->setGeneValue(g.colors[j*(S_v+1)]);
+#else
+    _bPicker->setGeneValue(g.colors[0]);
+#endif
 
     _cLabels[0]->setText(QString::number(100*g.minClockSpeed, 'f', 1));
     _mSliders.back()->setRange(100*g.minClockSpeed, 100*g.maxClockSpeed);
@@ -906,12 +951,20 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
 
     for (uint i=0; i<S_v; i++) {
       for (uint j=0; j<SD_v; j++) _sSliders[i][j]->noValue();
-      for (uint j=0; j<2; j++)    _dSliders[i][j]->noValue();
 
+#ifdef USE_DIMORPHISM
+      for (uint j=0; j<2; j++)    _dSliders[i][j]->noValue();
       for (uint j=0; j<2; j++)    _sPickers[i][j]->noValue();
+#else
+      _sPickers[i]->noValue();
+#endif
     }
 
+#ifdef USE_DIMORPHISM
     for (uint j=0; j<2; j++)  _bPickers[j]->noValue();
+#else
+    _bPicker->noValue();
+#endif
 
     for (PrettyBar *b: _sBars)  b->noValue();
 
@@ -1020,6 +1073,10 @@ void GeneticManipulator::updateSubject(void) {
   _proxy->objectUpdated();
 }
 
+void GeneticManipulator::updateVisu (void) {
+  _proxy->update();
+}
+
 void GeneticManipulator::updateGeneValue(void) {
   if (_updating)  return;
 
@@ -1031,8 +1088,10 @@ void GeneticManipulator::updateGeneValue(void) {
   if (j < SD_v) // spline data
     g.splines[i].data[j] = s->geneValue();
 
+#ifdef USE_DIMORPHISM
   else  // dimorphism data
     g.dimorphism[4*(j-SD_v)+i] = s->geneValue();
+#endif
 
   updateSubject();
 }
