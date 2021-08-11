@@ -48,8 +48,7 @@ int main(int argc, char *argv[]) {
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::QUIET;
 
-  std::string lhsGenomeArg, rhsGenomeArg, scenarioArg = "10+";
-
+  std::string lhsGenomeArg, rhsGenomeArg;
   CGenome lhsGenome, rhsGenome;
 
   int startspeed = 1;
@@ -92,8 +91,6 @@ int main(int argc, char *argv[]) {
      cxxopts::value(lhsGenomeArg))
     ("rhs-genome", "Right-hand side splinoid genome",
      cxxopts::value(rhsGenomeArg))
-
-    ("scenario", "Scenario specifications", cxxopts::value(scenarioArg))
 
     ("start", "Whether to start running immendiatly after initialisation"
               " (and optionally at which speed > 1)",
@@ -221,14 +218,14 @@ int main(int argc, char *argv[]) {
 
   std::cout << "Reading splinoid genome from input file '"
             << cGenomeArg << "'" << std::endl;
-  cGenome = simu::IndEvaluator::fromJsonFile(cGenomeArg).dna;
+  cGenome = simu::Evaluator::fromJsonFile(cGenomeArg).dna;
   cGenome.gdata.self.gid = std::max(cGenome.gdata.self.gid,
                                     phylogeny::GID(0));
 
   scenario.init(cGenome);
   if (!annNeuralTags.empty() /*&& snapshots == -1 && annRender.empty()*/) {
     phenotype::ANN &ann = scenario.subject()->brain();
-    simu::IndEvaluator::applyNeuralFlags(ann, annNeuralTags);
+    simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);
   }
   if (lesions > 0)  scenario.applyLesions(lesions);
 

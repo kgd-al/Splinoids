@@ -10,7 +10,7 @@
 void sigint_manager (int) {
   std::cerr << "Gracefully exiting simulation "
                "(please wait for end of current step)" << std::endl;
-  simu::IndEvaluator::aborted = true;
+  simu::Evaluator::aborted = true;
 }
 
 //long maybeSeed(const std::string& s) {
@@ -27,31 +27,27 @@ void sigint_manager (int) {
 //}
 
 int main(int argc, char *argv[]) {
-  using Ind = simu::IndEvaluator::Ind;
-
   // ===========================================================================
   // == Command line arguments parsing
 
+  using CGenome = genotype::Critter;
   using Verbosity = config::Verbosity;
 
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::QUIET;
 
-  std::vector<std::string> cGenomeArgs;
-  std::string scenarios = "all";
+  std::string lhsTeamArg, rhsTeamArg;
+  CGenome lhsTeam, rhsTeam;
 
-  std::map<std::string, Ind> individuals;
-
-  std::string outputFolder = "tmp/pp-eval/";
+  std::string outputFolder = "tmp/mk-eval/";
   char overwrite = simu::Simulation::PURGE;
 
-  bool v1scenarios = false;
   std::string lesions;
 
   std::string annNeuralTags;
 
-  cxxopts::Options options("Splinoids (pp-evaluator)",
-                           "Evaluation of minimal splinoids evolved according"
+  cxxopts::Options options("Splinoids (mk-evaluator)",
+                           "Evaluation of aggressive splinoids evolved according"
                            " to evaluator class");
   options.add_options()
     ("h,help", "Display help")
@@ -67,11 +63,11 @@ int main(int argc, char *argv[]) {
                   "[a]bort or [p]urge",
      cxxopts::value(overwrite))
 
-    ("scenarios", "Specific scenario(s) to test", cxxopts::value(scenarios))
-    ("spln-genome", "Splinoid genome", cxxopts::value(cGenomeArgs))
+    ("lhs-team", "Splinoid genomes for left-hand side team",
+     cxxopts::value(lhsTeamArg))
+    ("rhs-team", "Splinoid genomes for right-hand side team",
+     cxxopts::value(rhsTeamArg))
 
-    ("1,v1", "Use v1 scenarios",
-     cxxopts::value(v1scenarios)->implicit_value("true"))
     ("lesions", "Lesion type to apply (def: {})", cxxopts::value(lesions))
 
     ("ann-aggregate", "Specifiy a collections of position -> tag for the ANN"
@@ -94,27 +90,11 @@ int main(int argc, char *argv[]) {
   if (configFile.empty()) config::Simulation::printConfig("");
 
 
-  if (cGenomeArgs.empty())
-    utils::doThrow<std::invalid_argument>("No splinoid genomes provided");
-  for (const auto arg: cGenomeArgs) {
-    long cGenomeSeed = -2;//maybeSeed(arg);
-    if (cGenomeSeed < -1) {
-      std::cout << "Reading splinoid genome from input file '"
-                << arg << "'" << std::endl;
+  if (lhsTeamArgs.empty())
+    utils::doThrow<std::invalid_argument>("No data provided for lhs team");
+  if (rhsTeamArgs.empty())
+    utils::doThrow<std::invalid_argument>("No data provided for rhs team");
 
-      auto base = stdfs::path(arg).replace_extension();
-      individuals.emplace(
-        std::make_pair(base, simu::IndEvaluator::fromJsonFile(arg)));
-
-    } else {
-//      rng::FastDice dice;
-//      if (cGenomeSeed >= 0) dice.reset(cGenomeSeed);
-//      std::cout << "Generating splinoid genome from rng seed "
-//                << dice.getSeed() << std::endl;
-//      CGenome g = CGenome::random(dice);
-//      cGenomes.push_back(g);
-    }
-  }
 
 
   // ===========================================================================
@@ -133,7 +113,7 @@ int main(int argc, char *argv[]) {
 
   auto start = simu::Simulation::now();
 
-  simu::IndEvaluator eval (!v1scenarios);
+  simu::Evaluator eval (!v1scenarios);
   eval.setScenarios(scenarios);
   eval.setLesionTypes(lesions);
 

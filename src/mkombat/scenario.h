@@ -8,11 +8,18 @@ namespace simu {
 struct Team {
   using Genome = Simulation::CGenome;
   std::vector<Genome> members;
-  std::vector<float> ifitnesses;
+//  std::vector<float> ifitnesses;  /// TODO Implement?
   float fitness;
 
-  void to_json (nlohmann::json &j, const Team &t);
-  void from_json (const nlohmann::json &j, Team &t);
+  Team (void) : fitness(NAN) {}
+
+  auto size (void) const {
+    return members.size();
+  }
+
+  friend void to_json (nlohmann::json &j, const Team &t);
+  friend void from_json (const nlohmann::json &j, Team &t);
+  static Team fromFile(const stdfs::path &p);
 };
 
 class Scenario {
@@ -25,13 +32,16 @@ public:
 
 //  void applyLesions (int lesions);
 
-  float score (void) const;
+  std::array<float,2> scores (void) const;
+  std::array<bool,2> brainless (void) const;
 
   static const Simulation::InitData commonInitData;
 
 private:
-  const uint _teamsSize;
   Simulation &_simulation;
+  const uint _teamsSize;
+
+  std::array<std::vector<simu::Critter*>, 2> _teams;
 
   static genotype::Environment environmentGenome (uint tSize);
 };

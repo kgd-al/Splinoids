@@ -6,7 +6,7 @@
 void sigint_manager (int) {
   std::cerr << "Gracefully exiting simulation "
                "(please wait for end of current step)" << std::endl;
-  simu::IndEvaluator::aborted = true;
+  simu::Evaluator::aborted = true;
 }
 
 long maybeSeed(const std::string& s) {
@@ -33,7 +33,7 @@ void symlink_as_last (const stdfs::path &path) {
 int main(int argc, char *argv[]) {
   using CGenome = genotype::Critter;
   using EGenome = genotype::Environment;
-  using Ind = simu::IndEvaluator::Ind;
+  using Ind = simu::Evaluator::Ind;
 
   // ===========================================================================
   // == Command line arguments parsing
@@ -174,9 +174,9 @@ int main(int argc, char *argv[]) {
   }
   std::cout << dice.getSeed() << "\n";
 
-  simu::IndEvaluator eval (!v1scenarios);
+  simu::Evaluator eval (!v1scenarios);
 
-  using GA = simu::IndEvaluator::GA;
+  using GA = simu::Evaluator::GA;
   GA ga;
   ga.setPopSize(popSize);
   ga.setNbThreads(threads);

@@ -8,37 +8,22 @@
 
 namespace simu {
 
-struct IndEvaluator {
-  using Specs = Scenario::Specs;
+struct Evaluator {
   using DNA = genotype::Critter;
-  using Footprint = std::array<float, 16>;
-  using Ind = GAGA::NoveltyIndividual<DNA, Footprint>;
-  using GA = GAGA::GA<DNA, Ind>;
 
-  static constexpr int S = 3;
-  std::array<std::vector<Specs>, S+1> allScenarios;
-  std::vector<Specs> currentScenarios;
+  Evaluator (void);
 
-  IndEvaluator (bool v0Scenarios);
+//  void setLesionTypes (const std::string &s);
 
-  void selectCurrentScenarios (rng::AbstractDice &dice);
-  void setScenarios (const std::string &s);
+//  static void applyNeuralFlags (phenotype::ANN &ann,
+//                                const std::string &tagsfile);
 
-  void setLesionTypes (const std::string &s);
+  void operator() (Team &lhs, Team &rhs);
 
-  static void applyNeuralFlags (phenotype::ANN &ann,
-                                const std::string &tagsfile);
+//  stdfs::path logsSavePrefix, annTagsFile;
 
-  void operator() (Ind &ind, int);
-
-  static Ind fromJsonFile (const std::string &path);
-
-  static std::string specToString (const Specs s, int lesion);
-
-  const bool usingV0Scenarios;
-  stdfs::path logsSavePrefix, annTagsFile;
-
-  std::vector<int> lesions;
+//  std::vector<int> lesions;
+  static constexpr std::array<int,1> lesions {0};
 
   static std::atomic<bool> aborted;
 };
