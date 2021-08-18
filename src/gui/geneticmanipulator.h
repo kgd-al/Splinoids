@@ -83,7 +83,7 @@ private:
   QLabel *_lFirstname, *_lLastname;
   QComboBox *_bSex;
   QMap<QString, QLabel*> _dataWidgets;
-  ColorLabels *_rLabels, *_eLabels, *_sLabels;
+  ColorLabels *_rLabels, *_eLabels, *_sLabels, *_tLabels, *_hLabels;
   std::array<LabeledSlider*, 3> _mSliders;
   std::array<QLabel*, 2> _cLabels;
 

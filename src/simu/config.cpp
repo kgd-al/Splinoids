@@ -56,6 +56,7 @@ DEFINE_PARAMETER(float, plantEnergyDensity, 4)
 DEFINE_PARAMETER(decimal, decompositionRate, .01)
 
 DEFINE_PARAMETER(int, growthSubsteps, 4)
+DEFINE_PARAMETER(float, visionWidthToLength, 10)
 DEFINE_PARAMETER(decimal, healthToEnergyRatio, .05)
 DEFINE_PARAMETER(float, critterBaseSpeed, 1)
 DEFINE_PARAMETER(float, combatBaselineIntensity, .5)

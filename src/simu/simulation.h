@@ -2,6 +2,7 @@
 #define SIMULATION_H
 
 #include <chrono>
+#include <variant>
 
 #include "critter.h"
 #include "foodlet.h"
@@ -16,11 +17,15 @@ namespace simu {
 
 struct Simulation;
 struct Scenario;
+
 using SimulationCallback = std::function<void(void)>;
+using CritterCallback = std::function<void(Critter*)>;
+using SimulationCallbackVariant =
+  std::variant<SimulationCallback,CritterCallback>;
 
 class Simulation {
 public:
-  enum Callback { POST_ENV_STEP, POST_STEP };
+  enum Callback { POST_ENV_STEP, POST_STEP, PRE_CORPSE_DEL };
 protected:
   std::unique_ptr<Environment> _environment;
 
@@ -89,7 +94,7 @@ protected:
 
 private:
   friend Scenario;
-  using Callbacks = std::map<Callback, SimulationCallback>;
+  using Callbacks = std::map<Callback, SimulationCallbackVariant>;
   Callbacks _callbacks;
 
 public:
@@ -205,16 +210,20 @@ public:
              const InitData &data);
 
   void setupCallbacks(const Callbacks &c) { _callbacks = c; }
-  void maybeCall (Callback c) {
+
+  template <typename F, typename ...ARGS>
+  void maybeCall (Callback c, ARGS... args) {
     auto it = _callbacks.find(c);
-    if (it != _callbacks.end() && it->second) it->second();
+    if (it != _callbacks.end())
+      if (auto f = std::get_if<F>(&it->second))
+        (*f)(args...);
   }
 
   virtual void postInit (void) {}
 
-  virtual Critter* addCritter (const CGenome &genome,
+  virtual Critter* addCritter (CGenome genome,
                                float x, float y, float a, decimal e,
-                               float age = 0);
+                               float age = 0, bool overrideGID = false);
   virtual void delCritter (Critter *critter);
 
   virtual Foodlet* addFoodlet (BodyType t, float x, float y, float r, decimal e);

@@ -33,7 +33,6 @@ void symlink_as_last (const stdfs::path &path) {
 int main(int argc, char *argv[]) {
   using CGenome = genotype::Critter;
   using EGenome = genotype::Environment;
-  using Ind = simu::Evaluator::Ind;
 
   // ===========================================================================
   // == Command line arguments parsing
@@ -158,7 +157,7 @@ int main(int argc, char *argv[]) {
     utils::doThrow<std::logic_error>("Failed to trap SIGTERM");
 
   // ===========================================================================
-  // == GAGA setup
+  // == GA setup
 
 
   CGenome::printMutationRates(std::cout, 2);
@@ -174,105 +173,107 @@ int main(int argc, char *argv[]) {
   }
   std::cout << dice.getSeed() << "\n";
 
-  simu::Evaluator eval (!v1scenarios);
+  simu::Evaluator eval;
 
-  using GA = simu::Evaluator::GA;
-  GA ga;
-  ga.setPopSize(popSize);
-  ga.setNbThreads(threads);
-  ga.setMutationRate(1);
-  ga.setCrossoverRate(0);
-  ga.setSelectionMethod(GAGA::SelectionMethod::paretoTournament);
-  ga.setTournamentSize(4);
-  ga.setNbElites(1);
-  ga.setEvaluateAllIndividuals(true);
-  ga.setVerbosity(gagaVerbosity);
-  ga.setSaveFolder(outputFolder);
-  ga.setNbSavedElites(ga.getNbElites());
-  ga.setSaveGenStats(true);
-  ga.setSaveIndStats(true);
-  ga.setSaveParetoFront(false);
+//  using GA = simu::Evaluator::GA;
+//  GA ga;
+//  ga.setPopSize(popSize);
+//  ga.setNbThreads(threads);
+//  ga.setMutationRate(1);
+//  ga.setCrossoverRate(0);
+//  ga.setSelectionMethod(GAGA::SelectionMethod::paretoTournament);
+//  ga.setTournamentSize(4);
+//  ga.setNbElites(1);
+//  ga.setEvaluateAllIndividuals(true);
+//  ga.setVerbosity(gagaVerbosity);
+//  ga.setSaveFolder(outputFolder);
+//  ga.setNbSavedElites(ga.getNbElites());
+//  ga.setSaveGenStats(true);
+//  ga.setSaveIndStats(true);
+//  ga.setSaveParetoFront(false);
 
-  ga.setNewGenerationFunction([&dice, &eval, &ga] {
-    std::cout << "\nNew generation at " << utils::CurrentTime{} << "\n";
-    if (ga.getCurrentGenerationNumber() == 0)
-      symlink_as_last(ga.getSaveFolder());
-    eval.selectCurrentScenarios(dice);
-    std::cout << std::endl;
-  });
-  ga.setMutateMethod([&dice](CGenome &dna){ dna.mutate(dice); });
-//  ga.setCrossoverMethod([](const CGenome&, const CGenome&) -> CGenome {assert(false);});
-  ga.setEvaluator([&eval] (auto &i, auto p) { eval(i, p); },
-                  "prey-maybe-predator");
+//  ga.setNewGenerationFunction([&dice, &eval, &ga] {
+//    std::cout << "\nNew generation at " << utils::CurrentTime{} << "\n";
+//    if (ga.getCurrentGenerationNumber() == 0)
+//      symlink_as_last(ga.getSaveFolder());
+//    eval.selectCurrentScenarios(dice);
+//    std::cout << std::endl;
+//  });
+//  ga.setMutateMethod([&dice](CGenome &dna){ dna.mutate(dice); });
+////  ga.setCrossoverMethod([](const CGenome&, const CGenome&) -> CGenome {assert(false);});
+//  ga.setEvaluator([&eval] (auto &i, auto p) { eval(i, p); },
+//                  "prey-maybe-predator");
 
-// -- -- -- -- -- -- SPECIFIC TO THE NOVELTY EXTENSION: -- -- -- -- -- -- --
-    GAGA::NoveltyExtension<GA> nov;  // novelty extension instance
-    // Distance function (compares 2 signatures). Here a simple Euclidian distance.
-    auto euclidianDist = [](const auto& fpA, const auto& fpB) {
-        double sum = 0;
-        for (size_t i = 0; i < fpA.size(); ++i) sum += std::pow(fpA[i] - fpB[i], 2);
-        return sqrt(sum);
-    };
-    nov.setComputeSignatureDistanceFunction(euclidianDist);
-    nov.K = 10;  // size of the neighbourhood to compute novelty.
-    //(Novelty = avg dist to the K Nearest Neighbors)
+//// -- -- -- -- -- -- SPECIFIC TO THE NOVELTY EXTENSION: -- -- -- -- -- -- --
+//    GAGA::NoveltyExtension<GA> nov;  // novelty extension instance
+//    // Distance function (compares 2 signatures). Here a simple Euclidian distance.
+//    auto euclidianDist = [](const auto& fpA, const auto& fpB) {
+//        double sum = 0;
+//        for (size_t i = 0; i < fpA.size(); ++i) sum += std::pow(fpA[i] - fpB[i], 2);
+//        return sqrt(sum);
+//    };
+//    nov.setComputeSignatureDistanceFunction(euclidianDist);
+//    nov.K = 10;  // size of the neighbourhood to compute novelty.
+//    //(Novelty = avg dist to the K Nearest Neighbors)
 
-    ga.useExtension(nov);  // we have to tell gaga we want to use this extension
-    // -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+//    ga.useExtension(nov);  // we have to tell gaga we want to use this extension
+//    // -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-  if (load.empty()) {
-    ga.initPopulation([&dice] { return CGenome::random(dice); });
-    std::cout << "Generating random population\n";
+//  if (load.empty()) {
+//    ga.initPopulation([&dice] { return CGenome::random(dice); });
+//    std::cout << "Generating random population\n";
 
-  } else {
-    // copied from gaga to use appropriate constuctor
-    std::ifstream t(load);
-    std::stringstream buffer;
-    buffer << t.rdbuf();
-    auto o = nlohmann::json::parse(buffer.str());
-    assert(o.count("population"));
+//  } else {
+//    // copied from gaga to use appropriate constuctor
+//    std::ifstream t(load);
+//    std::stringstream buffer;
+//    buffer << t.rdbuf();
+//    auto o = nlohmann::json::parse(buffer.str());
+//    assert(o.count("population"));
 
-    std::vector<Ind> pop;
-    for (auto ind : o.at("population")) {
-        pop.push_back(Ind(CGenome(ind.at("dna").get<std::string>())));
-        pop.back().evaluated = false;
-    }
+//    std::vector<Ind> pop;
+//    for (auto ind : o.at("population")) {
+//        pop.push_back(Ind(CGenome(ind.at("dna").get<std::string>())));
+//        pop.back().evaluated = false;
+//    }
 
-    ga.setPopulation(pop);
-    std::cout << "Loaded population from " << load << ", " << pop.size()
-              << " individuals\n";
-  }
+//    ga.setPopulation(pop);
+//    std::cout << "Loaded population from " << load << ", " << pop.size()
+//              << " individuals\n";
+//  }
 
   // ===========================================================================
   // == Launch
 
   auto start = simu::Simulation::now();
-  ga.step(generations);
+  int success = -1;
 
-  // Check status
-  static constexpr auto bThreshold = .9f;
-  static constexpr auto bCount = 5;
-  const auto &stats = ga.genStats;
-  int success = -1, contiguousBrains = 0;
-  for (uint i=0; i<stats.size() && success < 0; i++) {
-    if (stats[i].at("cs_brain").at("avg") >= bThreshold)
-          contiguousBrains++;
-    else  contiguousBrains = 0;
-    if (contiguousBrains >= bCount)
-      success = i - bCount - 1;
-  }
+//  ga.step(generations);
 
-  if (success > 0) {
-    std::cout << "Performing " << success << " additionnal generations to reach"
-                 " target number of brains (" << bCount << " contiguous"
-                 " geneneration with >= " << bThreshold << " brain proportion)"
-                 "\n";
-    ga.step(success);
-  }
+//  // Check status
+//  static constexpr auto bThreshold = .9f;
+//  static constexpr auto bCount = 5;
+//  const auto &stats = ga.genStats;
+//  int success = -1, contiguousBrains = 0;
+//  for (uint i=0; i<stats.size() && success < 0; i++) {
+//    if (stats[i].at("cs_brain").at("avg") >= bThreshold)
+//          contiguousBrains++;
+//    else  contiguousBrains = 0;
+//    if (contiguousBrains >= bCount)
+//      success = i - bCount - 1;
+//  }
 
-  stdfs::create_directory_symlink(
-    GAGA::concat("gen", ga.getCurrentGenerationNumber()-1),
-    ga.getSaveFolder() / "gen_last");
+//  if (success > 0) {
+//    std::cout << "Performing " << success << " additionnal generations to reach"
+//                 " target number of brains (" << bCount << " contiguous"
+//                 " geneneration with >= " << bThreshold << " brain proportion)"
+//                 "\n";
+//    ga.step(success);
+//  }
+
+//  stdfs::create_directory_symlink(
+//    GAGA::concat("gen", ga.getCurrentGenerationNumber()-1),
+//    ga.getSaveFolder() / "gen_last");
 
   // ===========================================================================
   // == Post-evolution

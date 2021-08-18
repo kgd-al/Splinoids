@@ -36,30 +36,31 @@ struct SplineMaker {
 #define GENOME Spline
 
 using D = GENOME::Data;
+static constexpr auto EPSILON = 1e-3;
 DEFINE_GENOME_FIELD_WITH_BOUNDS(D, data, "",
   SplineMaker()
-    (I::SA, 0)
+    (I::SA, EPSILON)
     (I::EA, -M_PI/2) (I::EL, 0)
     (I::DX0, 0)(I::DY0, -1)(I::DX1, 0)(I::DY1, -1)
     (I::W0, 0) (I::W1, 0) (I::W2, 0)
     (),
 
   SplineMaker()
-    (I::SA, 0)
+    (I::SA, EPSILON)
     (I::EA, 0) (I::EL, 0)
     (I::DX0, 0)(I::DY0, 0)(I::DX1, 0)(I::DY1, 0)
     (I::W0, 0) (I::W1, 0) (I::W2, 0)
     (),
 
   SplineMaker()
-    (I::SA, M_PI)
+    (I::SA, M_PI-EPSILON)
     (I::EA, 0) (I::EL, 0)
     (I::DX0, 1)(I::DY0, 0)(I::DX1, 1)(I::DY1, 0)
     (I::W0, 0) (I::W1, 0) (I::W2, 0)
     (),
 
   SplineMaker()
-    (I::SA, M_PI)
+    (I::SA, M_PI-EPSILON)
     (I::EA, M_PI/2) (I::EL, 1)
     (I::DX0, 1)(I::DY0, 1)(I::DX1, 1)(I::DY1, 1)
     (I::W0, .5) (I::W1, .5) (I::W2, .5)

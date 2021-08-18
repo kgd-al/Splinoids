@@ -175,7 +175,7 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
   clockSpeed(.5); assert(0 <= _clockSpeed && _clockSpeed < 10);
   _reproduction = 0;
 
-  _energy = e / initEnergyRatio;
+  _energy = std::isinf(e) ? maximalEnergyStorage(_size) : e / initEnergyRatio;
 
   _reproductionReserve = 0;
   _reproductionSensor = nullptr;
@@ -186,7 +186,12 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
   _ears.fill(0);
 
   // Update current healths
-  _currHealth[0] = e * (1 - 1/initEnergyRatio) / config::Simulation::healthToEnergyRatio();
+  if (std::isinf(e))
+    _currHealth[0] = bodyMaxHealth();
+  else
+    _currHealth[0] = e * (1 - 1/initEnergyRatio)
+                    / config::Simulation::healthToEnergyRatio();
+
   for (uint i=0; i<SPLINES_COUNT; i++)
     for (Side s: {Side::LEFT, Side::RIGHT})
       _currHealth[1+splineIndex(i, s)] = splineMaxHealth(i, s);
@@ -206,6 +211,10 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
 //  utils::iclip_max(_energy, _masses[0]);  // WARNING Loss of precision
   assert(_energy <= _masses[0]);
   assert(bodyHealth() <= bodyMaxHealth());
+#ifndef NDEBUG
+  for (uint i=0; i<_masses.size(); i++)
+    assert(_currHealth[i] <= _masses[i]);
+#endif
 
 //  std::cerr << CID(this, "Splinoid ") << "\n";
 //  std::cerr << "     Body health: " << bodyHealth() << " / " << bodyMaxHealth()
@@ -467,7 +476,7 @@ void Critter::neuralStep(void) {
 //    inputs[i++] = usableEnergy() / maxUsableEnergy();
 //    inputs[i++] = bodyHealthness();
     inputs[i++] = bodyHealthness();
-    inputs[i++] = std::max(decimal(0), bodyHealth() - _previousHealth);
+    inputs[i++] = instantaneousPain();
 
     for (const auto &c: _retina) for (float v: c) inputs[i++] = v;
     for (const auto &e: _ears)  inputs[i++] = e;
@@ -558,6 +567,9 @@ void Critter::energyConsumption (Environment &env) {
 }
 
 void Critter::regeneration (Environment &env) {
+  static const auto &R = config::Simulation::baselineRegenerationRate();
+  if (R == 0) return;
+
   decimal dt = env.dt();
   decimal dE = 0;
 
@@ -565,6 +577,7 @@ void Critter::regeneration (Environment &env) {
   decltype(_currHealth) mhA {0};
   decimal mh = 0;
   for (uint i=0; i<2*SPLINES_COUNT+1; i++) {
+    if (isSplineIndex(i) && destroyedSpline(i)) continue;
     mhA[i] = _masses[i] - _currHealth[i];
     utils::iclip_min(0., mhA[i]);
     assert(mhA[i] >= 0);
@@ -578,14 +591,12 @@ void Critter::regeneration (Environment &env) {
   if (debugRegen)
     std::cerr << CID(this) << " missing health (total): " << mh << "\n";
 
-  dE = _energy * config::Simulation::baselineRegenerationRate()
-      * _clockSpeed * dt;
+  dE = _energy * R * _clockSpeed * dt;
 
   if (debugRegen)
     std::cerr << "Maximal energy for regeneration: " << std::min(dE, mh)
               << " = min(" << dE << ", " << mh << ") = min(" << _energy << " * "
-              << config::Simulation::baselineRegenerationRate() << " * "
-              << _clockSpeed << " * " << dt << ", ...)\n";
+              << R << " * " << _clockSpeed << " * " << dt << ", ...)\n";
 
   dE = std::min(dE, mh);
 
@@ -722,24 +733,15 @@ void Critter::feed (Foodlet *f, float dt) {
 // =============================================================================
 // == Helper routines
 
-decimal Critter::maxOutHealthAndEnergy (void) {
-  decimal requiredEnergy = 0;
+decimal Critter::energyEquivalent (void) const {
+  decimal e = 0;
 
-  for (uint i=0; i<2*SPLINES_COUNT+1; i++) {
-    const auto H = _masses[i];
-    if (H > 0) {
-      auto &h = _currHealth[i];
-      auto diff = H - h;
-      if (i == 0) diff *= config::Simulation::healthToEnergyRatio();
-      requiredEnergy += diff;
-      h = H;
-    }
-  }
+  for (uint i=0; i<1/*2*SPLINES_COUNT+1*/; i++)
+    if (_masses[i] > 0)
+      e += _currHealth[i] * config::Simulation::healthToEnergyRatio();
 
-  requiredEnergy += (maxUsableEnergy() - usableEnergy());
-  _energy = maxUsableEnergy();
-
-  return requiredEnergy;
+  e += usableEnergy();
+  return e;
 }
 
 // =============================================================================
@@ -1259,7 +1261,7 @@ void Critter::updateColors(void) {
 //  if (requestingMating(reproductionType())) color[0] = 1;
 
 //  using utils::operator <<;
-//  std::cerr << CID(this) << " body color: " << color << std::endl;
+//  std::cerr << CID(this) << " colors: " << _currentColors << std::endl;
 }
 
 void Critter::setMotorOutput(float i, Motor m) {
@@ -1279,6 +1281,7 @@ void Critter::setNoisy(bool n) {
   _sounds[0] = n;
 }
 
+static constexpr bool debugHealthLoss = true;
 bool Critter::applyHealthDamage (const FixtureData &d, float amount,
                                  Environment &env) {
   decimal damount = amount;
@@ -1287,8 +1290,9 @@ bool Critter::applyHealthDamage (const FixtureData &d, float amount,
   if (d.type != FixtureType::BODY) i += 1 + splineIndex(d.sindex, d.sside);
   decimal &v = _currHealth[i];
 
-//  std::cerr << "Applying " << damount << " of damage to " << CID(this) << d
-//            << ", resulting health is " << v << " >> ";
+  if (debugHealthLoss)
+    std::cerr << "Applying " << damount << " of damage to " << CID(this) << d
+              << ", resulting health is " << v << " >> ";
 
   damount = std::min(damount, v);
   v -= damount;
@@ -1296,11 +1300,13 @@ bool Critter::applyHealthDamage (const FixtureData &d, float amount,
   if (d.type == FixtureType::BODY)  // Return energy to environment
     env.modifyEnergyReserve(+damount*config::Simulation::healthToEnergyRatio());
 
-//  std::cerr << v << "\n";
-//  if (d.type == FixtureType::BODY)  // Return energy to environment
-//    std::cerr << "\tReturning " << damount*config::Simulation::healthToEnergyRatio()
-//              << " energy to the environment\n";
-//  std::cerr << std::endl;
+  if (debugHealthLoss) {
+    std::cerr << v << "\n";
+    if (d.type == FixtureType::BODY)  // Return energy to environment
+      std::cerr << "\tReturning " << damount*config::Simulation::healthToEnergyRatio()
+                << " energy to the environment\n";
+    std::cerr << std::endl;
+  }
 
   return v <= 0 && i > 0;
 }
@@ -1312,7 +1318,7 @@ void Critter::destroySpline(uint splineIndex) {
 //            << " was destroyed" << std::endl;
 
   _destroyed.set(k);
-  _masses[1+k] = 0;
+//  _masses[1+k] = 0;
 
   for (b2Fixture *f_: _b2Artifacts[k]) delFixture(f_);
   _b2Artifacts[k].clear();
@@ -1403,7 +1409,8 @@ float Critter::nextGrowthStepAt (uint currentStep) {
 }
 
 float Critter::computeVisionRange(float visionWidth) {
-  return std::max(.5f, std::min(10/visionWidth, 20.f));
+  static const auto &R = config::Simulation::visionWidthToLength();
+  return utils::clip(.5f, R/visionWidth, 2*R);
 }
 
 float Critter::agingSpeed (float clockSpeed) {
@@ -1575,7 +1582,8 @@ Critter* Critter::clone(const Critter *c, b2Body *b) {
   COPY(userIndex);
 
 #undef COPY
-  assert(this_c->totalEnergy() == c->totalEnergy());
+  assert(this_c->totalStoredEnergy() == c->totalStoredEnergy());
+  assert(this_c->energyEquivalent() == c->energyEquivalent());
 
   this_c->_objectUserData.ptr.critter = this_c;
 

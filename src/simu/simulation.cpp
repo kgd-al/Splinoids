@@ -9,7 +9,7 @@ using json = nlohmann::json;
 
 static constexpr bool debugShowStepHeader = false;
 static constexpr int debugEntropy = 0;
-static constexpr int debugCritterManagement = 0;
+static constexpr int debugCritterManagement = 1;
 static constexpr int debugFoodletManagement = 0;
 static constexpr int debugAudition = 0;
 static constexpr int debugReproduction = 0;
@@ -358,9 +358,9 @@ b2Body* Simulation::critterBody (float x, float y, float a) {
   return physics().CreateBody(&bodyDef);
 }
 
-Critter* Simulation::addCritter (const CGenome &genome,
+Critter* Simulation::addCritter (CGenome genome,
                                  float x, float y, float a, decimal e,
-                                 float age) {
+                                 float age, bool overrideGID) {
 
   b2Body *body = critterBody(x, y, a);
 
@@ -368,17 +368,24 @@ Critter* Simulation::addCritter (const CGenome &genome,
   decimal prevEE = _environment->energy();
 #endif
 
-  decimal dissipatedEnergy =
-    e * .5 *(1 - config::Simulation::healthToEnergyRatio());
-  decimal e_ = e - dissipatedEnergy;
+  decimal e_ = e;
+  if (!std::isinf(e)) {
+    decimal dissipatedEnergy =
+      e * .5 *(1 - config::Simulation::healthToEnergyRatio());
+    e_ = e - dissipatedEnergy;
+  }
 
-  _environment->modifyEnergyReserve(-e_);
+  if (overrideGID)
+    genome.gdata.self.gid = _gidManager();
 
   Critter *c = new Critter (genome, body, e_, age);
   _critters.insert(c);
 
+  if (std::isinf(e)) e_ = c->energyEquivalent();
+  _environment->modifyEnergyReserve(-e_);
+
 #ifndef NDEBUG
-  decimal e__ = c->totalEnergy();
+  decimal e__ = c->energyEquivalent();
   if (debugEntropy && e_ != e__)
     std::cerr << "Delta energy on " << CID(c) << " creation: " << e__-e_
               << std::endl;
@@ -395,10 +402,6 @@ Critter* Simulation::addCritter (const CGenome &genome,
 
 //  if (_ssga.watching()) _ssga.registerBirth(c);
 
-  if (age > 0) { /// WARNING this is quite ugly... (but it works)
-    e_ = c->maxOutHealthAndEnergy();
-    _environment->modifyEnergyReserve(-e_);
-  }
 
   return c;
 }
@@ -491,8 +494,12 @@ void Simulation::step (void) {
   if (_critters.empty())  _genData.min = 0;
   if (_timeMs.level > 1)  _timeMs.spln = durationFrom(start),  start = now();
 
+  detectBudgetFluctuations();
+
   _environment->step();
-  maybeCall(POST_ENV_STEP);
+  maybeCall<SimulationCallback>(POST_ENV_STEP);
+
+  detectBudgetFluctuations();
 
   if (_timeMs.level > 1)  _timeMs.env = durationFrom(start),  start = now();
 
@@ -522,7 +529,7 @@ void Simulation::step (void) {
   // If above did not fail, effect small corrections to keep things smooth
   if (config::Simulation::screwTheEntropy())  correctFloatingErrors();
 
-  maybeCall(POST_STEP);
+  maybeCall<SimulationCallback>(POST_STEP);
 
   if (_timeMs.level > 0)  _timeMs.step = durationFrom(stepStart);
 
@@ -691,8 +698,9 @@ void Simulation::produceCorpses(void) {
       corpses.push_back(c);
 
   for (Critter *c: corpses) {
+    maybeCall<CritterCallback>(PRE_CORPSE_DEL, c);
     Foodlet *f = addFoodlet(BodyType::CORPSE, c->x(), c->y(), c->bodyRadius(),
-                            c->totalEnergy());
+                            c->totalStoredEnergy());
     f->setBaseColor(c->initialBodyColor());
     f->updateColor();
     delCritter(c);
@@ -755,7 +763,7 @@ void Simulation::logStats (void) {
   s.nfights = _environment->fightingEvents().size();
 
   for (const auto &c: _critters) {
-    s.ecritters += c->totalEnergy();
+    s.ecritters += c->totalStoredEnergy();
     if (c->isYouth()) s.nyoungs++;
     else if (c->isAdult())  s.nadults++;
     else s.nelders++, assert(c->isElder());
@@ -859,7 +867,7 @@ void Simulation::logStats (void) {
 
 decimal Simulation::totalEnergy(void) const {
   decimal e = 0;
-  for (const auto &c: _critters)  e += c->totalEnergy();
+  for (const auto &c: _critters)  e += c->totalStoredEnergy();
   for (const auto &f: _foodlets)  e += f->energy();
   e += _environment->energy();
   return e;
@@ -894,7 +902,7 @@ void Simulation::detectBudgetFluctuations(float threshold) {
 
     decimal e = 0;
     oss << "\tCritters: ";
-    for (const auto &c: _critters)  e += c->totalEnergy();
+    for (const auto &c: _critters)  e += c->totalStoredEnergy();
     oss << e << "\n";
     e = 0;
     oss << "\tFoodlets: ";
@@ -904,7 +912,7 @@ void Simulation::detectBudgetFluctuations(float threshold) {
 
     std::cerr << oss.str() << std::endl;
 
-//    assert(false);
+    assert(false);
     abort();
   }
 }
@@ -1240,8 +1248,8 @@ void assertEqual (const Simulation &lhs, const Simulation &rhs, bool deepcopy) {
   for (auto ilhs = lhs._critters.begin(), irhs = rhs._critters.begin();
        ilhs != lhs._critters.end(); ++ilhs, ++irhs) {
     const Critter *clhs = *ilhs, *crhs = *irhs;
-    eclhs += clhs->totalEnergy();
-    ecrhs += crhs->totalEnergy();
+    eclhs += clhs->totalStoredEnergy();
+    ecrhs += crhs->totalStoredEnergy();
   }
   for (auto ilhs = lhs._foodlets.begin(), irhs = rhs._foodlets.begin();
        ilhs != lhs._foodlets.end(); ++ilhs, ++irhs) {

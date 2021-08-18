@@ -8,7 +8,7 @@
 namespace simu {
 
 static constexpr int debugFeeding = 0;
-static constexpr int debugFighting = 0;
+static constexpr int debugFighting = 3;
 static constexpr int debugHearing = 0;
 static constexpr int debugMating = 0;
 
@@ -186,8 +186,10 @@ struct CollisionMonitor : public b2ContactListener {
     }
 
     Environment::FightingData &d = e._fightingEvents.at(std::make_pair(cA, cB));
-    d.velocities[0] = cA->body().GetLinearVelocity();
-    d.velocities[1] = cB->body().GetLinearVelocity();
+    d.velocities.linear[0] = cA->body().GetLinearVelocity();
+    d.velocities.linear[1] = cB->body().GetLinearVelocity();
+    d.velocities.angular[0] = cA->angularSpeed();
+    d.velocities.angular[1] = cB->angularSpeed();
   }
 
   void registerFightEnd (Critter *cA, b2Fixture *fA,
@@ -425,16 +427,38 @@ void Environment::createEdges(void) {
   _edges->SetUserData(&_edgesUserData);
 }
 
+auto densityCollisionFactor (float d) {
+  static constexpr float MIN_DENSITY_ALPHA = .25;
+  static constexpr float MAX_DENSITY_ALPHA = 1;
+  static constexpr float DENSITY_ALPHA_RANGE =
+      MAX_DENSITY_ALPHA - MIN_DENSITY_ALPHA;
+  static constexpr float DENSITY_RANGE =
+      Critter::MAX_DENSITY - Critter::MIN_DENSITY;
+
+  return MIN_DENSITY_ALPHA + DENSITY_ALPHA_RANGE *
+      (d - Critter::MIN_DENSITY) / DENSITY_RANGE;
+}
+
 void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
                                std::set<std::pair<Critter*, uint>> &ds) {
   FightingDrawData fdd;
-  fdd.vA = d.velocities[0];
-  fdd.vB = d.velocities[1];
+  fdd.vA = d.velocities.linear[0];
+  fdd.vB = d.velocities.linear[1];
 
   // Ignore small enough collisions
-  bool ignoreA = (fdd.vA.Length() < config::Simulation::combatMinVelocity());
-  bool ignoreB = (fdd.vB.Length() < config::Simulation::combatMinVelocity());
-  if (ignoreA && ignoreB) return;
+  auto ignoreLinear = [] (float V) {
+    return V == 0 || V < config::Simulation::combatMinVelocity();
+  };
+  bool ignoreA_l = ignoreLinear(fdd.vA.Length());
+  bool ignoreB_l = ignoreLinear(fdd.vB.Length());
+
+  auto ignoreAngular = [] (float W) {
+    return W == 0 || W < M_PI/32;
+  };
+  bool ignoreA_a = ignoreAngular(d.velocities.angular[0]);
+  bool ignoreB_a = ignoreAngular(d.velocities.angular[1]);
+
+  if (ignoreA_l && ignoreB_l && ignoreA_a && ignoreB_a) return;
 
   fdd.pA = cA->pos();
   fdd.pB = cB->pos();
@@ -447,7 +471,18 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
   float n = d.fixtures.size();
 
   fdd.VA = b2Dot(fdd.vA,  fdd.C_);
+  ignoreA_l |= ignoreLinear(fdd.VA);
+
   fdd.VB = b2Dot(fdd.vB, -fdd.C_);
+  ignoreB_l |= ignoreLinear(fdd.VB);
+
+  if (ignoreA_l && ignoreB_l && ignoreA_a && ignoreB_a) return;
+
+  float El = config::Simulation::combatBaselineIntensity() * (
+                cA->body().GetMass() * fdd.VA * fdd.VA * (1-ignoreA_l)
+              + cB->body().GetMass() * fdd.VB * fdd.VB * (1-ignoreB_l)
+            ),
+        El_ = El / n;
 
   if (debugFighting > 1)
     std::cerr << "Fight step of " << CID(cA) << " & " << CID(cB) << "\n"
@@ -457,7 +492,13 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
               << "\tVA = " << fdd.VA << " = " << fdd.vA << "."
                 << fdd.C_ << "\n"
               << "\tVB = " << fdd.VB << " = " << fdd.vB << "."
-                << fdd.C_ << "\n";
+                << fdd.C_ << "\n"
+              << "\tEl = " << El << "\n";
+
+  std::cerr << "Velocity variation:\n"
+            << "\t" << fdd.vA.Length() << " >> " << cA->linearSpeed() << "\n"
+            << "\t" << fdd.vB.Length() << " >> " << cB->linearSpeed() << "\n";
+
   if (debugFighting > 2)
     std::cerr << "Fixture-Fixture collisions details:\n";
 
@@ -466,43 +507,39 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
     const Critter::FixtureData &fdA = *Critter::get(fA);
     const Critter::FixtureData &fdB = *Critter::get(fB);
 
-    static constexpr float MIN_DENSITY_ALPHA = .01;
-    static constexpr float MAX_DENSITY_ALPHA = 1;
-    static constexpr float DENSITY_ALPHA_RANGE =
-        MAX_DENSITY_ALPHA - MIN_DENSITY_ALPHA;
-    static constexpr float DENSITY_RANGE =
-        Critter::MAX_DENSITY - Critter::MIN_DENSITY;
-
-    float alpha_a = MIN_DENSITY_ALPHA + DENSITY_ALPHA_RANGE *
-        (fA->GetDensity() - Critter::MIN_DENSITY) / DENSITY_RANGE;
-    float alpha_b = MIN_DENSITY_ALPHA + DENSITY_ALPHA_RANGE *
-        (fB->GetDensity() - Critter::MIN_DENSITY) / DENSITY_RANGE;
+    float alpha_a = densityCollisionFactor(fA->GetDensity());
+    float alpha_b = densityCollisionFactor(fB->GetDensity());
 
     if (alpha_a == 0 && alpha_b == 0) continue;
     float alpha = (alpha_b) / (alpha_a + alpha_b);
 
-    float N = dt() * config::Simulation::combatBaselineIntensity() * (
-                  cA->body().GetMass() * fdd.VA * fdd.VA * (1-ignoreA)
-                + cB->body().GetMass() * fdd.VB * fdd.VB * (1-ignoreB)
-              ) / n;
-
-    float deA = alpha * .5 * alpha_b * N,
-          deB = (1 - alpha) * .5 * alpha_a * N;
+    float deA = alpha * El_, deB = (1 - alpha) * El_;
 
     if (debugFighting > 2)
       std::cerr << "\tFixtures " << CID(cA) << "F" << fdA << " and "
                 << CID(cB) << "F" << fdB << "\n"
-                << "\t\trA = " << fA->GetDensity() << "\trB = "
-                  << fB->GetDensity() << "\n"
-                << "\t\tN' = " << N << " / " << n << "\n"
-                << "\t\tdA = " << deA << "\n"
-                << "\t\tdB = " << deB << "\n";
+                << "\t\trA = " << fA->GetDensity()
+                  << "\t" << alpha_a << "\t" << alpha << "\n"
+                << "\t\trB = " << fB->GetDensity()
+                  << "\t" << alpha_b << "\t" << 1-alpha << "\n"
+                << "\t\tEl' = " << El_ << "\n";
 
     bool sADestroyed = cA->applyHealthDamage(fdA, deA, *this);
     if (sADestroyed)  ds.insert({cA, Critter::splineIndex(fdA)});
 
     bool sBDestroyed = cB->applyHealthDamage(fdB, deB, *this);
     if (sBDestroyed)  ds.insert({cB, Critter::splineIndex(fdB)});
+
+    if (debugFighting > 2) {
+      std::cerr << "\t\tdA = " << deA;
+      if (sADestroyed)  std::cerr << "\t>> destroyed";
+      std::cerr << "\n\t\tdB = " << deB;
+      if (sBDestroyed)  std::cerr << "\t>> destroyed";
+      std::cerr << "\n";
+    }
+
+    float sum_ = deA+deB, diff_ = El_ - sum_;
+    assert(std::fabs(deA + deB - El_) < 1e-3);
 
   #ifndef NDEBUG
     fightingDrawData.push_back(fdd);

@@ -20,7 +20,10 @@ struct Evaluator {
 
   void operator() (Team &lhs, Team &rhs);
 
-//  stdfs::path logsSavePrefix, annTagsFile;
+  static std::string kombatName (const std::string &lhsFile,
+                                 const std::string &rhsFile);
+
+  stdfs::path logsSavePrefix, annTagsFile;
 
 //  std::vector<int> lesions;
   static constexpr std::array<int,1> lesions {0};

@@ -432,7 +432,8 @@ public:
     return _energy;
   }
 
-  decimal totalEnergy (void) const {
+  decimal energyEquivalent (void) const;
+  decimal totalStoredEnergy (void) const {
     return _energy + config::Simulation::healthToEnergyRatio() * _currHealth[0];
   }
 
@@ -455,6 +456,10 @@ public:
 
   static auto splineIndex (const FixtureData &fd) {
     return splineIndex(fd.sindex, fd.sside);
+  }
+
+  static auto isSplineIndex (uint i) {
+    return 1 <= i && i < 2*SPLINES_COUNT+1;
   }
 
   const auto& masses (void) const {
@@ -481,23 +486,39 @@ public:
     return bodyHealth() / bodyMaxHealth();
   }
 
+  auto instantaneousPain (void) const {
+    return std::max(decimal(0), _previousHealth - bodyHealth());
+  }
+
   auto splineHealthness (uint i, Side s) const {
     auto m = splineMaxHealth(i, s);
     return m == 0 ? 0 : splineHealth(i, s) / m;
+  }
+
+  auto healthness (void) const {
+    auto n = 1;
+    auto h = bodyHealthness();
+    for (Side s: {Side::LEFT, Side::RIGHT})
+      for (uint i=0; i<SPLINES_COUNT; i++)
+        h += splineHealthness(i,s), n += (splineMaxHealth(i,s) > 0);
+    return h / n;
   }
 
   const auto& healthArray (void) const {
     return _currHealth;
   }
 
-  decimal maxOutHealthAndEnergy (void);
-
   auto activeSpline (uint i, Side s) const {
     return splineMaxHealth(i, s) > 0;
   }
 
+  // assert(isSplineIndex(i))
+  auto destroyedSpline (uint i) const {
+    return _destroyed.test(i);
+  }
+
   auto destroyedSpline (uint i, Side s) const {
-    return _destroyed.test(splineIndex(i, s));
+    return destroyedSpline(splineIndex(i, s));
   }
 
   const auto& brain (void) const {

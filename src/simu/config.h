@@ -103,6 +103,7 @@ struct CONFIG_FILE(Simulation) {
 
   // Splinoid constants
   DECLARE_PARAMETER(int, growthSubsteps)
+  DECLARE_PARAMETER(float, visionWidthToLength)
   DECLARE_PARAMETER(decimal, healthToEnergyRatio)
   DECLARE_PARAMETER(float, critterBaseSpeed)
   DECLARE_PARAMETER(float, combatBaselineIntensity)

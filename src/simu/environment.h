@@ -31,7 +31,10 @@ public:
 
   using FightingKey = std::pair<Critter*, Critter*>;
   struct FightingData {
-    std::array<P2D, 2> velocities;
+    struct {
+      std::array<P2D, 2> linear;
+      std::array<float, 2> angular;
+    } velocities;
     std::set<std::pair<b2Fixture*,b2Fixture*>> fixtures;
   };
   using FightingEvents = std::map<FightingKey, FightingData>;

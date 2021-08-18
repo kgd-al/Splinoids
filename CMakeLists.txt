@@ -212,6 +212,16 @@ if (EXP_KOMBAT)
       $<TARGET_OBJECTS:MK_OBJS>
       "src/mkombat/evaluator.cpp")
     target_link_libraries(mk-evaluator ${CORE_LIBS})
+
+    ############################################################################
+    ## Target (Mortal Kombat evaluation)
+    ############################################################################
+    add_executable(
+      mk-team-tool
+      $<TARGET_OBJECTS:SIMU_OBJS>
+      $<TARGET_OBJECTS:MK_OBJS>
+      "src/mkombat/team_tool.cpp")
+    target_link_libraries(mk-team-tool ${CORE_LIBS})
 endif()
 
 ################################################################################
@@ -357,20 +367,20 @@ endif()
 ################################################################################
 ## Target (tester may be with gui)
 ################################################################################
-if (CLUSTER_BUILD)
-    add_executable(
-        tester
-        $<TARGET_OBJECTS:SIMU_OBJS>
-        "src/tests/tester.cpp")
-    target_link_libraries(tester ${CORE_LIBS})
-else()
-    add_executable(
-        tester
-        $<TARGET_OBJECTS:SIMU_OBJS>
-        $<TARGET_OBJECTS:VISU_OBJS>
-        "src/tests/tester.cpp")
-    target_link_libraries(tester ${CORE_LIBS} ${GUI_LIBS})
-endif()
+#if (CLUSTER_BUILD)
+#    add_executable(
+#        tester
+#        $<TARGET_OBJECTS:SIMU_OBJS>
+#        "src/tests/tester.cpp")
+#    target_link_libraries(tester ${CORE_LIBS})
+#else()
+#    add_executable(
+#        tester
+#        $<TARGET_OBJECTS:SIMU_OBJS>
+#        $<TARGET_OBJECTS:VISU_OBJS>
+#        "src/tests/tester.cpp")
+#    target_link_libraries(tester ${CORE_LIBS} ${GUI_LIBS})
+#endif()
 
 ################################################################################
 ### Additional flags

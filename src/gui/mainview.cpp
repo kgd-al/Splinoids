@@ -364,7 +364,7 @@ void MainView::step(void) {
 
   uint n = config::Visualisation::substepsSpeed();
   if (_stepping)  n = 1;
-  for (uint i=0; i<n; i++) {
+  for (uint i=0; i<n && !_simu.finished(); i++) {
     _simu.step();
     emit stepped();
 

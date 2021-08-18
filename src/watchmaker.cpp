@@ -169,7 +169,7 @@ int main(int argc, char *argv[]) {
     genome = Genome::random(dice);
   }
 
-  if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
+  config::Simulation::setupConfig(configFile, verbosity);
 
   if (mutationsAutoLog)
     config::EDNAConfigFile_common::autologMutations(true);

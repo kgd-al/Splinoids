@@ -27,6 +27,10 @@ void sigint_manager (int) {
 //}
 
 int main(int argc, char *argv[]) {
+
+  // To prevent missing linkages
+  std::cerr << config::PTree::rsetSize() << std::endl;
+
   // ===========================================================================
   // == Command line arguments parsing
 
@@ -37,7 +41,9 @@ int main(int argc, char *argv[]) {
   Verbosity verbosity = Verbosity::QUIET;
 
   std::string lhsTeamArg, rhsTeamArg;
-  CGenome lhsTeam, rhsTeam;
+  simu::Team lhsTeam, rhsTeam;
+
+  std::string kombatName;
 
   std::string outputFolder = "tmp/mk-eval/";
   char overwrite = simu::Simulation::PURGE;
@@ -63,9 +69,9 @@ int main(int argc, char *argv[]) {
                   "[a]bort or [p]urge",
      cxxopts::value(overwrite))
 
-    ("lhs-team", "Splinoid genomes for left-hand side team",
+    ("lhs", "Splinoid genomes for left-hand side team",
      cxxopts::value(lhsTeamArg))
-    ("rhs-team", "Splinoid genomes for right-hand side team",
+    ("rhs", "Splinoid genomes for right-hand side team",
      cxxopts::value(rhsTeamArg))
 
     ("lesions", "Lesion type to apply (def: {})", cxxopts::value(lesions))
@@ -85,17 +91,20 @@ int main(int argc, char *argv[]) {
   if (result.count("auto-config") && result["auto-config"].as<bool>())
     configFile = "auto";
 
-  if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
+  config::Simulation::setupConfig(configFile, Verbosity::QUIET);
   config::Simulation::verbosity.overrideWith(0);
-  if (configFile.empty()) config::Simulation::printConfig("");
+  if (verbosity != Verbosity::QUIET)
+    config::Simulation::printConfig(std::cout);
 
 
-  if (lhsTeamArgs.empty())
+  if (lhsTeamArg.empty())
     utils::doThrow<std::invalid_argument>("No data provided for lhs team");
-  if (rhsTeamArgs.empty())
+  if (rhsTeamArg.empty())
     utils::doThrow<std::invalid_argument>("No data provided for rhs team");
 
-
+  lhsTeam = simu::Team::fromFile(lhsTeamArg);
+  rhsTeam = simu::Team::fromFile(rhsTeamArg);
+  kombatName = simu::Evaluator::kombatName(lhsTeamArg, rhsTeamArg);
 
   // ===========================================================================
   // == SIGINT management
@@ -113,38 +122,12 @@ int main(int argc, char *argv[]) {
 
   auto start = simu::Simulation::now();
 
-  simu::Evaluator eval (!v1scenarios);
-  eval.setScenarios(scenarios);
-  eval.setLesionTypes(lesions);
+  simu::Evaluator eval;
+//  eval.setLesionTypes(lesions);
 
-  static const auto &diffStats = [] (auto prev, auto curr) {
-    for (const auto &p: curr) {
-      auto it = prev.find(p.first);
-      std::cout << "\t" << std::setw(10) << p.first << ": ";
-      if (it != prev.end()) {
-        if (p.second == it->second)
-          std::cout << GAGA_COLOR_GREEN;
-        else
-          std::cout << GAGA_COLOR_RED << it->second << " >> ";
-        std::cout << p.second << GAGA_COLOR_NORMAL;
-      } else
-        std::cout << "\t" << GAGA_COLOR_YELLOW << p.second << GAGA_COLOR_NORMAL;
-      std::cout << "\n";
-    }
-  };
-
-  for (auto &p: individuals) {
-    auto &ind = p.second;
-    auto prevStats = ind.stats;
-    auto prevFitnesses = ind.fitnesses;
-
-    eval.logsSavePrefix = p.first;
-    eval.annTagsFile = annNeuralTags;
-    eval(ind, 0);
-
-    diffStats(prevStats, ind.stats);
-    diffStats(prevFitnesses, ind.fitnesses);
-  }
+  eval.logsSavePrefix = stdfs::path(outputFolder) / kombatName;
+  eval.annTagsFile = annNeuralTags;
+  eval(lhsTeam, rhsTeam);
 
   auto duration = simu::Simulation::durationFrom(start);
   uint days, hours, minutes, seconds, mseconds;

@@ -19,7 +19,9 @@ struct Team {
 
   friend void to_json (nlohmann::json &j, const Team &t);
   friend void from_json (const nlohmann::json &j, Team &t);
+
   static Team fromFile(const stdfs::path &p);
+  void toFile (const stdfs::path &p);
 };
 
 class Scenario {
@@ -29,11 +31,16 @@ public:
   void init (const Team &lhs, const Team &rhs);
   void postEnvStep (void);
   void postStep (void);
+  void preDelCritter (Critter *c);
 
 //  void applyLesions (int lesions);
 
   std::array<float,2> scores (void) const;
   std::array<bool,2> brainless (void) const;
+
+  const auto& teams (void) const {
+    return _teams;
+  }
 
   static const Simulation::InitData commonInitData;
 
@@ -41,7 +48,7 @@ private:
   Simulation &_simulation;
   const uint _teamsSize;
 
-  std::array<std::vector<simu::Critter*>, 2> _teams;
+  std::array<std::set<simu::Critter*>, 2> _teams;
 
   static genotype::Environment environmentGenome (uint tSize);
 };

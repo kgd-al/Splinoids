@@ -808,8 +808,10 @@ void GeneticManipulator::buildNeuralPanel(void) {
   int rcells = 2 * (1+2*genotype::Vision::config_t::precisionBounds().max);
   iol->addRow("Vision", _rLabels = new ColorLabels(rcells, true));
   iol->addRow("Audition", _eLabels
-             = new ColorLabels(2*(simu::Critter::VOCAL_CHANNELS+1), true));
-
+              = new ColorLabels(2*(simu::Critter::VOCAL_CHANNELS+1), true));
+  iol->addRow("Touch", _tLabels
+              = new ColorLabels(1+(2*simu::Critter::SPLINES_COUNT), false));
+  iol->addRow("Health", _hLabels = new ColorLabels(2, false));
   iol->addRow(line(""));
 
   QGridLayout *g = new QGridLayout;
@@ -903,6 +905,8 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
         _rLabels->label(i + j * lhs)->setVisible(false);
 
     _eLabels->setEnabled(true);
+    _tLabels->setEnabled(false);  /// TODO
+    _hLabels->setEnabled(true);
     _sLabels->setEnabled(true);
 
     for (uint i=0; i<S_v; i++) {
@@ -947,6 +951,8 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
 
     _rLabels->setEnabled(false);
     _eLabels->setEnabled(false);
+    _tLabels->setEnabled(false);
+    _hLabels->setEnabled(false);
     _sLabels->setEnabled(false);
 
     for (uint i=0; i<S_v; i++) {
@@ -1043,6 +1049,12 @@ void GeneticManipulator::readCurrentStatus(void) {
       _eLabels->label(j + i * es)->setValue(std::max(0.f, e[i*es+j]));
     _sLabels->label(j)->setValue(s[j]);
   }
+
+  /// TODO
+  /// _tLabels;
+
+  _hLabels->label(0)->setValue(c.bodyHealthness());
+  _hLabels->label(1)->setValue(c.instantaneousPain());
 
   _sBars[0]->setValue(float(c.usableEnergy()));
   _sBars[1]->setValue(float(c.bodyHealth()));

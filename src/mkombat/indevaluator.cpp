@@ -69,7 +69,7 @@ void Evaluator::operator() (Team &lhs, Team &rhs) {
     scenario.init(lhs, rhs);
 
     brainless = scenario.brainless();
-    if (brainless[0] || brainless[1])  break;
+//    if (brainless[0] || brainless[1])  break;
 
 /// TODO Modular ANN (not implemented for 3d)
 //    std::unique_ptr<phenotype::ModularANN> mann;
@@ -80,80 +80,22 @@ void Evaluator::operator() (Team &lhs, Team &rhs) {
 //    scenario.applyLesions(lesion);
 
 /// TODO Log (what to log?)
-//    std::bitset<5> tags;
-//    std::ofstream tlog, alog, nlog;
-//    std::ofstream olog, mlog;
-//    if (!logsSavePrefix.empty()) {
-//      stdfs::path savePath = logsSavePrefix / specStr;
+    std::ofstream llog, rlog;
+    if (!logsSavePrefix.empty()) {
 
-//      stdfs::create_directories(savePath);
+      stdfs::create_directories(logsSavePrefix);
+      std::cerr << logsSavePrefix << " should exist!\n";
 
-//      std::string stags = "GAENV";
+      static const auto header = [] (auto &os) {
+        os << "Time Count LSpeed ASpeed Health TotalHealth\n";
+      };
 
-//      tlog.open(savePath / "trajectory.dat");
-//      tlog << "Env size: " << simulation.environment().xextent()
-//           << " " << simulation.environment().yextent() << "\n"
-//           << "Food_x Food_y Food_r\n";
-//      if (auto f = scenario.foodlet())
-//        tlog << f->x() << " " << f->y() << " " << f->radius() << "\n\n";
+      llog.open(logsSavePrefix / "lhs.dat");
+      header(llog);
 
-//      tlog << stags << " sx sy sa cx cy ca px py pa\n";
-
-//      alog.open(savePath / "vocalisation.dat");
-//      alog << "Noise";
-//      for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
-//        alog << " S" << i;
-//      for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
-//        alog << " C" << i;
-//      alog << "\n";
-
-//      nlog.open(savePath / "neurons.dat");
-//      nlog << stags;
-//      for (const auto &p: brain.neurons())
-//        if (p->isHidden())
-//          nlog << " (" << p->pos.x() << "," << p->pos.y() << ")";
-//      nlog << "\n";
-
-//      if (!annTagsFile.empty()) {
-//        olog.open(savePath / "outputs.dat");
-//        olog << "ML MR CS VV VC\n";
-
-//        mlog.open(savePath / "modules.dat");
-//        mlog << stags;
-//        for (const auto &p: mann->modules()) {
-//          if (p.second->type() == phenotype::ANN::Neuron::H) {
-//            auto f = p.second->flags;
-//            mlog << " " << f << "M " << f << "S";
-//          }
-//        }
-//        mlog << "\n";
-
-//        std::ofstream slog (savePath / "nstats");
-//        std::array<uint, 3> n {0};
-//        uint c = 0;
-//        float s = 0;
-//        for (const auto &p: brain.neurons()) {
-//          n[p->type]++;
-//          c += p->links().size();
-//          s += p->pos.x();
-//        }
-//        slog << "INeurons: " << n[0] << "\n"
-//             << "ONeurons: " << n[1] << "\n"
-//             << "HNeurons: " << n[2] << "\n"
-//             << "Connections: " << c << "\n";
-//        slog << "Skewdness: " << s / brain.neurons().size() << "\n";
-//        n.fill(0);
-//        c = 0;
-//        for (const auto &p: mann->modules()) {
-//          n[p.second->type()]++;
-//          c += p.second->links.size();
-//        }
-//        slog << "IModules: " << n[0] << "\n"
-//             << "OModules: " << n[1] << "\n"
-//             << "HModules: " << n[2] << "\n"
-//             << "MConnections: " << c << "\n";
-//      }
-//    }
+      rlog.open(logsSavePrefix / "rhs.dat");
+      header(rlog);
+    }
 
     while (!simulation.finished() && !aborted) {
       simulation.step();
@@ -161,86 +103,43 @@ void Evaluator::operator() (Team &lhs, Team &rhs) {
 //      // Update modules values (if modular ann is used)
 //      if (mann) for (const auto &p: mann->modules()) p.second->update();
 
-//      if (!logsSavePrefix.empty()) {
-//        tags.reset();
-//        const auto &r = s.retina();
-//        tags[4] = std::any_of(r.begin(), r.end(),
-//          [] (const auto &c) { return c[0] == 0 && c[1] > 0 && c[2] == 0; });
+      if (!logsSavePrefix.empty()) {
+        auto teams = scenario.teams();
+        static const auto log = [] (auto &os, auto team, auto time) {
+          auto s = team.size();
+          os << time << " " << s << " ";
 
-//        tags[3] = std::any_of(r.begin(), r.end(),
-//          [] (const auto &c) { return std::all_of(c.begin(), c.end(),
-//            [] (auto v) { return 0 < v && v < 1; }); });
+          if (s > 0) {
+            float avgLSpeed = 0, avgASpeed = 0, avgHealth = 0, avgTHealth = 0;
+            for (const simu::Critter *c: team) {
+              avgLSpeed += c->linearSpeed();
+              avgASpeed += std::fabs(c->angularSpeed());
+              avgHealth += c->bodyHealthness();
+              avgTHealth += c->healthness();
+            }
+            avgLSpeed /= s;
+            avgASpeed /= s;
+            avgHealth /= s;
+            avgTHealth /= s;
 
-//        tags[2] = std::any_of(r.begin(), r.end(),
-//          [] (const auto &c) { return c[0] == 1; });
+            os << " " << avgLSpeed << " " << avgASpeed
+               << " " << avgHealth << " " << avgTHealth;
+          } else
+            os << "0 0 0 0";
 
-//        const auto &e = s.ears();
-//        for (uint i=0; i<e.size(); i++) {
-//          uint ti = (i%(Critter::VOCAL_CHANNELS+1) == 0) ? 1 : 0;
-//          tags[ti] = tags[ti] | (e[i] > 0);
-//        }
-//      }
-
-//      if (tlog.is_open()) {
-//        tlog << tags
-//             << " " << s.x() << " " << s.y() << " " << s.rotation() << " ";
-
-//        if (auto c = scenario.clone())
-//          tlog << c->x() << " " << c->y() << " " << c->rotation();
-//        else
-//          tlog << "nan nan nan";
-//        tlog << " ";
-
-//        if (auto p = scenario.predator())
-//          tlog << p->x() << " " << p->y() << " " << p->rotation();
-//        else
-//          tlog << "nan nan nan";
-
-//        tlog << "\n";
-//      }
-
-//      if (alog.is_open()) {
-//        for (float v: s.producedSound())  alog << v << " ";
-
-//        if (auto c = scenario.clone())
-//          for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
-//            alog << c->producedSound()[i+1] << " ";
-//        else
-//          for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
-//            alog << "nan ";
-//        alog << "\n";
-//      }
-
-//      if (nlog.is_open()) {
-//        nlog << tags;
-//        for (const auto &p: brain.neurons())
-//          if (p->isHidden())
-//            nlog << " " << p->value;
-//        nlog << "\n";
-//      }
-
-//      if (olog.is_open()) {
-//        for (const auto &v: s.neuralOutputs())
-//          olog << v << " ";
-//        olog << "\n";
-//      }
-
-//      if (mlog.is_open()) {
-//        mlog << tags;
-//        for (const auto &p: mann->modules()) {
-//          if (p.second->type() == phenotype::ANN::Neuron::H) {
-//            const auto &v = p.second->value();
-//            mlog << " " << v.mean << " " << v.stddev;
-//          }
-//        }
-//        mlog << "\n";
-//      }
+          os << "\n";
+        };
+        auto t = float(simulation.currTime().timestamp())
+            / config::Simulation::ticksPerSecond();
+        if (llog.is_open()) log(llog, teams[0], t);
+        if (rlog.is_open()) log(rlog, teams[1], t);
+      }
     }
 
     auto scores = scenario.scores();
     lhs.fitness = scores[0];
     rhs.fitness = scores[1];
-    assert(!brainless[0] && !brainless[1]);
+//    assert(!brainless[0] && !brainless[1]);
   }
 }
 
@@ -257,5 +156,24 @@ void Evaluator::operator() (Team &lhs, Team &rhs) {
 //    return Ind(g);
 //  }
 //}
+
+std::string Evaluator::kombatName (const std::string &lhsFile,
+                                   const std::string &rhsFile) {
+  const std::regex regex (".*ID([0-9]+).*[^[:alnum:]](\\w+)\\.team\\.json");
+  std::ostringstream oss;
+  std::smatch pieces;
+  std::regex_match(lhsFile, pieces, regex);
+  if (pieces.size() == 3)
+    oss << pieces[1] << "_" << pieces[2];
+  else
+    oss << "PARSE_ERROR";
+  oss << "__";
+  std::regex_match(rhsFile, pieces, regex);
+  if (pieces.size() == 3)
+    oss << pieces[1] << "_" << pieces[2];
+  else
+    oss << "PARSE_ERROR";
+  return oss.str();
+}
 
 } // end of namespace simu

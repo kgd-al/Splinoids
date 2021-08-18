@@ -89,10 +89,10 @@ public:
     return _graphicEnvironment->boundingRect();
   }
 
-  simu::Critter* addCritter(const CGenome &genome,
+  simu::Critter* addCritter(CGenome genome,
                             float x, float y, float a,
                             simu::decimal e,
-                            float age) override;
+                            float age, bool overrideGID) override;
   void delCritter (simu::Critter *critter) override;
 
   simu::Foodlet* addFoodlet(simu::BodyType t, float x, float y,

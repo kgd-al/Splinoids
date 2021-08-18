@@ -48,8 +48,9 @@ int main(int argc, char *argv[]) {
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::QUIET;
 
-  std::string lhsGenomeArg, rhsGenomeArg;
-  CGenome lhsGenome, rhsGenome;
+  std::string lhsTeamArg, rhsTeamArg;
+  simu::Team lhsTeam, rhsTeam;
+  std::string kombatName;
 
   int startspeed = 1;
 
@@ -67,10 +68,8 @@ int main(int argc, char *argv[]) {
 
   std::string annRender = ""; // no extension
   std::string annNeuralTags;
-  float annAlphaThreshold = 0;
   bool annAggregateNeurons = false;
 
-  bool v1scenarios = false;
   int lesions = 0;
 
   bool tag = false;
@@ -87,10 +86,8 @@ int main(int argc, char *argv[]) {
     ("v,verbosity", "Verbosity level. " + config::verbosityValues(),
      cxxopts::value(verbosity))
 
-    ("lhs-genome", "Left-hand side splinoid genome",
-     cxxopts::value(lhsGenomeArg))
-    ("rhs-genome", "Right-hand side splinoid genome",
-     cxxopts::value(rhsGenomeArg))
+    ("lhs", "Left-hand side team", cxxopts::value(lhsTeamArg))
+    ("rhs", "Right-hand side team", cxxopts::value(rhsTeamArg))
 
     ("start", "Whether to start running immendiatly after initialisation"
               " (and optionally at which speed > 1)",
@@ -121,18 +118,13 @@ int main(int argc, char *argv[]) {
      cxxopts::value(annRender)->implicit_value("png"))
     ("ann-tags", "Specifiy a collections of position -> tag for the ANN nodes",
      cxxopts::value(annNeuralTags))
-    ("ann-threshold", "Rendering threshold for provided alpha value"
-                      " (inclusive)", cxxopts::value(annAlphaThreshold))
     ("ann-aggregate", "Group neurons into behavioral modules",
      cxxopts::value(annAggregateNeurons)->implicit_value("true"))
 
-    ("1,v1", "Use v1 scenarios",
-     cxxopts::value(v1scenarios)->implicit_value("true"))
     ("lesions", "Lesion type to apply (def: 0/none)", cxxopts::value(lesions))
 
     ("tags", "Tag items to facilitate reading",
      cxxopts::value(tag)->implicit_value("true"))
-
     ;
 
   auto result = options.parse(argc, argv);
@@ -150,10 +142,16 @@ int main(int argc, char *argv[]) {
       if (result.count(o))
         std::cout << "Warning: option '" << o << " is ignored in snapshot mode"
                   << "\n";
-    if (!stdfs::exists(cGenomeArg))
-      utils::doThrow<std::invalid_argument>(
-        "Provided splinoid genome file '", cGenomeArg, " does not exist!");
   }
+
+  if (lhsTeamArg.empty())
+    utils::doThrow<std::invalid_argument>("No data provided for lhs team");
+  if (rhsTeamArg.empty())
+    utils::doThrow<std::invalid_argument>("No data provided for rhs team");
+
+  lhsTeam = simu::Team::fromFile(lhsTeamArg);
+  rhsTeam = simu::Team::fromFile(rhsTeamArg);
+  kombatName = simu::Evaluator::kombatName(lhsTeamArg, rhsTeamArg);
 
   // ===========================================================================
   // == Qt setup
@@ -191,9 +189,10 @@ int main(int argc, char *argv[]) {
 
 #undef RESTORE
 
-  if (verbosity != Verbosity::QUIET) config::Visualisation::printConfig(std::cout);
+  config::Visualisation::setupConfig(configFile, Verbosity::QUIET);
   config::Simulation::verbosity.overrideWith(0);
-  if (configFile.empty()) config::Visualisation::printConfig("");
+  if (verbosity != Verbosity::QUIET)
+    config::Visualisation::printConfig(std::cout);
 
   // ===========================================================================
   // == Window/layout setup
@@ -201,7 +200,7 @@ int main(int argc, char *argv[]) {
   QMainWindow w;
   gui::StatsView *stats = new gui::StatsView;
   visu::GraphicSimulation simulation (w.statusBar(), stats);
-  simu::Scenario scenario (scenarioArg, simulation);
+  simu::Scenario scenario (simulation, lhsTeam.size());
 
   gui::MainView *v = new gui::MainView (simulation, stats, w.menuBar());
   gui::GeneticManipulator *cs = v->characterSheet();
@@ -216,18 +215,12 @@ int main(int argc, char *argv[]) {
   // ===========================================================================
   // == Simulation setup
 
-  std::cout << "Reading splinoid genome from input file '"
-            << cGenomeArg << "'" << std::endl;
-  cGenome = simu::Evaluator::fromJsonFile(cGenomeArg).dna;
-  cGenome.gdata.self.gid = std::max(cGenome.gdata.self.gid,
-                                    phylogeny::GID(0));
-
-  scenario.init(cGenome);
-  if (!annNeuralTags.empty() /*&& snapshots == -1 && annRender.empty()*/) {
-    phenotype::ANN &ann = scenario.subject()->brain();
-    simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);
-  }
-  if (lesions > 0)  scenario.applyLesions(lesions);
+  scenario.init(lhsTeam, rhsTeam);
+//  if (!annNeuralTags.empty() /*&& snapshots == -1 && annRender.empty()*/) {
+//    phenotype::ANN &ann = scenario.subject()->brain();
+//    simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);
+//  }
+//  if (lesions > 0)  scenario.applyLesions(lesions);
 
   if (!outputFolder.empty()) {
     bool ok = simulation.setWorkPath(outputFolder,
@@ -239,12 +232,12 @@ int main(int argc, char *argv[]) {
   // Final preparations (for all versions)
 
   v->fitInView(simulation.bounds(), Qt::KeepAspectRatio);
-  v->select(simulation.critters().at(scenario.subject()));
+//  v->select(simulation.critters().at(scenario.subject()));
   if (tag) {
-    simulation.visuCritter(scenario.subject())->tag = "S";
-    if (auto c = scenario.clone())    simulation.visuCritter(c)->tag = "A";
-    if (auto p = scenario.predator()) simulation.visuCritter(p)->tag = "E";
-    if (auto f = scenario.foodlet())  simulation.visuFoodlet(f)->tag = "G";
+//    simulation.visuCritter(scenario.subject())->tag = "S";
+//    if (auto c = scenario.clone())    simulation.visuCritter(c)->tag = "A";
+//    if (auto p = scenario.predator()) simulation.visuCritter(p)->tag = "E";
+//    if (auto f = scenario.foodlet())  simulation.visuFoodlet(f)->tag = "G";
   }
 
   if (!background.empty()) {
@@ -366,27 +359,29 @@ int main(int argc, char *argv[]) {
     return 242;
 
   } else if (trace > 0) {
-    config::Visualisation::trace.overrideWith(trace);
+//    config::Visualisation::trace.overrideWith(trace);
 
-    config::Visualisation::brainDeadSelection.overrideWith(BrainDead::UNSET);
-    config::Visualisation::drawVision.overrideWith(0);
-    config::Visualisation::drawAudition.overrideWith(0);
+//    config::Visualisation::brainDeadSelection.overrideWith(BrainDead::UNSET);
+//    config::Visualisation::drawVision.overrideWith(0);
+//    config::Visualisation::drawAudition.overrideWith(0);
 
-    stdfs::path savefolder = cGenomeArg;
-    stdfs::path savepath = savefolder.replace_extension();
-    savepath /= scenarioArg;
-    if (lesions > 0) {
-      std::ostringstream oss;
-      oss << "_l" << lesions;
-      savepath += oss.str();
-    }
-    savepath /= "ptrajectory.png";
-    stdfs::create_directories(savepath.parent_path());
+//    stdfs::path savefolder = cGenomeArg;
+//    stdfs::path savepath = savefolder.replace_extension();
+//    savepath /= scenarioArg;
+//    if (lesions > 0) {
+//      std::ostringstream oss;
+//      oss << "_l" << lesions;
+//      savepath += oss.str();
+//    }
+//    savepath /= "ptrajectory.png";
+//    stdfs::create_directories(savepath.parent_path());
 
-    while (!simulation.finished())  simulation.step();
+//    while (!simulation.finished())  simulation.step();
 
-    simulation.render(QString::fromStdString(savepath));
-    std::cout << "Saved to: " << savepath << "\n";
+//    simulation.render(QString::fromStdString(savepath));
+//    std::cout << "Saved to: " << savepath << "\n";
+    std::cerr << "Trace mode incompatible with NxN kombats\n";
+    return 242;
 
   } else if (!annRender.empty()) {
 //    ANNViewer *av = cs->brainPanel()->annViewer;
@@ -468,7 +463,7 @@ int main(int argc, char *argv[]) {
     w.show();
 
     v->fitInView(simulation.bounds(), Qt::KeepAspectRatio);
-    v->select(simulation.critters().at(scenario.subject()));
+    v->select(nullptr);
 
     QTimer::singleShot(100, [&v, startspeed] {
       if (startspeed) v->start(startspeed);

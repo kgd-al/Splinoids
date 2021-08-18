@@ -141,11 +141,11 @@ void GraphicSimulation::addVisuCritter(simu::Critter *sc) {
 }
 
 simu::Critter*
-GraphicSimulation::addCritter (const CGenome &genome,
+GraphicSimulation::addCritter (CGenome genome,
                                float x, float y, float a, simu::decimal e,
-                               float age) {
+                               float age, bool overrideGID) {
 
-  auto *sc = Simulation::addCritter(genome, x, y, a, e, age);
+  auto *sc = Simulation::addCritter(genome, x, y, a, e, age, overrideGID);
   addVisuCritter(sc);
   return sc;
 }

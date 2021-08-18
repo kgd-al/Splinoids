@@ -25,6 +25,11 @@ Team Team::fromFile (const stdfs::path &p) {
   return nlohmann::json::parse(utils::readAll(p));
 }
 
+void Team::toFile(const stdfs::path &p) {
+  std::ofstream ofs (p);
+  ofs << nlohmann::json(*this);
+}
+
 // =============================================================================
 
 const Simulation::InitData Scenario::commonInitData = [] {
@@ -44,10 +49,11 @@ genotype::Environment Scenario::environmentGenome (uint tSize) {
   e.maxVegetalPortion = 1;
   e.taurus = 0;
 
-  if (tSize == 1)
-    e.width = e.height = 4;
+  if (tSize == 1) {
+    e.width = 20;
+    e.height = 8;
 
-  else
+  } else
     utils::doThrow<std::logic_error>("Non atomic teams not implemented!");
 
   return e;
@@ -58,13 +64,19 @@ genotype::Environment Scenario::environmentGenome (uint tSize) {
 Scenario::Scenario (Simulation &simulation, uint tSize)
   : _simulation(simulation), _teamsSize(tSize) {
   simulation.setupCallbacks({
-    { Simulation::POST_ENV_STEP, [this] { postEnvStep(); } },
-    {     Simulation::POST_STEP, [this] { postStep();    } },
+    { Simulation::POST_ENV_STEP,  [this] { postEnvStep(); } },
+    {     Simulation::POST_STEP,  [this] { postStep();    } },
+    { Simulation::PRE_CORPSE_DEL, [this] (Critter *c) {
+        preDelCritter(c);
+      }
+    }
   });
 }
 
 void Scenario::init(const Team &lhs, const Team &rhs) {
-  static constexpr auto E = Critter::maximalEnergyStorage(Critter::MAX_SIZE);
+  static constexpr auto E = INFINITY;
+  static constexpr auto R = Critter::MAX_SIZE;
+
   _simulation.init(environmentGenome(_teamsSize), {}, commonInitData);
 
   if (lhs.size() != _teamsSize)
@@ -82,11 +94,21 @@ void Scenario::init(const Team &lhs, const Team &rhs) {
 
 //  lhs.gdata.self.gid = phylogeny::GID(0);
 
-  for (uint t: {0,1}) {
-    const Team &team = (t ? lhs : rhs);
+  for (int t: {0,1}) {
+    const Team &team = (t==0 ? lhs : rhs);
     for (uint i=0; i<_teamsSize; i++)
-      _teams[t].push_back(
-        _simulation.addCritter(team.members[i], 2*(2*t-1), 0, 0, E, .5));
+      _teams[t].insert(
+        _simulation.addCritter(team.members[i],
+                               8*(2*t-1)/*.5*R*(2*t-1)*/, 0, t*M_PI, E, .5, true));
+  }
+
+  assert(_simulation.critters().size() == 2*_teamsSize);
+  std::set<phylogeny::GID> gids;
+  for (auto &t: _teams) {
+    for (auto c: t) {
+      auto r = gids.insert(c->id());
+      assert(r.second);
+    }
   }
 }
 
@@ -120,10 +142,38 @@ void Scenario::init(const Team &lhs, const Team &rhs) {
 //}
 
 void Scenario::postEnvStep(void) {
+  // DEBUG TEST
+  for (auto &t: _teams) {
+    for (auto c: t) {
+      c->selectiveBrainDead[0] = c->selectiveBrainDead[1] = 1;
+      c->setMotorOutput(1, Motor::LEFT);
+
+      bool h = true;//(c->healthness() == 1);
+      c->setMotorOutput(h ? 1 : -1, Motor::RIGHT);
+    }
+  }
+  // END OF DEBUG TEST
 }
 
 void Scenario::postStep(void) {
-  _simulation._finished = _simulation.currTime().timestamp() >= 1000;
+  static const auto timeout = 10*config::Simulation::ticksPerSecond();
+  bool empty = _teams[0].empty() || _teams[1].empty();
+  bool awake = false;
+  for (const auto &team: _teams) {
+    for (const Critter *c: team) {
+      awake |= c->body().IsAwake();
+      if (awake)  break;
+    }
+    if (awake)  break;
+  }
+
+  _simulation._finished = empty || !awake
+    || (_simulation.currTime().timestamp() >= timeout);
+}
+
+void Scenario::preDelCritter(Critter *c) {
+  for (auto &team: _teams)
+    team.erase(c);
 }
 
 std::array<float,2> Scenario::scores (void) const {
@@ -165,8 +215,8 @@ std::array<bool,2> Scenario::brainless(void) const {
   std::array<bool,2> b {true,true};
 
   for (uint t: {0,1})
-    for (uint i=0; i<_teamsSize && b[t]; i++)
-      b[t] |= _teams[t][i]->brain().empty();
+    for (auto it = _teams[t].begin(); it != _teams[t].end() && b[t]; ++it)
+      b[t] |= (*it)->brain().empty();
 
   return b;
 }
