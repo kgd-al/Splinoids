@@ -683,7 +683,7 @@ void GeneticManipulator::buildStatsLayout(void) {
   _bSex->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
   connect(_bSex, QOverload<int>::of(&QComboBox::currentIndexChanged),
           this, &GeneticManipulator::sexChanged);
-  othersLayout->addWidget(_bSex, 0, 0, 1, 2);
+  othersLayout->addWidget(_bSex, 0, 0, 2, 2, Qt::AlignCenter);
 
   uint r = 0, c = 2;
   const auto addLRow =
@@ -701,6 +701,7 @@ void GeneticManipulator::buildStatsLayout(void) {
   };
 
                             addLRow(false, "Mass");
+  c = 2;                    addLRow(false, "Moment");
   addLRow(false, "Age");    addLRow(false, "Clock");
   addLRow( true, "Adult");  addLRow( true, "Old");
   addLRow(false, "Effcy");  addLRow(false, "Repro");
@@ -905,7 +906,7 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
         _rLabels->label(i + j * lhs)->setVisible(false);
 
     _eLabels->setEnabled(true);
-    _tLabels->setEnabled(false);  /// TODO
+    _tLabels->setEnabled(true);  /// TODO
     _hLabels->setEnabled(true);
     _sLabels->setEnabled(true);
 
@@ -993,6 +994,7 @@ void GeneticManipulator::updateShapeData(void) {
   const SCritter &c = _subject->object();
 
   set("Mass", &SCritter::mass);
+  set("Moment", &SCritter::momentOfInertia);
 
   _sBars[0]->setMaximum(float(c.bodyMaxHealth()), false);
   _sBars[1]->setMaximum(float(c.maxUsableEnergy()), false);
@@ -1050,8 +1052,8 @@ void GeneticManipulator::readCurrentStatus(void) {
     _sLabels->label(j)->setValue(s[j]);
   }
 
-  /// TODO
-  /// _tLabels;
+  for (uint i=0; i<1+2*simu::Critter::SPLINES_COUNT; i++)
+    _tLabels->label(i)->setValue(c.touchSensorOn(i));
 
   _hLabels->label(0)->setValue(c.bodyHealthness());
   _hLabels->label(1)->setValue(c.instantaneousPain());

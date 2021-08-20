@@ -35,7 +35,6 @@ public:
   static constexpr float MAX_DENSITY = 2;
 
   static constexpr auto SPLINES_COUNT = Genome::SPLINES_COUNT;
-  static constexpr uint SPLINES_PRECISION = 4;
 
   static constexpr uint VOCAL_CHANNELS = 3;
 
@@ -123,7 +122,7 @@ private:
     // Right spline
     P2D pr0;  // Destination
     P2D cr0;  // First control point
-    P2D cr1;  // Second control point'
+    P2D cr1;  // Second control point
 
 #ifndef NDEBUG
     friend void assertEqual (const SplineData &lhs, const SplineData &rhs,
@@ -168,6 +167,10 @@ private:
   // ===========================================================================
   // == Audition cache data ==
   std::array<float, 2*(VOCAL_CHANNELS+1)> _ears;
+
+  // ===========================================================================
+  // == Touch cache data ==
+  std::array<uint, 2*SPLINES_COUNT+1> _touch;
 
   // ===========================================================================
   // == Neural outputs ==
@@ -317,6 +320,10 @@ public:
 
   auto mass (void) const {
     return _body.GetMass();
+  }
+
+  auto momentOfInertia (void) const {
+    return _body.GetInertia();
   }
 
   auto linearSpeed (void) const {
@@ -537,6 +544,15 @@ public:
     float total = 0;
     for (float f: _feedingSources)  total += f;
     return _feedingSources[BodyType::CORPSE] / total;
+  }
+
+  void registerContact (const FixtureData &fd, bool touching) {
+    _touch[fd.type == FixtureType::BODY ? 0 : 1+splineIndex(fd)]
+      += (touching ? +1 : -1);
+  }
+
+  bool touchSensorOn (uint i) const {
+    return _touch[i] > 0;
   }
 
   bool applyHealthDamage(const FixtureData &d, float amount, Environment &env);

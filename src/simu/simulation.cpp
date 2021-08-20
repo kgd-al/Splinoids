@@ -9,7 +9,7 @@ using json = nlohmann::json;
 
 static constexpr bool debugShowStepHeader = false;
 static constexpr int debugEntropy = 0;
-static constexpr int debugCritterManagement = 1;
+static constexpr int debugCritterManagement = 0;
 static constexpr int debugFoodletManagement = 0;
 static constexpr int debugAudition = 0;
 static constexpr int debugReproduction = 0;

@@ -73,6 +73,14 @@ Scenario::Scenario (Simulation &simulation, uint tSize)
   });
 }
 
+#if 1
+#define X 8*(2*t-1)
+#define FORWARD true
+#else
+#define X (.5*R+.001)*(2*t-1)
+#define FORWARD false
+#endif
+
 void Scenario::init(const Team &lhs, const Team &rhs) {
   static constexpr auto E = INFINITY;
   static constexpr auto R = Critter::MAX_SIZE;
@@ -99,7 +107,7 @@ void Scenario::init(const Team &lhs, const Team &rhs) {
     for (uint i=0; i<_teamsSize; i++)
       _teams[t].insert(
         _simulation.addCritter(team.members[i],
-                               8*(2*t-1)/*.5*R*(2*t-1)*/, 0, t*M_PI, E, .5, true));
+                               X, 0, t*M_PI, E, .5, true));
   }
 
   assert(_simulation.critters().size() == 2*_teamsSize);
@@ -148,7 +156,7 @@ void Scenario::postEnvStep(void) {
       c->selectiveBrainDead[0] = c->selectiveBrainDead[1] = 1;
       c->setMotorOutput(1, Motor::LEFT);
 
-      bool h = true;//(c->healthness() == 1);
+      bool h = FORWARD;//(c->healthness() == 1 || c->species() < phylogeny::SID(1));
       c->setMotorOutput(h ? 1 : -1, Motor::RIGHT);
     }
   }
@@ -156,7 +164,7 @@ void Scenario::postEnvStep(void) {
 }
 
 void Scenario::postStep(void) {
-  static const auto timeout = 10*config::Simulation::ticksPerSecond();
+  static const auto timeout = 20*config::Simulation::ticksPerSecond();
   bool empty = _teams[0].empty() || _teams[1].empty();
   bool awake = false;
   for (const auto &team: _teams) {

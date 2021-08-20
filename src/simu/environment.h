@@ -29,13 +29,19 @@ public:
   };
   using FeedingEvents = std::set<FeedingEvent>;
 
+  struct CritterData {
+    uint collisions = 0;
+    struct {
+      float linear, angular;
+    } previousVelocities;
+    float totalImpulsions;
+  };
+  using CritterDataMap = std::map<Critter*, CritterData>;
+
   using FightingKey = std::pair<Critter*, Critter*>;
   struct FightingData {
-    struct {
-      std::array<P2D, 2> linear;
-      std::array<float, 2> angular;
-    } velocities;
-    std::set<std::pair<b2Fixture*,b2Fixture*>> fixtures;
+    std::array<CritterData*, 2> critters;
+    std::map<std::pair<b2Fixture*,b2Fixture*>, float> fixtures;
   };
   using FightingEvents = std::map<FightingKey, FightingData>;
 
@@ -66,6 +72,8 @@ private:
 
   b2Body *_edges;
   b2BodyUserData _edgesUserData, _obstaclesUserData;
+
+  CritterDataMap _critterData;
 
   FeedingEvents _feedingEvents;
   FightingEvents _fightingEvents;

@@ -200,6 +200,8 @@ if (EXP_KOMBAT)
       mk-evolver
       $<TARGET_OBJECTS:SIMU_OBJS>
       $<TARGET_OBJECTS:MK_OBJS>
+      "src/mkombat/coevolutionga.cpp"
+      "src/mkombat/coevolutionga.h"
       "src/mkombat/evolver.cpp")
     target_link_libraries(mk-evolver ${CORE_LIBS} pthread)
 

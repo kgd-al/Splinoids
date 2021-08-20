@@ -9,7 +9,7 @@
 namespace simu {
 
 struct Evaluator {
-  using DNA = genotype::Critter;
+  using Genome = genotype::Critter;
 
   Evaluator (void);
 

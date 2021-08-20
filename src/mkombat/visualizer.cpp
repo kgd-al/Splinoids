@@ -76,8 +76,8 @@ int main(int argc, char *argv[]) {
   int trace = -1;
 
   cxxopts::Options options("Splinoids (mk-gui-evaluation)",
-                           "2D simulation of minimal splinoids for "
-                           "evolution in Mortal Kombat conditions");
+                           "2D graphical simulation of simplified splinoids "
+                           " for evolution in Mortal Kombat conditions");
   options.add_options()
     ("h,help", "Display help")
     ("a,auto-config", "Load configuration data from default location")

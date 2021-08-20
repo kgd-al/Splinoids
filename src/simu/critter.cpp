@@ -91,14 +91,15 @@ P2D ySymmetrical (const P2D &p) {
   return {p.x,-p.y};
 }
 
+static constexpr uint SPLINES_PRECISION = 4;
 using CubicCoefficients = std::array<real, 4>;
 using SplinesCoefficients = std::array<CubicCoefficients,
-                                       Critter::SPLINES_PRECISION-2>;
+                                       SPLINES_PRECISION-2>;
 
 SplinesCoefficients coefficients = [] {
   SplinesCoefficients c;
-  for (uint i=0; i<Critter::SPLINES_PRECISION-2; i++) {
-    real t = real(i+1) / (Critter::SPLINES_PRECISION-1),
+  for (uint i=0; i<SPLINES_PRECISION-2; i++) {
+    real t = real(i+1) / (SPLINES_PRECISION-1),
          t_ = 1-t;
     c[i] = {
       real(std::pow(t_, 3)),
@@ -113,7 +114,7 @@ SplinesCoefficients coefficients = [] {
 P2D pointAt (int t, const P2D &p0, const P2D &c0, const P2D &c1, const P2D &p1){
   if (t == 0)
     return p0;
-  else if (t == Critter::SPLINES_PRECISION-1)
+  else if (t == SPLINES_PRECISION-1)
     return p1;
   else {
     const auto& c = coefficients[t-1];
@@ -184,6 +185,7 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
   _voice.fill(0);
   _sounds.fill(0);
   _ears.fill(0);
+  _touch.fill(0);
 
   // Update current healths
   if (std::isinf(e))
@@ -242,6 +244,7 @@ void Critter::buildBrain(void) {
   using Coordinates = phenotype::ANN::Coordinates;
   using Point = Coordinates::value_type;
   static const auto add = [] (auto &v, auto... coords) {
+//    std::cerr << Point({coords...}) << "\n";
     v.emplace_back(Point({coords...}));
   };
 
@@ -285,7 +288,8 @@ void Critter::buildBrain(void) {
 #if ESHN_SUBSTRATE_DIMENSION == 2
     for (uint i=0; i<3; i++) add(inputs, x, -1+i*.25f / 3.f);
 #elif ESHN_SUBSTRATE_DIMENSION == 3
-    for (uint i=0; i<3; i++) add(inputs, x, -1.f, 1 - i / 3.f);
+    // z in [1/3,1]
+    for (uint i=0; i<3; i++) add(inputs, x, -1.f, 1 - 2.f * i / 6.f);
 #endif
   }
 
@@ -295,10 +299,23 @@ void Critter::buildBrain(void) {
 #if ESHN_SUBSTRATE_DIMENSION == 2
       add(inputs, i*.5f, -.75f + .25f * j / (VOCAL_CHANNELS+1));
 #elif ESHN_SUBSTRATE_DIMENSION == 3
-      add(inputs, i*.5f, -1.f, -1.f + j / float(VOCAL_CHANNELS+1));
+      // z in [-1,-1/3]
+      add(inputs, i*.5f, -1.f, -1.f + 2.f * j / float(VOCAL_CHANNELS * 3.f));
 #endif
     }
   }
+
+  // Touch
+  add(inputs, 0.f, -1.f, 1.f/8.f);  // body
+  for (int s: {1,-1}) {
+    for (uint i=0; i<SPLINES_COUNT; i++) {
+      float a = s*_genotype.splines[i].data[genotype::Spline::Index::SA];
+      assert(-M_PI <= a && a <= M_PI);
+      float x = int(Point::RATIO * (-a / M_PI)) / float(Point::RATIO);
+      add(inputs, x, -1.f, -1.f/8.f + 2.f * i / (SPLINES_COUNT * 8.f));
+    }
+  }
+
 
   // ========
   // = Outputs
@@ -480,6 +497,7 @@ void Critter::neuralStep(void) {
 
     for (const auto &c: _retina) for (float v: c) inputs[i++] = v;
     for (const auto &e: _ears)  inputs[i++] = e;
+    for (const auto &t: _touch) inputs[i++] = (t > 0);
 
     // Process n propagation steps
     _brain(inputs, _neuralOutputs, _genotype.brain.substeps);
@@ -1281,7 +1299,7 @@ void Critter::setNoisy(bool n) {
   _sounds[0] = n;
 }
 
-static constexpr bool debugHealthLoss = true;
+static constexpr bool debugHealthLoss = false;
 bool Critter::applyHealthDamage (const FixtureData &d, float amount,
                                  Environment &env) {
   decimal damount = amount;

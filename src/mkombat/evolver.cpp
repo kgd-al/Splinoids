@@ -1,6 +1,7 @@
 #include <csignal>
 
-#include "indevaluator.h"
+#include "coevolutionga.h"
+//#include "kgd/external/gaga.hpp"
 #include "kgd/external/cxxopts.hpp"
 
 void sigint_manager (int) {
@@ -31,8 +32,7 @@ void symlink_as_last (const stdfs::path &path) {
 }
 
 int main(int argc, char *argv[]) {
-  using CGenome = genotype::Critter;
-  using EGenome = genotype::Environment;
+  using CGenome = ga::CoEvolution::Genome;
 
   // ===========================================================================
   // == Command line arguments parsing
@@ -41,26 +41,18 @@ int main(int argc, char *argv[]) {
 
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::SHOW;
-  int gagaVerbosity = 1;
 
-  std::string eGenomeArg;
-//  std::vector<std::string> cGenomeArgs;
-  std::string load;
+//  std::string load;
 
-  EGenome eGenome;
-//  std::vector<CGenome> cGenomes;
-
-  std::string outputFolder = "tmp/pp-evo/";
+  std::string outputFolder = "tmp/mk-evo/";
   char overwrite = simu::Simulation::ABORT;
 
-  uint popSize = 5, generations = 1, threads = 1;
-  long seed = -1;
+  ga::CoEvolution::Parameters params;
+  uint threads = 1;
 
-  bool v1scenarios = false;
-
-  cxxopts::Options options("Splinoids (pp-evolver)",
-                           "Evolution of minimal splinoids in 2D simulations"
-                           " with enforced prey/predator interactions");
+  cxxopts::Options options("Splinoids (mk-evolver)",
+                           "Evolution of simplified splinoids in Mortal Kombat"
+                           " conditions");
   options.add_options()
     ("h,help", "Display help")
     ("a,auto-config", "Load configuration data from default location")
@@ -68,8 +60,6 @@ int main(int argc, char *argv[]) {
      cxxopts::value(configFile))
     ("v,verbosity", "Verbosity level. " + config::verbosityValues(),
      cxxopts::value(verbosity))
-    ("gaga-verbosity", "Verbosity level (for gaga [0,3])",
-     cxxopts::value(gagaVerbosity))
 
     ("f,data-folder", "Folder under which to store the computational outputs",
      cxxopts::value(outputFolder))
@@ -77,22 +67,15 @@ int main(int argc, char *argv[]) {
                   "[a]bort or [p]urge",
      cxxopts::value(overwrite))
 
-    ("env-genome", "Environment's genome", cxxopts::value(eGenomeArg))
-//    ("spln-genome", "Splinoid genome to start from or a random seed. Use "
-//                    "multiple times to define multiple sub-populations",
-//     cxxopts::value(cGenomeArgs))
-    ("load", "Restart evolution from a saved population",
-     cxxopts::value(load))
+//    ("load", "Restart evolution from a saved population",
+//     cxxopts::value(load))
 
-    ("seed", "Size of the evolved population", cxxopts::value(seed))
-    ("pop-size", "Size of the evolved population", cxxopts::value(popSize))
+    ("seed", "RNG seed for the evolution", cxxopts::value(params.seed))
+    ("team-size", "Size of the single team", cxxopts::value(params.teamSize))
+    ("team-count", "Number of teams", cxxopts::value(params.teams))
     ("generations", "Number of generations to let the evolution run for",
-     cxxopts::value(generations))
+     cxxopts::value(params.generations))
     ("threads", "Number of parallel threads", cxxopts::value(threads))
-
-
-    ("1,v1", "Use v1 scenarios",
-     cxxopts::value(v1scenarios)->implicit_value("true"))
     ;
 
   auto result = options.parse(argc, argv);
@@ -106,7 +89,6 @@ int main(int argc, char *argv[]) {
   if (result.count("auto-config") && result["auto-config"].as<bool>())
     configFile = "auto";
 
-
   if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
   { // alter mutation rates for this splineless experiment
     config::Simulation::verbosity.overrideWith(0);
@@ -117,34 +99,8 @@ int main(int argc, char *argv[]) {
     utils::normalize(cm);
     genotype::Critter::config_t::mutationRates.overrideWith(cm);
   }
-  if (configFile.empty()) config::Simulation::printConfig("");
+  config::Simulation::printConfig(stdfs::path(outputFolder) / "configs");
 
-//  if (load.empty()) {
-//    if (cGenomeArgs.empty())  cGenomeArgs.push_back("-1");
-//    for (const auto arg: cGenomeArgs) {
-//      long cGenomeSeed = maybeSeed(arg);
-//      if (cGenomeSeed < -1) {
-//        std::cout << "Reading splinoid genome from input file '"
-//                  << arg << "'" << std::endl;
-//        cGenomes.push_back(CGenome::fromFile(arg));
-
-//      } else {
-//        rng::FastDice dice;
-//        if (cGenomeSeed >= 0) dice.reset(cGenomeSeed);
-//        std::cout << "Generating splinoid genome from rng seed "
-//                  << dice.getSeed() << std::endl;
-//        CGenome g = CGenome::random(dice);
-//        cGenomes.push_back(g);
-//      }
-//    }
-
-//    std::cout << "Splinoid";
-//    if (cGenomes.size() > 1) std::cout << "s";
-//    std::cout << ":\n";
-//    for (const CGenome &g: cGenomes)
-//      std::cout << g;
-//    std::cout << std::endl;
-//  }
 
   // ===========================================================================
   // == SIGINT management
@@ -159,39 +115,21 @@ int main(int argc, char *argv[]) {
   // ===========================================================================
   // == GA setup
 
-
-  CGenome::printMutationRates(std::cout, 2);
-//  if (!outputFolder.empty())
-//    s.setWorkPath(outputFolder, simu::Simulation::Overwrite(overwrite));
-  simu::Simulation::printStaticStats();
-
   rng::AtomicDice dice;
   std::cout << "Using seed ";
-  if (seed >= 0) {
-    dice.reset(seed);
-    std::cout << seed << " -> ";
+  if (params.seed >= 0) {
+    dice.reset(params.seed);
+    std::cout << params.seed << " -> ";
   }
   std::cout << dice.getSeed() << "\n";
 
-  simu::Evaluator eval;
+  std::cout << params << "\n";
+  CGenome::printMutationRates(std::cout, 2);
+//  simu::Simulation::printStaticStats();
 
-//  using GA = simu::Evaluator::GA;
-//  GA ga;
-//  ga.setPopSize(popSize);
-//  ga.setNbThreads(threads);
-//  ga.setMutationRate(1);
-//  ga.setCrossoverRate(0);
-//  ga.setSelectionMethod(GAGA::SelectionMethod::paretoTournament);
-//  ga.setTournamentSize(4);
-//  ga.setNbElites(1);
-//  ga.setEvaluateAllIndividuals(true);
-//  ga.setVerbosity(gagaVerbosity);
-//  ga.setSaveFolder(outputFolder);
-//  ga.setNbSavedElites(ga.getNbElites());
-//  ga.setSaveGenStats(true);
-//  ga.setSaveIndStats(true);
-//  ga.setSaveParetoFront(false);
+  ga::CoEvolution evolver (params);
 
+  // ga.disableGenerationalHistoryOrSOmethingLikeThat();
 //  ga.setNewGenerationFunction([&dice, &eval, &ga] {
 //    std::cout << "\nNew generation at " << utils::CurrentTime{} << "\n";
 //    if (ga.getCurrentGenerationNumber() == 0)
