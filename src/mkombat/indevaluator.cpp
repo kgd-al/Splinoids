@@ -57,19 +57,48 @@ Evaluator::Evaluator (void) {
 //  }
 //}
 
-void Evaluator::operator() (Team &lhs, Team &rhs) {
+auto duration (const simu::Simulation &s) {
+  static const auto &DT = config::Simulation::ticksPerSecond();
+  return float(s.currTime().timestamp()) / DT;
+}
+
+template <typename T, typename ...ARGS>
+auto avg (const std::set<Critter*> &pop,
+          T (Critter::*getter) (ARGS...) const,
+          ARGS ...args) {
+  T v = 0;
+  if (pop.size() > 0) {
+    for (Critter *c: pop)  v += (c->*getter)(std::forward<ARGS>(args)...);
+    v /= T(pop.size());
+  }
+  return v;
+}
+
+void Evaluator::operator() (Ind &lhs_i, Ind &rhs_i) {
   std::array<bool,2> brainless;
+
+  const Team &lhs = lhs_i.dna, &rhs = rhs_i.dna;
 
   using utils::operator<<;
   for (int lesion: lesions) {
 
     Simulation simulation;
     Scenario scenario (simulation, lhs.size());
+    Footprint footprint;
 
     scenario.init(lhs, rhs);
 
     brainless = scenario.brainless();
-//    if (brainless[0] || brainless[1])  break;
+    bool bothBrainless = brainless[0] && brainless[1];
+
+    uint f = 0;
+    const auto t0_avg = [&scenario] (auto f, auto... args) {
+      return simu::avg(scenario.teams()[0], f, args...);
+    };
+    using SSide = Critter::Side;
+    for (SSide s: {SSide::LEFT, SSide::RIGHT})
+      for (uint i=0; i<Critter::SPLINES_COUNT; i++)
+        footprint[f++] = t0_avg(&Critter::splineHealth, i, s);
 
 /// TODO Modular ANN (not implemented for 3d)
 //    std::unique_ptr<phenotype::ModularANN> mann;
@@ -97,7 +126,7 @@ void Evaluator::operator() (Team &lhs, Team &rhs) {
       header(rlog);
     }
 
-    while (!simulation.finished() && !aborted) {
+    while (!simulation.finished() && !aborted && !bothBrainless) {
       simulation.step();
 
 //      // Update modules values (if modular ann is used)
@@ -107,72 +136,79 @@ void Evaluator::operator() (Team &lhs, Team &rhs) {
         auto teams = scenario.teams();
         static const auto log = [] (auto &os, auto team, auto time) {
           auto s = team.size();
-          os << time << " " << s << " ";
 
-          if (s > 0) {
-            float avgLSpeed = 0, avgASpeed = 0, avgHealth = 0, avgTHealth = 0;
-            for (const simu::Critter *c: team) {
-              avgLSpeed += c->linearSpeed();
-              avgASpeed += std::fabs(c->angularSpeed());
-              avgHealth += c->bodyHealthness();
-              avgTHealth += c->healthness();
-            }
-            avgLSpeed /= s;
-            avgASpeed /= s;
-            avgHealth /= s;
-            avgTHealth /= s;
-
-            os << " " << avgLSpeed << " " << avgASpeed
-               << " " << avgHealth << " " << avgTHealth;
-          } else
-            os << "0 0 0 0";
-
-          os << "\n";
+          const auto avg = [&team] (auto f) { return simu::avg(team, f); };
+          os << time << " " << s << " "
+             << " " << avg(&Critter::linearSpeed)
+             << " " << avg(&Critter::angularSpeed)
+             << " " << avg(&Critter::bodyHealthness)
+             << " " << avg(&Critter::healthness)
+             << "\n";
         };
-        auto t = float(simulation.currTime().timestamp())
-            / config::Simulation::ticksPerSecond();
+        auto t = duration(simulation);
         if (llog.is_open()) log(llog, teams[0], t);
         if (rlog.is_open()) log(rlog, teams[1], t);
       }
     }
 
-    auto scores = scenario.scores();
-    lhs.fitness = scores[0];
-    rhs.fitness = scores[1];
+    lhs_i.fitnesses["mk"] = scenario.score();
+//    lhs_i.stats["t"] = Scenario::DURATION - duration(simulation);
+    lhs_i.stats["b"] = !brainless[0];
+
+    footprint[f++] = t0_avg(&Critter::bodyHealth);
+    for (SSide s: {SSide::LEFT, SSide::RIGHT})
+      for (uint i=0; i<Critter::SPLINES_COUNT; i++)
+        footprint[f++] = t0_avg(&Critter::splineHealth, i, s);
+    footprint[f++] = t0_avg(&Critter::mass);
+    footprint[f++] = t0_avg(&Critter::momentOfInertia);
+    footprint[f++] = t0_avg(&Critter::x);
+    footprint[f++] = t0_avg(&Critter::y);
+    lhs_i.signature = footprint;
+    assert(f == FOOTPRINT_DIM);
+
+    lhs_i.infos = id(rhs_i);
+
 //    assert(!brainless[0] && !brainless[1]);
   }
 }
 
-//Evaluator::Ind Evaluator::fromJsonFile(const std::string &path) {
-//  std::ifstream t(path);
-//  std::stringstream buffer;
-//  buffer << t.rdbuf();
-//  auto o = nlohmann::json::parse(buffer.str());
+Evaluator::Ind Evaluator::fromJsonFile(const std::string &path) {
+  std::ifstream t(path);
+  std::stringstream buffer;
+  buffer << t.rdbuf();
+  auto o = nlohmann::json::parse(buffer.str());
 
-//  if (o.count("dna")) // assuming this is a gaga individual
-//    return Ind(o);
-//  else {
-//    DNA g = o;
-//    return Ind(g);
-//  }
-//}
+  if (o.count("dna")) // assuming this is a gaga individual
+    return Ind(o);
+  else {
+    Genome g = o;
+    return Ind(g);
+  }
+}
 
 std::string Evaluator::kombatName (const std::string &lhsFile,
                                    const std::string &rhsFile) {
-  const std::regex regex (".*ID([0-9]+).*[^[:alnum:]](\\w+)\\.team\\.json");
+  static const std::regex regex
+    (".*ID([0-9]+)/([AB])/gen([0-9]+)/.*_([0-9]+)\\.dna");
+
   std::ostringstream oss;
+  const auto merge = [&oss] (std::smatch tokens) {
+    if (tokens.size() == 5) {
+      oss << tokens[1];
+      for (uint i = 2; i < tokens.size(); i++)
+        oss << "-" << tokens[i];
+    } else
+      oss << "PARSE_ERROR";
+  };
+
   std::smatch pieces;
   std::regex_match(lhsFile, pieces, regex);
-  if (pieces.size() == 3)
-    oss << pieces[1] << "_" << pieces[2];
-  else
-    oss << "PARSE_ERROR";
+  merge(pieces);
+
   oss << "__";
   std::regex_match(rhsFile, pieces, regex);
-  if (pieces.size() == 3)
-    oss << pieces[1] << "_" << pieces[2];
-  else
-    oss << "PARSE_ERROR";
+  merge(pieces);
+
   return oss.str();
 }
 

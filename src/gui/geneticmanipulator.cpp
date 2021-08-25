@@ -906,7 +906,7 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
         _rLabels->label(i + j * lhs)->setVisible(false);
 
     _eLabels->setEnabled(true);
-    _tLabels->setEnabled(true);  /// TODO
+    _tLabels->setEnabled(true);
     _hLabels->setEnabled(true);
     _sLabels->setEnabled(true);
 

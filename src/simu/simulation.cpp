@@ -187,50 +187,12 @@ void Simulation::init(const Environment::Genome &egenome,
                       std::vector<Critter::Genome> cgenomes,
                       const InitData &data) {
 
-//  // Parse scenario settings
-//  json scenarioData;
-//  if (stdfs::exists(data)) {
-//    std::cout << "Parsing contents of " << data << " for scenario"
-//                                                               " data\n";
-//    scenarioData = json::parse(utils::readAll(data));
-
-//  } else
-//    scenarioData = json::parse(data);
-
-//  InitData data;
-
   _finished = false;
   _aborted = false;
   _genData.min = 0;
   _genData.max = 0;
   _genData.goal = std::numeric_limits<decltype(_genData.goal)>::max();
   _time.set(0);
-
-  // TODO Remove (debug)
-//  cgenome.vision.angleBody = M_PI/4.;
-//  cgenome.vision.angleRelative = -M_PI/4;
-//  cgenome.vision.width = M_PI/4.;
-//  cgenome.vision.precision = 1;
-//  cgenome.matureAge = .05;
-
-//  auto le = [&cgenome] (float v) {
-//    return Critter::lifeExpectancy(Critter::clockSpeed(cgenome, v));
-//  };
-//  auto sd = [&cgenome] (float v, bool y) {
-//    auto s = y ? Critter::MIN_SIZE : Critter::MAX_SIZE;
-//    return Critter::starvationDuration(s,
-//      Critter::maximalEnergyStorage(s),
-//      Critter::clockSpeed(cgenome, v));
-//  };
-
-//  if (debugShowStaticStats)
-//    std::cerr << "Stats for provided genome\n"
-//              << "   Old age duration: " << le(0) << ", " << le(.5) << ", "
-//                << le(1) << "\n"
-//              << "Starvation duration:\n\t"
-//                << sd(0, true) << ", " << sd(.5, true) << ", " << sd(1, true)
-//                << "\n\t" << sd(0, false) << ", " << sd(.5, false) << ", "
-//                << sd(1, false) << std::endl;
 
   _systemExpectedEnergy = data.ienergy;
 
@@ -274,17 +236,17 @@ void Simulation::init(const Environment::Genome &egenome,
     float x = dice(-CW, CW);
     float y = dice(-CH, CH);
 
-    /// TODO Test array army
+    // Test array army
 //    uint n = data.nCritters / 2;
 //    float a = M_PI * (1-bindex);
 //    float x = (bindex ? -1 : +1) * W * (((i/2)%3) + 1) / 4;
 //    float y = -.95 * H + 1.9 * H * int(i / 2) / n;
 
-    // TODO Test 1
+    // Test 1
 //    if (i == 0) x = -.75, y = .25, a = 0;
 //    if (i == 1) x = -.75, y = -.25, a = 0;
 
-    // TODO Test 2
+    // Test 2
 //    if (i == 0) x = 49, y = 49, a = M_PI/4;
 //    if (i == 1) x = 47, y = 50-sqrt(2), a = M_PI/2;
 //    if (i == 2) x = 50-sqrt(2), y = 47, a = 0;
@@ -297,7 +259,7 @@ void Simulation::init(const Environment::Genome &egenome,
 
 //  addFoodlet(BodyType::PLANT,
 //             0, 0,
-//             1, 2); // TODO
+//             1, 2); // Test
   plantRenewal(std::min(W, H) * data.pRange);
 
   if (config::Simulation::logStatsEvery() > 0)
@@ -494,12 +456,8 @@ void Simulation::step (void) {
   if (_critters.empty())  _genData.min = 0;
   if (_timeMs.level > 1)  _timeMs.spln = durationFrom(start),  start = now();
 
-  detectBudgetFluctuations();
-
   _environment->step();
   maybeCall<SimulationCallback>(POST_ENV_STEP);
-
-  detectBudgetFluctuations();
 
   if (_timeMs.level > 1)  _timeMs.env = durationFrom(start),  start = now();
 

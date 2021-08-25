@@ -1,7 +1,6 @@
 #include <csignal>
 
-#include "coevolutionga.h"
-//#include "kgd/external/gaga.hpp"
+#include "indevaluator.h"
 #include "kgd/external/cxxopts.hpp"
 
 void sigint_manager (int) {
@@ -31,8 +30,19 @@ void symlink_as_last (const stdfs::path &path) {
   std::cout << "Created " << link << " -> " << path << "\n";
 }
 
+template <typename D = std::chrono::milliseconds>
+auto timestamp (void) {
+  using namespace std::chrono;
+  return duration_cast<D>(system_clock::now().time_since_epoch()).count();
+}
+
 int main(int argc, char *argv[]) {
-  using CGenome = ga::CoEvolution::Genome;
+  std::cerr << config::PTree::rsetSize() << std::endl;
+
+//  using CGenome = ga::CoEvolution::Genome;
+  using Ind = simu::Evaluator::Ind;
+  using Team = simu::Evaluator::Genome;
+  static_assert(std::is_same<Team, simu::Team>::value, "What!?");
 
   // ===========================================================================
   // == Command line arguments parsing
@@ -41,14 +51,18 @@ int main(int argc, char *argv[]) {
 
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::SHOW;
+  int gagaVerbosity = 1;
 
 //  std::string load;
 
   std::string outputFolder = "tmp/mk-evo/";
   char overwrite = simu::Simulation::ABORT;
 
-  ga::CoEvolution::Parameters params;
+  uint teamSize = 1, popSize = 5, generations = 1;
   uint threads = 1;
+  long seed = -1;
+
+  auto id = timestamp();
 
   cxxopts::Options options("Splinoids (mk-evolver)",
                            "Evolution of simplified splinoids in Mortal Kombat"
@@ -60,6 +74,8 @@ int main(int argc, char *argv[]) {
      cxxopts::value(configFile))
     ("v,verbosity", "Verbosity level. " + config::verbosityValues(),
      cxxopts::value(verbosity))
+    ("gaga-verbosity", "GAGA verbosity level. ",
+     cxxopts::value(gagaVerbosity))
 
     ("f,data-folder", "Folder under which to store the computational outputs",
      cxxopts::value(outputFolder))
@@ -70,12 +86,16 @@ int main(int argc, char *argv[]) {
 //    ("load", "Restart evolution from a saved population",
 //     cxxopts::value(load))
 
-    ("seed", "RNG seed for the evolution", cxxopts::value(params.seed))
-    ("team-size", "Size of the single team", cxxopts::value(params.teamSize))
-    ("team-count", "Number of teams", cxxopts::value(params.teams))
+    ("seed", "RNG seed for the evolution (except the GAGA part)",
+     cxxopts::value(seed))
+    ("team-size", "Size of the single team", cxxopts::value(teamSize))
+    ("team-count", "Number of teams", cxxopts::value(popSize))
     ("generations", "Number of generations to let the evolution run for",
-     cxxopts::value(params.generations))
+     cxxopts::value(generations))
     ("threads", "Number of parallel threads", cxxopts::value(threads))
+    ("id", "Run identificator (used to uniquely identify the output folder, "
+           "defaults to the current timestamp)",
+     cxxopts::value(id))
     ;
 
   auto result = options.parse(argc, argv);
@@ -86,11 +106,24 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
+  stdfs::path dataFolder = outputFolder;
+  dataFolder /= "ID" + std::to_string(id);
+  std::cerr << "provided id: " << id << " of type "
+            << utils::className<decltype(id)>()
+            << ". data folder: " << dataFolder << "\n";
+
   if (result.count("auto-config") && result["auto-config"].as<bool>())
     configFile = "auto";
 
-  if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
-  { // alter mutation rates for this splineless experiment
+  std::string configFileAbsolute = stdfs::canonical(configFile).string();
+  if (!stdfs::exists(configFile))
+    utils::doThrow<std::invalid_argument>(
+      "Failed to find Simulation.config at ", configFileAbsolute);
+  if (!config::Simulation::readConfig(configFile))
+    utils::doThrow<std::invalid_argument>(
+      "Error while parsing config file ", configFileAbsolute, " or dependency");
+
+  { // alter mutation rates for this reproduction-less experiment
     config::Simulation::verbosity.overrideWith(0);
     auto cm = genotype::Critter::config_t::mutationRates();
     cm["cdata"] = 0.;
@@ -99,7 +132,8 @@ int main(int argc, char *argv[]) {
     utils::normalize(cm);
     genotype::Critter::config_t::mutationRates.overrideWith(cm);
   }
-  config::Simulation::printConfig(stdfs::path(outputFolder) / "configs");
+  if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
+  config::Simulation::printConfig(stdfs::path(dataFolder) / "configs");
 
 
   // ===========================================================================
@@ -117,101 +151,162 @@ int main(int argc, char *argv[]) {
 
   rng::AtomicDice dice;
   std::cout << "Using seed ";
-  if (params.seed >= 0) {
-    dice.reset(params.seed);
-    std::cout << params.seed << " -> ";
+  if (seed >= 0) {
+    dice.reset(seed);
+    std::cout << seed << " -> ";
   }
   std::cout << dice.getSeed() << "\n";
 
-  std::cout << params << "\n";
-  CGenome::printMutationRates(std::cout, 2);
+  genotype::Critter::printMutationRates(std::cout, 2);
 //  simu::Simulation::printStaticStats();
 
-  ga::CoEvolution evolver (params);
+  phylogeny::GIDManager gidManager;
+  simu::Evaluator eval;
 
-  // ga.disableGenerationalHistoryOrSOmethingLikeThat();
-//  ga.setNewGenerationFunction([&dice, &eval, &ga] {
-//    std::cout << "\nNew generation at " << utils::CurrentTime{} << "\n";
-//    if (ga.getCurrentGenerationNumber() == 0)
-//      symlink_as_last(ga.getSaveFolder());
-//    eval.selectCurrentScenarios(dice);
-//    std::cout << std::endl;
-//  });
-//  ga.setMutateMethod([&dice](CGenome &dna){ dna.mutate(dice); });
-////  ga.setCrossoverMethod([](const CGenome&, const CGenome&) -> CGenome {assert(false);});
-//  ga.setEvaluator([&eval] (auto &i, auto p) { eval(i, p); },
-//                  "prey-maybe-predator");
+  using GA = simu::Evaluator::GA;
+  struct Evolution {
+    GA ga;
+    GAGA::NoveltyExtension<GA> nov;
+    Ind lastChampion = Ind(Team());
+  };
+  static const auto p_name = [] (uint p) {
+    return p == 0 ? "A" : "B";
+  };
 
-//// -- -- -- -- -- -- SPECIFIC TO THE NOVELTY EXTENSION: -- -- -- -- -- -- --
-//    GAGA::NoveltyExtension<GA> nov;  // novelty extension instance
-//    // Distance function (compares 2 signatures). Here a simple Euclidian distance.
-//    auto euclidianDist = [](const auto& fpA, const auto& fpB) {
-//        double sum = 0;
-//        for (size_t i = 0; i < fpA.size(); ++i) sum += std::pow(fpA[i] - fpB[i], 2);
-//        return sqrt(sum);
-//    };
-//    nov.setComputeSignatureDistanceFunction(euclidianDist);
-//    nov.K = 10;  // size of the neighbourhood to compute novelty.
-//    //(Novelty = avg dist to the K Nearest Neighbors)
+  std::array<Evolution, 2> evos;
 
-//    ga.useExtension(nov);  // we have to tell gaga we want to use this extension
-//    // -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+  for (uint p = 0; p<2; p++) {
+    GA &ga = evos[p].ga;
+    ga.setPopSize(popSize);
+    ga.setNbThreads(threads);
+    ga.setMutationRate(1);
+    ga.setCrossoverRate(0);
+    ga.setSelectionMethod(GAGA::SelectionMethod::paretoTournament);
+    ga.setTournamentSize(4);
+    ga.setNbElites(1);
+    ga.setEvaluateAllIndividuals(true);
+    ga.setVerbosity(gagaVerbosity);
+//    ga.setSaveFolder(outputFolder);
+    ga.setNbSavedElites(ga.getNbElites());
+    ga.setSaveGenStats(true);
+    ga.setSaveIndStats(true);
+    ga.setSaveParetoFront(false);
+    ga.disableGenerationHistory();
 
-//  if (load.empty()) {
-//    ga.initPopulation([&dice] { return CGenome::random(dice); });
-//    std::cout << "Generating random population\n";
+    ga.setSaveFolderGenerator([p, id, dataFolder] (auto) {
+      return dataFolder / p_name(p);
+    });
 
-//  } else {
-//    // copied from gaga to use appropriate constuctor
-//    std::ifstream t(load);
-//    std::stringstream buffer;
-//    buffer << t.rdbuf();
-//    auto o = nlohmann::json::parse(buffer.str());
-//    assert(o.count("population"));
+    ga.setNewGenerationFunction([&evos, &ga, p] {
+      std::cout << "\n[POP " << p_name(p) << "] New generation at "
+                << utils::CurrentTime{} << "\n";
+      auto gen = ga.getCurrentGenerationNumber();
+      if (gen == 0 && p == 0) symlink_as_last(ga.getSaveFolder().parent_path());
 
-//    std::vector<Ind> pop;
-//    for (auto ind : o.at("population")) {
-//        pop.push_back(Ind(CGenome(ind.at("dna").get<std::string>())));
-//        pop.back().evaluated = false;
+      Ind &c = evos[1-p].lastChampion;
+      std::cout << "\tOpponent is " << p_name(1-p) << simu::Evaluator::id(c)
+                << " of fitness " << c.fitnesses.at("mk") << "\n";
+    });
+
+    ga.setMutateMethod([&dice, &gidManager](Team &t) {
+      auto &m = *dice(t.members);
+      m.mutate(dice);
+      m.gdata.updateAfterCloning(gidManager);
+    });
+
+//    ga.setCrossoverMethod([](const CGenome&, const CGenome&)
+//                          -> CGenome {assert(false);});
+
+    ga.setEvaluator([&eval, &evos, p] (auto &i, auto) {
+        auto &c = evos[1-p].lastChampion;
+
+//        std::ostringstream oss;
+//        oss << p_name(p) << i.id.first << ":" << i.id.second
+//            << ") Fighting against Champ " << p_name(1-p) << " "
+//            << c.id.first << ":" << c.id.second << " of fitness "
+//            << c.fitnesses.at("mk") << "\n";
+//        std::cout << oss.str();
+
+        eval(i, c);
+      }, "mortal-kombat");
+
+  // -- -- -- -- -- -- SPECIFIC TO THE NOVELTY EXTENSION: -- -- -- -- -- -- --
+    auto &nov = evos[p].nov;
+    // Distance function (compares 2 signatures). Here a simple Euclidian distance.
+    auto euclidianDist = [](const auto& fpA, const auto& fpB) {
+        double sum = 0;
+        for (size_t i = 0; i < fpA.size(); ++i)
+          sum += std::pow(fpA[i] - fpB[i], 2);
+        return sqrt(sum);
+    };
+    nov.setComputeSignatureDistanceFunction(euclidianDist);
+    nov.K = 10;  // size of the neighbourhood to compute novelty.
+    //(Novelty = avg dist to the K Nearest Neighbors)
+
+    ga.useExtension(nov);  // we have to tell gaga we want to use this extension
+  // -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+//    if (load.empty()) {
+      ga.initPopulation([teamSize, &dice, &gidManager] {
+        auto t = Team::random(teamSize, dice);
+        for (auto &m: t.members)  m.gdata.setAsPrimordial(gidManager);
+        return t;
+      });
+      std::cout << "Generating random population\n";
+
+//    } else {
+//      // copied from gaga to use appropriate constuctor
+//      std::ifstream t(load);
+//      std::stringstream buffer;
+//      buffer << t.rdbuf();
+//      auto o = nlohmann::json::parse(buffer.str());
+//      assert(o.count("population"));
+
+//      std::vector<Ind> pop;
+//      for (auto ind : o.at("population")) {
+//          pop.push_back(Ind(Team(ind.at("dna").get<std::string>())));
+//          pop.back().evaluated = false;
+//      }
+
+//      ga.setPopulation(pop);
+//      std::cout << "Loaded population from " << load << ", " << pop.size()
+//                << " individuals\n";
 //    }
-
-//    ga.setPopulation(pop);
-//    std::cout << "Loaded population from " << load << ", " << pop.size()
-//              << " individuals\n";
-//  }
+  }
 
   // ===========================================================================
   // == Launch
 
   auto start = simu::Simulation::now();
-  int success = -1;
+  int success = 0;
 
-//  ga.step(generations);
+  for (uint i=0; i<generations; i++) {
+    for (uint p = 0; p < 2; p++) {
+      auto &ga = evos[p].ga;
+      auto gen = ga.getCurrentGenerationNumber();
+      auto &c = evos[p].lastChampion;
 
-//  // Check status
-//  static constexpr auto bThreshold = .9f;
-//  static constexpr auto bCount = 5;
-//  const auto &stats = ga.genStats;
-//  int success = -1, contiguousBrains = 0;
-//  for (uint i=0; i<stats.size() && success < 0; i++) {
-//    if (stats[i].at("cs_brain").at("avg") >= bThreshold)
-//          contiguousBrains++;
-//    else  contiguousBrains = 0;
-//    if (contiguousBrains >= bCount)
-//      success = i - bCount - 1;
-//  }
+      if (gen == 0) {
+        c = ga.population[0];
+        c.fitnesses["mk"] = NAN;
 
-//  if (success > 0) {
-//    std::cout << "Performing " << success << " additionnal generations to reach"
-//                 " target number of brains (" << bCount << " contiguous"
-//                 " geneneration with >= " << bThreshold << " brain proportion)"
-//                 "\n";
-//    ga.step(success);
-//  }
+      } else
+        c = ga.getLastGenElites(1).at("mk").front();
+    }
 
-//  stdfs::create_directory_symlink(
-//    GAGA::concat("gen", ga.getCurrentGenerationNumber()-1),
-//    ga.getSaveFolder() / "gen_last");
+    for (uint p = 0; p < 2; p++)
+      evos[p].ga.step();
+  }
+
+  for (uint p = 0; p < 2; p++) {
+    GA &ga = evos[p].ga;
+    stdfs::create_directory_symlink(
+      GAGA::concat("gen", ga.getCurrentGenerationNumber()-1),
+      ga.getSaveFolder() / "gen_last");
+
+    success +=
+      (ga.getLastGenElites(1).at("mk").front().fitnesses.at("mk") >= 0);
+  }
 
   // ===========================================================================
   // == Post-evolution
@@ -228,7 +323,7 @@ int main(int argc, char *argv[]) {
   days = duration / 24;
 
   std::cout << "### Evolution ";
-  if (success >= 0) std::cout << "completed";
+  if (success > 0)  std::cout << "completed";
   else              std::cout << "failed";
   std::cout << " in ";
   if (days > 0)

@@ -200,8 +200,6 @@ if (EXP_KOMBAT)
       mk-evolver
       $<TARGET_OBJECTS:SIMU_OBJS>
       $<TARGET_OBJECTS:MK_OBJS>
-      "src/mkombat/coevolutionga.cpp"
-      "src/mkombat/coevolutionga.h"
       "src/mkombat/evolver.cpp")
     target_link_libraries(mk-evolver ${CORE_LIBS} pthread)
 
@@ -216,7 +214,7 @@ if (EXP_KOMBAT)
     target_link_libraries(mk-evaluator ${CORE_LIBS})
 
     ############################################################################
-    ## Target (Mortal Kombat evaluation)
+    ## Target (Team management tool: creation & extraction)
     ############################################################################
     add_executable(
       mk-team-tool

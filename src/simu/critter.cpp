@@ -312,6 +312,7 @@ void Critter::buildBrain(void) {
       float a = s*_genotype.splines[i].data[genotype::Spline::Index::SA];
       assert(-M_PI <= a && a <= M_PI);
       float x = int(Point::RATIO * (-a / M_PI)) / float(Point::RATIO);
+      if (x == 0) x += s * Point::EPSILON;
       add(inputs, x, -1.f, -1.f/8.f + 2.f * i / (SPLINES_COUNT * 8.f));
     }
   }
@@ -329,7 +330,6 @@ void Critter::buildBrain(void) {
   add(outputs,  .0f,  .9f); //                frequency
 #elif ESHN_SUBSTRATE_DIMENSION == 3
 
-  /// TODO Make this safer!!!!
   std::array<Point, EnumUtils<MotorOutput>::size()> mcoords;
   mcoords[uint(MotorOutput::FORWARD_LEFT)] =   { -.5f, 1.f,  .25f};
   mcoords[uint(MotorOutput::FORWARD_RIGHT)] =  { +.5f, 1.f,  .25f};
@@ -595,7 +595,7 @@ void Critter::regeneration (Environment &env) {
   decltype(_currHealth) mhA {0};
   decimal mh = 0;
   for (uint i=0; i<2*SPLINES_COUNT+1; i++) {
-    if (isSplineIndex(i) && destroyedSpline(i)) continue;
+    if (isSplineIndex(i) && destroyedSpline(i-1)) continue;
     mhA[i] = _masses[i] - _currHealth[i];
     utils::iclip_min(0., mhA[i]);
     assert(mhA[i] >= 0);
@@ -1275,7 +1275,7 @@ void Critter::updateColors(void) {
     }
   }
 
-  /// TODO Decide
+  /// TODO Decide (but is incompatible with red-coded damages...)
 //  if (requestingMating(reproductionType())) color[0] = 1;
 
 //  using utils::operator <<;

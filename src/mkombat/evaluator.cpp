@@ -26,7 +26,25 @@ void sigint_manager (int) {
 //  return p? l : -2;
 //}
 
+template <typename T>
+void diffStats (const T &prev, const T &curr) {
+  for (const auto &p: curr) {
+    auto it = prev.find(p.first);
+    std::cout << "\t" << std::setw(10) << p.first << ": ";
+    if (it != prev.end()) {
+      if (p.second == it->second)
+        std::cout << GAGA_COLOR_GREEN;
+      else
+        std::cout << GAGA_COLOR_RED << it->second << " >> ";
+      std::cout << p.second << GAGA_COLOR_NORMAL;
+    } else
+      std::cout << "\t" << GAGA_COLOR_YELLOW << p.second << GAGA_COLOR_NORMAL;
+    std::cout << "\n";
+  }
+}
+
 int main(int argc, char *argv[]) {
+  using Ind = simu::Evaluator::Ind;
 
   // To prevent missing linkages
   std::cerr << config::PTree::rsetSize() << std::endl;
@@ -41,7 +59,6 @@ int main(int argc, char *argv[]) {
   Verbosity verbosity = Verbosity::QUIET;
 
   std::string lhsTeamArg, rhsTeamArg;
-  simu::Team lhsTeam, rhsTeam;
 
   std::string kombatName;
 
@@ -91,19 +108,14 @@ int main(int argc, char *argv[]) {
   if (result.count("auto-config") && result["auto-config"].as<bool>())
     configFile = "auto";
 
-  config::Simulation::setupConfig(configFile, Verbosity::QUIET);
-  config::Simulation::verbosity.overrideWith(0);
-  if (verbosity != Verbosity::QUIET)
-    config::Simulation::printConfig(std::cout);
-
 
   if (lhsTeamArg.empty())
     utils::doThrow<std::invalid_argument>("No data provided for lhs team");
   if (rhsTeamArg.empty())
     utils::doThrow<std::invalid_argument>("No data provided for rhs team");
 
-  lhsTeam = simu::Team::fromFile(lhsTeamArg);
-  rhsTeam = simu::Team::fromFile(rhsTeamArg);
+  Ind lhsTeam = simu::Evaluator::fromJsonFile(lhsTeamArg);
+  Ind rhsTeam = simu::Evaluator::fromJsonFile(rhsTeamArg);
   kombatName = simu::Evaluator::kombatName(lhsTeamArg, rhsTeamArg);
 
   // ===========================================================================
@@ -121,6 +133,8 @@ int main(int argc, char *argv[]) {
 
 
   auto start = simu::Simulation::now();
+  const auto prevFitness = lhsTeam.fitnesses;
+  const auto prevInfos = lhsTeam.infos;
 
   simu::Evaluator eval;
 //  eval.setLesionTypes(lesions);
@@ -151,6 +165,16 @@ int main(int argc, char *argv[]) {
   if (days > 0 || hours > 0 || minutes > 0 || seconds > 0)
     std::cout << seconds << "s ";
   std::cout << mseconds << "ms" << std::endl;
+
+  std::cout << prevInfos << " =?= " << simu::Evaluator::id(rhsTeam) << "\n";
+  if (prevInfos == simu::Evaluator::id(rhsTeam)) {
+    std::cout << "Rhs id matching lhs memory. Comparison result for lhs:\n";
+    diffStats(prevFitness, lhsTeam.fitnesses);
+
+  } else {
+    std::cout << "Result for lhs:\n";
+    diffStats({}, lhsTeam.fitnesses);
+  }
 
 //  s.destroy();
   return 0;

@@ -368,7 +368,7 @@ void MainView::step(void) {
     _simu.step();
     emit stepped();
 
-    // TODO
+    // Test
 //    if (_simu.currTime().timestamp() == 15) {
 //      stop();
 //      break;

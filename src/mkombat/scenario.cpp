@@ -73,13 +73,13 @@ Scenario::Scenario (Simulation &simulation, uint tSize)
   });
 }
 
-#if 1
-#define X 8*(2*t-1)
-#define FORWARD true
-#else
-#define X (.5*R+.001)*(2*t-1)
-#define FORWARD false
-#endif
+//#if 1
+//#define X 8*(2*t-1)
+//#define FORWARD true
+//#else
+//#define X (.5*R+.001)*(2*t-1)
+//#define FORWARD false
+//#endif
 
 void Scenario::init(const Team &lhs, const Team &rhs) {
   static constexpr auto E = INFINITY;
@@ -107,7 +107,7 @@ void Scenario::init(const Team &lhs, const Team &rhs) {
     for (uint i=0; i<_teamsSize; i++)
       _teams[t].insert(
         _simulation.addCritter(team.members[i],
-                               X, 0, t*M_PI, E, .5, true));
+                               8*(2*t-1), 0, t*M_PI, E, .5, true));
   }
 
   assert(_simulation.critters().size() == 2*_teamsSize);
@@ -150,21 +150,21 @@ void Scenario::init(const Team &lhs, const Team &rhs) {
 //}
 
 void Scenario::postEnvStep(void) {
-  // DEBUG TEST
-  for (auto &t: _teams) {
-    for (auto c: t) {
-      c->selectiveBrainDead[0] = c->selectiveBrainDead[1] = 1;
-      c->setMotorOutput(1, Motor::LEFT);
+//  // DEBUG TEST
+//  for (auto &t: _teams) {
+//    for (auto c: t) {
+//      c->selectiveBrainDead[0] = c->selectiveBrainDead[1] = 1;
+//      c->setMotorOutput(1, Motor::LEFT);
 
-      bool h = FORWARD;//(c->healthness() == 1 || c->species() < phylogeny::SID(1));
-      c->setMotorOutput(h ? 1 : -1, Motor::RIGHT);
-    }
-  }
-  // END OF DEBUG TEST
+//      bool h = FORWARD;//(c->healthness() == 1 || c->species() < phylogeny::SID(1));
+//      c->setMotorOutput(h ? 1 : -1, Motor::RIGHT);
+//    }
+//  }
+//  // END OF DEBUG TEST
 }
 
 void Scenario::postStep(void) {
-  static const auto timeout = 20*config::Simulation::ticksPerSecond();
+  static const auto timeout = DURATION*config::Simulation::ticksPerSecond();
   bool empty = _teams[0].empty() || _teams[1].empty();
   bool awake = false;
   for (const auto &team: _teams) {
@@ -184,46 +184,50 @@ void Scenario::preDelCritter(Critter *c) {
     team.erase(c);
 }
 
-std::array<float,2> Scenario::scores (void) const {
-  /// TODO Does not work for dead critters...
-  std::array<float,2> healths, scores;
+float Scenario::score (void) const {
+  std::array<float,2> healths;
+  float score;
   for (uint t: {0, 1}) {
     healths[t] = 0;
     for (simu::Critter *c: _teams[t])
       healths[t] += c->bodyHealthness();
-    healths[t] /= _teamsSize;
+    if (!_teams[t].empty())  healths[t] /= _teamsSize;
   }
 
   const auto A = healths[0], B = healths[1];
   if (A == 0 && B == 0)
-    scores = { 0, 0 };
+    score = 0;
 
   else if (A > 0 && B == 0)
-    scores = { 2, -2 };
+    score = 2;
 
   else if (A == 0 && B > 0)
-    scores = { -2, 2 };
+    score = -2;
 
   else if (A < 1 || B < 1)
-    scores = { -B+A, -A+B };  // 1-B - (1-A)
+    score = -B+A;
 
   else {
     float d = std::numeric_limits<float>::max();
     for (simu::Critter *lhs: _teams[0])
       for (simu::Critter *rhs: _teams[1])
         d = std::min(d, b2Distance(lhs->pos(), rhs->pos()));
+
+    const auto &e = _simulation.environment();
+    d /= std::sqrt(std::pow(e.width(), 2) + std::pow(e.height(), 2));
     d = - 3 - d;
-    scores = { d, d };
+
+    score = d;
   }
 
-  return scores;
+  return score;
 }
 
 std::array<bool,2> Scenario::brainless(void) const {
-  std::array<bool,2> b {true,true};
+  std::array<bool,2> b {false,false};
 
   for (uint t: {0,1})
-    for (auto it = _teams[t].begin(); it != _teams[t].end() && b[t]; ++it)
+    for (auto it = _teams[t].begin(); it != _teams[t].end() && !b[t]; ++it)
       b[t] |= (*it)->brain().empty();
 
   return b;
