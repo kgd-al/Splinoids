@@ -34,6 +34,10 @@ static const QMap<Sex, QColor> sexColors {
 
 using Side = simu::Critter::Side;
 
+QRectF toQt (const b2AABB &aabb) {
+  return QRectF(toQt(aabb.lowerBound), toQt(aabb.upperBound));
+}
+
 Critter::Critter(simu::Critter &critter)
   : _critter(critter), _prevState(critter) {
 
@@ -84,6 +88,29 @@ void Critter::update (void) {
   QGraphicsItem::update();
 }
 
+b2AABB Critter::computeb2ABBB (void) const {
+  // Compute b2AABB
+  b2Transform t;
+  t.SetIdentity();
+  b2AABB aabb;
+  aabb.lowerBound.Set( FLT_MAX,  FLT_MAX);
+  aabb.upperBound.Set(-FLT_MAX, -FLT_MAX);
+  const b2Fixture *f = _critter.fixturesList();
+  while (f) {
+    if (!f->IsSensor()) {
+      const b2Shape *s = f->GetShape();
+      for (int c=0; c<s->GetChildCount(); c++) {
+        b2AABB sAABB;
+        s->ComputeAABB(&sAABB, t, c);
+        aabb.Combine(sAABB);
+      }
+    }
+    f = f->GetNext();
+  }
+
+  return aabb;
+}
+
 void Critter::updateShape (void) {
   prepareGeometryChange();
 
@@ -111,29 +138,7 @@ void Critter::updateShape (void) {
 
   updateVision();
 
-  QRectF b2br;
-  { // Compute b2AABB
-    b2Transform t;
-    t.SetIdentity();
-    b2AABB aabb;
-    aabb.lowerBound.Set( FLT_MAX,  FLT_MAX);
-    aabb.upperBound.Set(-FLT_MAX, -FLT_MAX);
-    const b2Fixture *f = _critter.fixturesList();
-    while (f) {
-      if (!f->IsSensor()) {
-        const b2Shape *s = f->GetShape();
-        for (int c=0; c<s->GetChildCount(); c++) {
-          b2AABB sAABB;
-          s->ComputeAABB(&sAABB, t, c);
-//          shapeAABB.lowerBound = shapeAABB.lowerBound;
-//          shapeAABB.upperBound = shapeAABB.upperBound;
-          aabb.Combine(sAABB);
-        }
-      }
-      f = f->GetNext();
-    }
-    b2br = QRectF(toQt(aabb.lowerBound), toQt(aabb.upperBound));
-  }
+  QRectF b2br = computeAABB();
 
 #ifndef NDEBUG
   _polygons.clear();
@@ -572,35 +577,38 @@ void Critter::saveGenotype(const QString &filename) const {
   _critter.genotype().toFile(filename.toStdString());
 }
 
-void Critter::printPhenotype (const QString &filename) const {
+void Critter::printPhenotype (const QString &filename, int size) const {
   if (filename.isEmpty())
     return;
   else if (filename.endsWith(".png"))
-    printPhenotypePng(filename);
+    printPhenotypePng(filename, size);
   else
     qDebug() << "Unmanaged extension for filename" << filename;
 }
 
-QPixmap Critter::renderPhenotype(void) const {
-  static const float Z = 10*config::Visualisation::viewZoom();
-  const QRectF &r = _minimalBoundingRect;
-  float W = r.height() * Z, H = r.width() * Z;
+QPixmap Critter::renderPhenotype(int size) const {
+  float S = size > 0 ? size : 10*config::Visualisation::viewZoom();
+  const QRectF &r = _critterBoundingRect;
+  float R = S / std::max(r.width(), r.height());
+  float W = r.width() * R, H = r.height() * R;
 
   QPixmap pixmap (W, H);
   pixmap.fill(Qt::transparent);
 
   QPainter painter (&pixmap);
   painter.setRenderHint(QPainter::Antialiasing, true);
-  painter.translate(.5*r.height()*Z, r.right()*Z);
+  painter.translate(.5*W, .5*H);
   painter.rotate(-90);
-  painter.scale(.5*Z, .5*Z);
+  painter.scale(.5*S, .5*S);
   doPaint(&painter);
+
+  qDebug() << "[SAVE]" << S << r << R << W << H;
 
   return pixmap;
 }
 
-void Critter::printPhenotypePng (const QString &filename) const {
-  QPixmap pixmap = renderPhenotype();
+void Critter::printPhenotypePng (const QString &filename, int size) const {
+  QPixmap pixmap = renderPhenotype(size);
 //  qDebug() << "Critter bounding rects are:";
 //  qDebug() << "\tminimal: " << _minimalBoundingRect;
 //  qDebug() << "Pixmap size is" << pixmap.size();

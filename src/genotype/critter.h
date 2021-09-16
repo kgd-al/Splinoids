@@ -55,7 +55,7 @@ class Critter : public genotype::EDNA<Critter> {
   APT_EDNA()
 
 public:
-  #define CRITTER_SPLINES_COUNT 2
+  #define CRITTER_SPLINES_COUNT 4
   static constexpr uint SPLINES_COUNT = CRITTER_SPLINES_COUNT;
 
   using Sex = BOCData::Sex;

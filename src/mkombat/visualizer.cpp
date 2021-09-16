@@ -38,6 +38,7 @@ int main(int argc, char *argv[]) {
 
   using ANNViewer = kgd::es_hyperneat::gui::ann::Viewer;
   using CGenome = genotype::Critter;
+  using Ind = simu::Evaluator::Ind;
   using utils::operator<<;
 
   // ===========================================================================
@@ -49,14 +50,15 @@ int main(int argc, char *argv[]) {
   Verbosity verbosity = Verbosity::QUIET;
 
   std::string lhsTeamArg, rhsTeamArg;
-  simu::Team lhsTeam, rhsTeam;
   std::string kombatName;
 
   int startspeed = 1;
+  bool autoquit = false;
 
   std::string outputFolder = "tmp/mk-gui/";
   char overwrite = simu::Simulation::ABORT;
 
+  int picture = -1;
   int snapshots = -1;
   bool noRestore = false;
 
@@ -92,12 +94,16 @@ int main(int argc, char *argv[]) {
     ("start", "Whether to start running immendiatly after initialisation"
               " (and optionally at which speed > 1)",
      cxxopts::value(startspeed)->implicit_value("1"))
+    ("auto-quit", "Whether to automatically quit at the end of the scenario",
+     cxxopts::value(autoquit)->implicit_value("true"))
     ("f,data-folder", "Folder under which to store the computational outputs",
      cxxopts::value(outputFolder))
     ("overwrite", "Action to take if the data folder is not empty: either "
                   "[a]bort or [p]urge",
      cxxopts::value(overwrite))
 
+    ("picture", "Generate a picture of provided size for both lhs & rhs",
+     cxxopts::value(picture)->implicit_value("25"))
     ("snapshots", "Generate simu+ann snapshots of provided size (batch)",
      cxxopts::value(snapshots)->implicit_value("25"))
     ("snapshots-views",
@@ -149,8 +155,8 @@ int main(int argc, char *argv[]) {
   if (rhsTeamArg.empty())
     utils::doThrow<std::invalid_argument>("No data provided for rhs team");
 
-  lhsTeam = simu::Team::fromFile(lhsTeamArg);
-  rhsTeam = simu::Team::fromFile(rhsTeamArg);
+  Ind lhsTeam = simu::Evaluator::fromJsonFile(lhsTeamArg);
+  Ind rhsTeam = simu::Evaluator::fromJsonFile(rhsTeamArg);
   kombatName = simu::Evaluator::kombatName(lhsTeamArg, rhsTeamArg);
 
   // ===========================================================================
@@ -171,8 +177,6 @@ int main(int argc, char *argv[]) {
   // ===========================================================================
   // == Config setup
 
-//    config::Simulation::setupConfig(configFile, verbosity);
-
 #define RESTORE(X, T) \
   config::Visualisation::X.overrideWith(settings.value("hack::" #X).value<T>()); \
   if (verbosity != Verbosity::QUIET) \
@@ -189,7 +193,14 @@ int main(int argc, char *argv[]) {
 
 #undef RESTORE
 
-  config::Visualisation::setupConfig(configFile, Verbosity::QUIET);
+  if (stdfs::path(configFile).filename() == "Simulation.config") {
+    config::Visualisation::setupConfig("auto", Verbosity::QUIET);
+    config::Simulation::setupConfig(configFile, Verbosity::QUIET);
+
+  } else
+    config::Visualisation::setupConfig(configFile, Verbosity::QUIET);
+
+
   config::Simulation::verbosity.overrideWith(0);
   if (verbosity != Verbosity::QUIET)
     config::Visualisation::printConfig(std::cout);
@@ -200,7 +211,7 @@ int main(int argc, char *argv[]) {
   QMainWindow w;
   gui::StatsView *stats = new gui::StatsView;
   visu::GraphicSimulation simulation (w.statusBar(), stats);
-  simu::Scenario scenario (simulation, lhsTeam.size());
+  simu::Scenario scenario (simulation, lhsTeam.dna.size());
 
   gui::MainView *v = new gui::MainView (simulation, stats, w.menuBar());
   gui::GeneticManipulator *cs = v->characterSheet();
@@ -215,7 +226,7 @@ int main(int argc, char *argv[]) {
   // ===========================================================================
   // == Simulation setup
 
-  scenario.init(lhsTeam, rhsTeam);
+  scenario.init(lhsTeam.dna, rhsTeam.dna);
 //  if (!annNeuralTags.empty() /*&& snapshots == -1 && annRender.empty()*/) {
 //    phenotype::ANN &ann = scenario.subject()->brain();
 //    simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);
@@ -251,8 +262,30 @@ int main(int argc, char *argv[]) {
                 << " is not a valid QColor specification. Ignoring\n";
   }
 
+  int r = 242;  // return value
 
-  if (snapshots > 0) {
+  if (picture > 0) {
+    bool atomic = (lhsTeam.dna.size() == 1);
+
+    std::array<std::string, 2> paths { lhsTeamArg, rhsTeamArg };
+    auto teams = scenario.teams();
+    for (uint i=0; i<2; i++) {
+      stdfs::path obase = stdfs::path(paths[i]).replace_extension();
+      auto &t = teams[i];
+
+      uint j=0;
+      for (auto it = t.begin(); it != t.end(); ++it, j++) {
+        visu::Critter *c = simulation.critters().at(*it);
+        QString output = QString::fromStdString(obase);
+        if (!atomic)  output += "_" + QString::number(j);
+        output += ".png";
+        c->printPhenotype(output, picture);
+      }
+    }
+
+    r = 0;
+
+  } else if (snapshots > 0) {
   // ===========================================================================
   // Batch snapshot mode
 
@@ -354,9 +387,8 @@ int main(int argc, char *argv[]) {
 //      generate();
 //    }
 
-//    return 0;
+//    r = 0;
     std::cerr << "Batch snapshot mode incompatible with 3D ANN Viewer\n";
-    return 242;
 
   } else if (trace > 0) {
 //    config::Visualisation::trace.overrideWith(trace);
@@ -381,7 +413,6 @@ int main(int argc, char *argv[]) {
 //    simulation.render(QString::fromStdString(savepath));
 //    std::cout << "Saved to: " << savepath << "\n";
     std::cerr << "Trace mode incompatible with NxN kombats\n";
-    return 242;
 
   } else if (!annRender.empty()) {
 //    ANNViewer *av = cs->brainPanel()->annViewer;
@@ -452,7 +483,6 @@ int main(int argc, char *argv[]) {
 //      }
 //    }
     std::cerr << "ANN Render mode incompatible with 3D ANN Viewer\n";
-    return 242;
 
   } else {
   // ===========================================================================
@@ -462,6 +492,7 @@ int main(int argc, char *argv[]) {
     cs->setVisible(settings.value("cs::visible").toBool());
     w.show();
 
+    v->setAutoQuit(autoquit);
     v->fitInView(simulation.bounds(), Qt::KeepAspectRatio);
     v->select(nullptr);
 
@@ -470,7 +501,19 @@ int main(int argc, char *argv[]) {
       else            v->stop();
     });
 
-    auto r = a.exec();
+    using Eval = simu::Evaluator;
+    auto log = Eval::logging_getData();
+    Eval::logging_init(log,
+                    stdfs::path(outputFolder)
+                    /  Eval::kombatName(lhsTeamArg, rhsTeamArg));
+    QObject::connect(v, &gui::MainView::stepped,
+                     [log,&scenario] {
+      Eval::logging_step(log, scenario);
+    });
+
+    r = a.exec();
+
+    Eval::logging_freeData(&log);
 
     settings.setValue("cs::visible", cs->isVisible());
     settings.setValue("cs::geom", cs->saveGeometry());
@@ -487,9 +530,9 @@ int main(int argc, char *argv[]) {
     SAVE(drawVision, int)
     SAVE(drawAudition, bool)
   #undef SAVE
-
-    return r;
-
   }
 
+  std::cout << "Score: " << scenario.score() << "\n";
+
+  return r;
 }

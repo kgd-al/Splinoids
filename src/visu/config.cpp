@@ -1,5 +1,7 @@
 #include "config.h"
 
+namespace visu {
+
 QPointF toQt (const simu::P2D &p) {
   return QPointF(p.x, p.y);
 }
@@ -14,6 +16,8 @@ simu::Color fromQt (const QColor &qc) {
     float(qc.redF()), float(qc.greenF()), float(qc.blueF())
   };
 }
+
+} // end of namespace visu
 
 namespace config {
 #define CFILE Visualisation

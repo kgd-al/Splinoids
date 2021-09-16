@@ -108,6 +108,14 @@ int main(int argc, char *argv[]) {
   if (result.count("auto-config") && result["auto-config"].as<bool>())
     configFile = "auto";
 
+  std::string configFileAbsolute = stdfs::canonical(configFile).string();
+  if (!stdfs::exists(configFile))
+    utils::doThrow<std::invalid_argument>(
+      "Failed to find Simulation.config at ", configFileAbsolute);
+  if (!config::Simulation::readConfig(configFile))
+    utils::doThrow<std::invalid_argument>(
+      "Error while parsing config file ", configFileAbsolute, " or dependency");
+  if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
 
   if (lhsTeamArg.empty())
     utils::doThrow<std::invalid_argument>("No data provided for lhs team");
@@ -141,7 +149,7 @@ int main(int argc, char *argv[]) {
 
   eval.logsSavePrefix = stdfs::path(outputFolder) / kombatName;
   eval.annTagsFile = annNeuralTags;
-  eval(lhsTeam, rhsTeam);
+  eval(lhsTeam, {rhsTeam});
 
   auto duration = simu::Simulation::durationFrom(start);
   uint days, hours, minutes, seconds, mseconds;

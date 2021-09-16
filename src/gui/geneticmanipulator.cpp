@@ -269,7 +269,7 @@ protected:
   QColor color;
 
   void setColorValue (const Color &c) {
-    setColorValue(toQt(c));
+    setColorValue(visu::toQt(c));
   }
 
   void setColorValue (const QColor &c) {
@@ -341,7 +341,7 @@ struct GeneColorPicker : public ColorLabel {
   }
 
   Color geneValue (void) {
-    return fromQt(color);
+    return visu::fromQt(color);
   }
 
   void setGeneValue (const Color &c) {
@@ -702,6 +702,7 @@ void GeneticManipulator::buildStatsLayout(void) {
 
                             addLRow(false, "Mass");
   c = 2;                    addLRow(false, "Moment");
+  addLRow(false, "Length"); addLRow(false, "Width");
   addLRow(false, "Age");    addLRow(false, "Clock");
   addLRow( true, "Adult");  addLRow( true, "Old");
   addLRow(false, "Effcy");  addLRow(false, "Repro");
@@ -709,7 +710,7 @@ void GeneticManipulator::buildStatsLayout(void) {
 
   othersLayout->addWidget(line("Vision"), r++, 0, 1, 4);
   addLRow( true, "Angle");  addLRow(true, "Rotation");
-  addLRow( true, "Width");  addLRow(true, "Precision");
+  addLRow( true, "Span");   addLRow(true, "Precision");
 
   othersLayout->addWidget(line("Wellfare"), r++, 0, 1, 4);
   othersLayout->addLayout(buildBarsLayout(), r++, 0, 1, 4);
@@ -887,14 +888,18 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     _bSex->setCurrentIndex(int(c.genotype().cdata.sex));
 
     const auto degrees = [] (float v) {
-      return QString::number(180. * v / M_PI, 'f', 1);
+      return QString::number(180. * v / M_PI, 'f', 1) + tr("°");
     };
+
+    QRectF bb = _subject->computeAABB();
+    set("Length", bb.width());
+    set("Width", bb.height());
 
     set("Adult", &SCritter::matureAt);
     set("Old", &SCritter::oldAt);
     set("Angle", &SCritter::visionBodyAngle, degrees);
     set("Rotation", &SCritter::visionRelativeRotation, degrees);
-    set("Width", &SCritter::visionWidth, degrees);
+    set("Span", &SCritter::visionWidth, degrees);
     set("Precision", &SCritter::visionPrecision,
         [] (float v) { return QString::number(v, 'f', 0); });
 

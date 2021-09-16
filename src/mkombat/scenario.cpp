@@ -73,14 +73,6 @@ Scenario::Scenario (Simulation &simulation, uint tSize)
   });
 }
 
-//#if 1
-//#define X 8*(2*t-1)
-//#define FORWARD true
-//#else
-//#define X (.5*R+.001)*(2*t-1)
-//#define FORWARD false
-//#endif
-
 void Scenario::init(const Team &lhs, const Team &rhs) {
   static constexpr auto E = INFINITY;
   static constexpr auto R = Critter::MAX_SIZE;
@@ -149,19 +141,7 @@ void Scenario::init(const Team &lhs, const Team &rhs) {
 //  std::cout << " (" << count << " links deleted)\n";
 //}
 
-void Scenario::postEnvStep(void) {
-//  // DEBUG TEST
-//  for (auto &t: _teams) {
-//    for (auto c: t) {
-//      c->selectiveBrainDead[0] = c->selectiveBrainDead[1] = 1;
-//      c->setMotorOutput(1, Motor::LEFT);
-
-//      bool h = FORWARD;//(c->healthness() == 1 || c->species() < phylogeny::SID(1));
-//      c->setMotorOutput(h ? 1 : -1, Motor::RIGHT);
-//    }
-//  }
-//  // END OF DEBUG TEST
-}
+void Scenario::postEnvStep(void) {}
 
 void Scenario::postStep(void) {
   static const auto timeout = DURATION*config::Simulation::ticksPerSecond();

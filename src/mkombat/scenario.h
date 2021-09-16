@@ -51,6 +51,10 @@ public:
 
 //  void applyLesions (int lesions);
 
+  const auto& simulation (void) const {
+    return _simulation;
+  }
+
   float score (void) const;
   std::array<bool,2> brainless (void) const;
 

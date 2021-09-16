@@ -7,6 +7,8 @@
 
 namespace visu {
 
+QRectF toQt (const b2AABB &aabb);
+
 class Critter : public QObject, public QGraphicsItem {
   Q_OBJECT
 public:
@@ -73,6 +75,11 @@ public:
 
   void update (void);
 
+  b2AABB computeb2ABBB (void) const;
+  QRectF computeAABB (void) const {
+    return toQt(computeb2ABBB());
+  }
+
   QRectF boundingRect (void) const;
   QRectF sceneBoundingRect(void) const {
     return boundingRect().translated(pos());
@@ -100,8 +107,8 @@ public:
 
   void saveGenotype (const QString &filename) const;
 
-  QPixmap renderPhenotype (void) const;
-  void printPhenotype (const QString &filename) const;
+  QPixmap renderPhenotype (int size) const;
+  void printPhenotype (const QString &filename, int size = -1) const;
 
 signals:
   void shapeChanged (void);
@@ -123,7 +130,7 @@ private:
 #endif
 
   void printPhenotypePdf (const QString &filename) const;
-  void printPhenotypePng (const QString &filename) const;
+  void printPhenotypePng (const QString &filename, int size) const;
 };
 
 struct CID {

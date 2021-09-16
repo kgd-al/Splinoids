@@ -386,7 +386,12 @@ void MainView::step(void) {
 
   _stepping = false;
 
-  if (_simu.finished()) stop();
+  if (_simu.finished()) {
+    stop();
+
+    if (_autoquit)
+      qApp->quit();
+  }
 }
 
 void MainView::joystickEvent (JButton b, PersitentJoystick::Value v) {

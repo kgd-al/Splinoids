@@ -10,6 +10,7 @@ namespace simu {
 
 struct Evaluator {
   using Genome = Team;//genotype::Critter;
+  struct LogData;
 
   static constexpr int FOOTPRINT_DIM =
       4*Critter::SPLINES_COUNT+1  // Start and final healths for splines & body
@@ -18,6 +19,7 @@ struct Evaluator {
   using Footprint = std::array<float, FOOTPRINT_DIM>;
 
   using Ind = GAGA::NoveltyIndividual<Genome, Footprint>;
+  using Champs = std::deque<Ind>;
   using GA = GAGA::GA<Genome, Ind>;
 
   Evaluator (void);
@@ -27,7 +29,12 @@ struct Evaluator {
 //  static void applyNeuralFlags (phenotype::ANN &ann,
 //                                const std::string &tagsfile);
 
-  void operator() (Ind &lhs, Ind &rhs);
+  void operator() (Ind &lhs, const Champs &rhs);
+
+  static LogData* logging_getData (void);
+  static void logging_init (LogData *d, const stdfs::path &folder);
+  static void logging_step (LogData *d, Scenario &s);
+  static void logging_freeData (LogData **d);
 
   static std::string id (const Ind &i) {
     return GAGA::concat(i.id.first, ":", i.id.second,

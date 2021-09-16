@@ -62,6 +62,8 @@ int main(int argc, char *argv[]) {
   uint threads = 1;
   long seed = -1;
 
+  uint memory = 1;
+
   auto id = timestamp();
 
   cxxopts::Options options("Splinoids (mk-evolver)",
@@ -92,6 +94,8 @@ int main(int argc, char *argv[]) {
     ("team-count", "Number of teams", cxxopts::value(popSize))
     ("generations", "Number of generations to let the evolution run for",
      cxxopts::value(generations))
+    ("memory", "Number of previous champions to evaluate against",
+     cxxopts::value(memory))
     ("threads", "Number of parallel threads", cxxopts::value(threads))
     ("id", "Run identificator (used to uniquely identify the output folder, "
            "defaults to the current timestamp)",
@@ -157,6 +161,9 @@ int main(int argc, char *argv[]) {
   }
   std::cout << dice.getSeed() << "\n";
 
+  std::cout << "Team size: " << teamSize << "\n"
+            << "Memory: " << memory << "\n";
+
   genotype::Critter::printMutationRates(std::cout, 2);
 //  simu::Simulation::printStaticStats();
 
@@ -167,7 +174,7 @@ int main(int argc, char *argv[]) {
   struct Evolution {
     GA ga;
     GAGA::NoveltyExtension<GA> nov;
-    Ind lastChampion = Ind(Team());
+    simu::Evaluator::Champs lastChampions;
   };
   static const auto p_name = [] (uint p) {
     return p == 0 ? "A" : "B";
@@ -203,9 +210,10 @@ int main(int argc, char *argv[]) {
       auto gen = ga.getCurrentGenerationNumber();
       if (gen == 0 && p == 0) symlink_as_last(ga.getSaveFolder().parent_path());
 
-      Ind &c = evos[1-p].lastChampion;
-      std::cout << "\tOpponent is " << p_name(1-p) << simu::Evaluator::id(c)
-                << " of fitness " << c.fitnesses.at("mk") << "\n";
+      std::cout << "\tOpponents are:\n";
+      for (Ind &c: evos[1-p].lastChampions)
+        std::cout << "\t\t" << p_name(1-p) << simu::Evaluator::id(c)
+                  << " of fitness " << c.fitnesses.at("mk") << "\n";
     });
 
     ga.setMutateMethod([&dice, &gidManager](Team &t) {
@@ -218,16 +226,7 @@ int main(int argc, char *argv[]) {
 //                          -> CGenome {assert(false);});
 
     ga.setEvaluator([&eval, &evos, p] (auto &i, auto) {
-        auto &c = evos[1-p].lastChampion;
-
-//        std::ostringstream oss;
-//        oss << p_name(p) << i.id.first << ":" << i.id.second
-//            << ") Fighting against Champ " << p_name(1-p) << " "
-//            << c.id.first << ":" << c.id.second << " of fitness "
-//            << c.fitnesses.at("mk") << "\n";
-//        std::cout << oss.str();
-
-        eval(i, c);
+        eval(i, evos[1-p].lastChampions);
       }, "mortal-kombat");
 
   // -- -- -- -- -- -- SPECIFIC TO THE NOVELTY EXTENSION: -- -- -- -- -- -- --
@@ -284,14 +283,23 @@ int main(int argc, char *argv[]) {
     for (uint p = 0; p < 2; p++) {
       auto &ga = evos[p].ga;
       auto gen = ga.getCurrentGenerationNumber();
-      auto &c = evos[p].lastChampion;
+      auto &champs = evos[p].lastChampions;
 
-      if (gen == 0) {
-        c = ga.population[0];
-        c.fitnesses["mk"] = NAN;
+      bool first = (gen == 0);
+      auto c = first ? ga.population[0]
+                     : ga.getLastGenElites(1).at("mk").front();
+      if (first)  c.fitnesses["mk"] = NAN;
 
-      } else
-        c = ga.getLastGenElites(1).at("mk").front();
+      auto dbg = [&champs] (auto msg){
+        std::cerr << "## " << msg << " ## champs: [";
+        for (const auto &c: champs) std::cerr << " " << simu::Evaluator::id(c);
+        std::cerr << " ]\n";
+      };
+      dbg("BEFORE INSERTION");
+      champs.push_back(c);
+      dbg(" AFTER INSERTION");
+      while (champs.size() > memory) champs.pop_front();
+      dbg(" AFTER CLEANUP ");
     }
 
     for (uint p = 0; p < 2; p++)

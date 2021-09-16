@@ -74,13 +74,69 @@ auto avg (const std::set<Critter*> &pop,
   return v;
 }
 
-void Evaluator::operator() (Ind &lhs_i, Ind &rhs_i) {
+// === Logging
+/// TODO Log (what to log?)
+
+struct Evaluator::LogData {
+  std::ofstream lhs, rhs;
+};
+
+Evaluator::LogData* Evaluator::logging_getData(void) {
+  return new Evaluator::LogData;
+}
+
+void Evaluator::logging_freeData(LogData **d) {
+  delete *d;
+  *d = nullptr;
+}
+
+void Evaluator::logging_init(LogData *d, const stdfs::path &f) {
+  stdfs::create_directories(f);
+  std::cerr << f << " should exist!\n";
+
+  static const auto header = [] (auto &os) {
+    os << "Time Count LSpeed ASpeed Health TotalHealth\n";
+  };
+
+  d->lhs.open(f / "lhs.dat");
+  header(d->lhs);
+
+  d->rhs.open(f / "rhs.dat");
+  header(d->rhs);
+}
+
+void Evaluator::logging_step(LogData *d, Scenario &s) {
+  auto teams = s.teams();
+  static const auto log = [] (auto &os, auto team, auto time) {
+    const auto avg = [&team] (auto f) { return simu::avg(team, f); };
+    os << time << " " << team.size() << " "
+       << " " << avg(&Critter::linearSpeed)
+       << " " << avg(&Critter::angularSpeed)
+       << " " << avg(&Critter::bodyHealthness)
+       << " " << avg(&Critter::healthness)
+       << "\n";
+  };
+  auto t = duration(s.simulation());
+  if (d->lhs.is_open()) log(d->lhs, teams[0], t);
+  if (d->rhs.is_open()) log(d->rhs, teams[1], t);
+}
+
+// ===
+
+void Evaluator::operator() (Ind &lhs_i, const Champs &champs) {
   std::array<bool,2> brainless;
 
-  const Team &lhs = lhs_i.dna, &rhs = rhs_i.dna;
+  const Team &lhs = lhs_i.dna;
 
-  using utils::operator<<;
-  for (int lesion: lesions) {
+  uint nChamps = champs.size();
+  lhs_i.fitnesses["mk"] = 0;
+
+  uint c = 1;
+  for (const auto &rhs_i: champs) {
+    const Team &rhs = rhs_i.dna;
+
+//  using utils::operator<<;
+//  for (int lesion: lesions) {
 
     Simulation simulation;
     Scenario scenario (simulation, lhs.size());
@@ -108,23 +164,8 @@ void Evaluator::operator() (Ind &lhs_i, Ind &rhs_i) {
 //    }
 //    scenario.applyLesions(lesion);
 
-/// TODO Log (what to log?)
-    std::ofstream llog, rlog;
-    if (!logsSavePrefix.empty()) {
-
-      stdfs::create_directories(logsSavePrefix);
-      std::cerr << logsSavePrefix << " should exist!\n";
-
-      static const auto header = [] (auto &os) {
-        os << "Time Count LSpeed ASpeed Health TotalHealth\n";
-      };
-
-      llog.open(logsSavePrefix / "lhs.dat");
-      header(llog);
-
-      rlog.open(logsSavePrefix / "rhs.dat");
-      header(rlog);
-    }
+    LogData log;
+    if (!logsSavePrefix.empty())  logging_init(&log, logsSavePrefix);
 
     while (!simulation.finished() && !aborted && !bothBrainless) {
       simulation.step();
@@ -132,26 +173,10 @@ void Evaluator::operator() (Ind &lhs_i, Ind &rhs_i) {
 //      // Update modules values (if modular ann is used)
 //      if (mann) for (const auto &p: mann->modules()) p.second->update();
 
-      if (!logsSavePrefix.empty()) {
-        auto teams = scenario.teams();
-        static const auto log = [] (auto &os, auto team, auto time) {
-          auto s = team.size();
-
-          const auto avg = [&team] (auto f) { return simu::avg(team, f); };
-          os << time << " " << s << " "
-             << " " << avg(&Critter::linearSpeed)
-             << " " << avg(&Critter::angularSpeed)
-             << " " << avg(&Critter::bodyHealthness)
-             << " " << avg(&Critter::healthness)
-             << "\n";
-        };
-        auto t = duration(simulation);
-        if (llog.is_open()) log(llog, teams[0], t);
-        if (rlog.is_open()) log(rlog, teams[1], t);
-      }
+      if (!logsSavePrefix.empty()) logging_step(&log, scenario);
     }
 
-    lhs_i.fitnesses["mk"] = scenario.score();
+    lhs_i.fitnesses["mk"] += c * scenario.score();
 //    lhs_i.stats["t"] = Scenario::DURATION - duration(simulation);
     lhs_i.stats["b"] = !brainless[0];
 
@@ -169,7 +194,10 @@ void Evaluator::operator() (Ind &lhs_i, Ind &rhs_i) {
     lhs_i.infos = id(rhs_i);
 
 //    assert(!brainless[0] && !brainless[1]);
+    c++;
   }
+
+  lhs_i.fitnesses["mk"] /= nChamps * (nChamps+1) / 2.f;
 }
 
 Evaluator::Ind Evaluator::fromJsonFile(const std::string &path) {

@@ -162,12 +162,20 @@ private:
 
   QLayout* buildBarsLayout (void);
 
+  using Formatter = std::function<QString(float)>;
+  static QString defaultFormatter (float v) {
+    return QString::number(v, 'f', 2);
+  }
+
+  void set (const QString &l, float val,
+            const Formatter &formatter = defaultFormatter) {
+    _dataWidgets[l]->setText(formatter(val));
+  }
+
   template <typename T>
   void set (const QString &l, T (simu::Critter::*f) (void) const,
-            const std::function<QString(float)> &formatter = [] (float v) {
-              return QString::number(v, 'f', 2); }) {
-
-      _dataWidgets[l]->setText(formatter((_subject->object().*f)()));
+            const Formatter &formatter = defaultFormatter) {
+    set(l , (_subject->object().*f)(), formatter);
   }
 };
 

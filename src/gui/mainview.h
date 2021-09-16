@@ -31,6 +31,7 @@ class MainView : public QGraphicsView {
 
   bool _running, _stepping;
   bool _zoomout;
+  bool _autoquit;
 
 public:
   MainView (visu::GraphicSimulation &simulation, StatsView *stats,
@@ -53,6 +54,8 @@ public:
   void start (uint speed = 1);
   void stop (void);
   void toggle (void);
+
+  void setAutoQuit (bool q) { _autoquit = q; }
 
   void stepping (bool s);
 
