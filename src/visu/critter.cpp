@@ -59,8 +59,8 @@ QPointF fromPolar (float angle, float length) {
 QRectF squarify (const QRectF &r) {
   QPointF c = r.center();
   qreal s = std::max(
-    std::max(r.right() - c.x(), c.x() - r.left()),
-    std::max(r.top() - c.y(), c.y() - r.bottom())
+    std::max(r.right()/* - c.x()*/, /*c.x()*/ - r.left()),
+    std::max(r.bottom()/* - c.y()*/, /*c.y(°*/ - r.top())
   );
   return QRectF (c-QPointF(s, s), QSizeF(2*s, 2*s));
 }
@@ -582,15 +582,17 @@ void Critter::printPhenotype (const QString &filename, int size) const {
     return;
   else if (filename.endsWith(".png"))
     printPhenotypePng(filename, size);
+  else if (filename.endsWith(".pdf"))
+    printPhenotypePdf(filename);
   else
     qDebug() << "Unmanaged extension for filename" << filename;
 }
 
-QPixmap Critter::renderPhenotype(int size) const {
+void Critter::printPhenotypePng (const QString &filename, int size) const {
   float S = size > 0 ? size : 10*config::Visualisation::viewZoom();
-  const QRectF &r = _critterBoundingRect;
-  float R = S / std::max(r.width(), r.height());
-  float W = r.width() * R, H = r.height() * R;
+  const QRectF &bb = _critterBoundingRect;
+  QRectF r (S * bb.topLeft(), S * bb.bottomRight());
+  float W = r.width(), H = r.height();
 
   QPixmap pixmap (W, H);
   pixmap.fill(Qt::transparent);
@@ -599,22 +601,36 @@ QPixmap Critter::renderPhenotype(int size) const {
   painter.setRenderHint(QPainter::Antialiasing, true);
   painter.translate(.5*W, .5*H);
   painter.rotate(-90);
-  painter.scale(.5*S, .5*S);
+  painter.scale(S, S);
   doPaint(&painter);
 
-  qDebug() << "[SAVE]" << S << r << R << W << H;
-
-  return pixmap;
-}
-
-void Critter::printPhenotypePng (const QString &filename, int size) const {
-  QPixmap pixmap = renderPhenotype(size);
 //  qDebug() << "Critter bounding rects are:";
 //  qDebug() << "\tminimal: " << _minimalBoundingRect;
 //  qDebug() << "Pixmap size is" << pixmap.size();
   bool ok = pixmap.save(filename);
   qDebug().nospace() << (ok ? "Saved" : " Failed to save") << " C"
                      << uint(_critter.id()) << " to " << filename;
+}
+
+void Critter::printPhenotypePdf(const QString &filename) const {
+  QRectF bb = _minimalBoundingRect;
+
+  QPrinter printer (QPrinter::HighResolution);
+  printer.setPageSize(QPageSize(10*bb.size().transposed(), QPageSize::Millimeter));
+  printer.setPageMargins(QMarginsF(0, 0, 0, 0));
+  printer.setOutputFileName(filename);
+
+  auto R = printer.pageLayout().paintRectPixels(printer.resolution());
+  auto r = R.width() / bb.height();
+  qDebug() << bb << R;
+
+  QPainter painter (&printer);
+  painter.setRenderHint(QPainter::Antialiasing, true);
+  painter.translate(-r*bb.top(), r*bb.right());
+  qDebug() << r << bb.right() << bb.top();
+  painter.rotate(-90);
+  painter.scale(r, r);
+  doPaint(&painter);
 }
 
 QDebug operator<<(QDebug dbg, const CID &cid) {

@@ -202,16 +202,16 @@ void Evaluator::operator() (Ind &lhs_i, const Champs &champs) {
 
 Evaluator::Ind Evaluator::fromJsonFile(const std::string &path) {
   std::ifstream t(path);
+  if (!t) utils::doThrow<std::invalid_argument>("Error while opening ", path);
+
   std::stringstream buffer;
   buffer << t.rdbuf();
-  auto o = nlohmann::json::parse(buffer.str());
 
+  auto o = nlohmann::json::parse(buffer.str());
   if (o.count("dna")) // assuming this is a gaga individual
     return Ind(o);
-  else {
-    Genome g = o;
-    return Ind(g);
-  }
+  else
+    return Ind(Genome(o));
 }
 
 std::string Evaluator::kombatName (const std::string &lhsFile,

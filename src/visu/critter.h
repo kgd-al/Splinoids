@@ -107,8 +107,9 @@ public:
 
   void saveGenotype (const QString &filename) const;
 
-  QPixmap renderPhenotype (int size) const;
   void printPhenotype (const QString &filename, int size = -1) const;
+  void printPhenotypePdf (const QString &filename) const;
+  void printPhenotypePng (const QString &filename, int size) const;
 
 signals:
   void shapeChanged (void);
@@ -128,9 +129,6 @@ private:
   void debugDrawBelow (QPainter*) const {}
   void debugDrawAbove (QPainter*) const {}
 #endif
-
-  void printPhenotypePdf (const QString &filename) const;
-  void printPhenotypePng (const QString &filename, int size) const;
 };
 
 struct CID {

@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
   std::string outputFolder = "tmp/mk-gui/";
   char overwrite = simu::Simulation::ABORT;
 
-  int picture = -1;
+  std::string picture;
   int snapshots = -1;
   bool noRestore = false;
 
@@ -264,7 +264,7 @@ int main(int argc, char *argv[]) {
 
   int r = 242;  // return value
 
-  if (picture > 0) {
+  if (!picture.empty()) {
     bool atomic = (lhsTeam.dna.size() == 1);
 
     std::array<std::string, 2> paths { lhsTeamArg, rhsTeamArg };
@@ -278,8 +278,10 @@ int main(int argc, char *argv[]) {
         visu::Critter *c = simulation.critters().at(*it);
         QString output = QString::fromStdString(obase);
         if (!atomic)  output += "_" + QString::number(j);
-        output += ".png";
-        c->printPhenotype(output, picture);
+
+        if (picture == "pdf")
+              c->printPhenotypePdf(output + ".pdf");
+        else  c->printPhenotypePng(output + ".png", std::stoi(picture));
       }
     }
 

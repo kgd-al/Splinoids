@@ -10,7 +10,8 @@ usage(){
 log() {
   nl="\r"
   [ ! -z "$2" ] && nl=$2
-  printf "%80s$nl" "$1"
+  c=$(stty size | awk '{print $2}')
+  printf "%*s$nl" "$c" "$1"
 }
 
 f=$1
@@ -28,7 +29,7 @@ mkdir -p $out
 
 gens=$(readlink -e $f/A/gen_last | sed 's/.*[^0-9]\([0-9]\+\)/\1/')
 # Just to get the ceil of the base 10 power...
-gwidth=$(echo "l($gens)/l(10) " | bc -l | awk '{print $1%1 ? int($1)+1 : $1}')
+gwidth=$(awk "{x=log($gens+1)/log(10); print x%1 ? int(x)+1 : x}" <<< $i)
 # echo "$gens > $gwidth"
 ofile(){
   printf "$out/%0${gwidth}d.png" $1
@@ -58,7 +59,7 @@ do
   if [ ! -f $o ]
   then
     log "[$g / $gens] Merging pictures for lhs/rhs"
-    montage -tile 1x2 -gravity center -geometry 100% $lhs_o -label $g $rhs_o $o
+    montage -tile 1x2 -gravity center -geometry ${S}x$S $lhs_o -label $g $rhs_o $o
   else
     log "[$g / $gens] Pictures for lhs/rhs already merged"
   fi
