@@ -197,7 +197,7 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
   for (uint i=0; i<SPLINES_COUNT; i++)
     for (Side s: {Side::LEFT, Side::RIGHT})
       _currHealth[1+splineIndex(i, s)] = splineMaxHealth(i, s);
-  _previousHealth = bodyHealth();
+  _previousHealthness = bodyHealthness();
 
   _destroyed.reset();
 
@@ -376,7 +376,7 @@ void Critter::step(Environment &env) {
   updateColors();
 
   // Miscellaneous updates
-  _previousHealth = bodyHealth();
+  _previousHealthness = bodyHealth();
 
   // TODO Smell?
 }
@@ -491,7 +491,6 @@ void Critter::neuralStep(void) {
 //    inputs[i++] = _age;
 //    inputs[i++] = reproductionReadiness(reproductionType());
 //    inputs[i++] = usableEnergy() / maxUsableEnergy();
-//    inputs[i++] = bodyHealthness();
     inputs[i++] = bodyHealthness();
     inputs[i++] = instantaneousPain();
 

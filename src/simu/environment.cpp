@@ -541,7 +541,7 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
   static const auto energy = [] (float m, float v) { return .5 * m * v * v; };
   static const auto diff =
       [] (float t0, float t1) { return std::max(0.f, t0 - t1); };
-  static const auto agg = [] (float l, float r) { return CBI * (l + 5 * r); };
+  static const auto agg = [] (float l, float r) { return CBI * (l + r); };
 
   const CritterData &dA = _critterData.at(cA),
                     &dB = _critterData.at(cB);

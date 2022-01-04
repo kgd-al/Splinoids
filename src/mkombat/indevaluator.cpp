@@ -78,7 +78,7 @@ auto avg (const std::set<Critter*> &pop,
 /// TODO Log (what to log?)
 
 struct Evaluator::LogData {
-  std::ofstream lhs, rhs;
+  std::ofstream lhs, rhs, ndata;
 };
 
 Evaluator::LogData* Evaluator::logging_getData(void) {
@@ -90,7 +90,8 @@ void Evaluator::logging_freeData(LogData **d) {
   *d = nullptr;
 }
 
-void Evaluator::logging_init(LogData *d, const stdfs::path &f) {
+void Evaluator::logging_init(LogData *d, const stdfs::path &f,
+                             Scenario &s) {
   stdfs::create_directories(f);
   std::cerr << f << " should exist!\n";
 
@@ -103,6 +104,16 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f) {
 
   d->rhs.open(f / "rhs.dat");
   header(d->rhs);
+
+  if (s.neuralEvaluation()) {
+    auto &os = d->ndata;
+    os.open(f / "neurons.dat");
+    os << "IAO";
+    for (const auto &p: s.subject()->brain().neurons())
+      if (p->isHidden())
+        os << " (" << p->pos.x() << "," << p->pos.y() << ")";
+    os << "\n";
+  }
 }
 
 void Evaluator::logging_step(LogData *d, Scenario &s) {
@@ -119,85 +130,120 @@ void Evaluator::logging_step(LogData *d, Scenario &s) {
   auto t = duration(s.simulation());
   if (d->lhs.is_open()) log(d->lhs, teams[0], t);
   if (d->rhs.is_open()) log(d->rhs, teams[1], t);
+
+  if (s.neuralEvaluation()) {
+    auto &os = d->ndata;
+    os << s.currentFlags();
+    for (const auto &p: s.subject()->brain().neurons())
+      if (p->isHidden())
+        os << " " << p->value;
+    os << "\n";
+  }
 }
 
 // ===
 
-void Evaluator::operator() (Ind &lhs_i, const Champs &champs) {
+Scenario::Params Evaluator::fromString(
+    const std::string &lhsArg, const std::string &rhsArg) {
+  Scenario::Params params;
+  params.desc = rhsArg;
+  params.neuralEvaluation = (rhsArg[0] == ':');
+  if (!params.neuralEvaluation) {
+    params.rhs = fromJsonFile(rhsArg).dna;
+    params.flags.reset();
+
+  } else {
+    params.flags.reset();
+
+    std::string s = rhsArg.substr(1);
+    if (s == "pain_i" || s == "pain_b") params.flags.set(0);
+    if (s == "pain_a" || s == "pain_b") params.flags.set(1);
+    if (s == "vind") params.flags.set(2);
+    assert(params.flags.any());
+  }
+
+  params.kombatName = kombatName(lhsArg, rhsArg);
+
+  return params;
+}
+
+void Evaluator::operator () (Ind &lhs, const Ind &rhs) {
+  Scenario::Params params;
+  params.desc = ":mk";
+  params.rhs = rhs.dna;
+  params.neuralEvaluation = false;
+  params.flags.reset();
+  operator() (lhs, params);
+  lhs.infos = id(rhs);
+}
+
+const std::set<std::string> Evaluator::canonicalScenarios {
+  "pain_i", // Instantaneous pain
+  "pain_a", // Health level
+  "pain_b", // Damage simulation
+  "vind"    // Inflicted damage
+};
+
+void Evaluator::operator() (Ind &lhs_i, const Scenario::Params &params) {
   std::array<bool,2> brainless;
-
-  const Team &lhs = lhs_i.dna;
-
-  uint nChamps = champs.size();
-  lhs_i.fitnesses["mk"] = 0;
-
-  uint c = 1;
-  for (const auto &rhs_i: champs) {
-    const Team &rhs = rhs_i.dna;
 
 //  using utils::operator<<;
 //  for (int lesion: lesions) {
 
-    Simulation simulation;
-    Scenario scenario (simulation, lhs.size());
-    Footprint footprint;
+  Simulation simulation;
+  Scenario scenario (simulation, lhs_i.dna.size());
+  Footprint footprint;
 
-    scenario.init(lhs, rhs);
+  scenario.init(lhs_i.dna, params);
 
-    brainless = scenario.brainless();
-    bool bothBrainless = brainless[0] && brainless[1];
+  brainless = scenario.brainless();
+  bool bothBrainless = brainless[0] && brainless[1];
 
-    uint f = 0;
-    const auto t0_avg = [&scenario] (auto f, auto... args) {
-      return simu::avg(scenario.teams()[0], f, args...);
-    };
-    using SSide = Critter::Side;
-    for (SSide s: {SSide::LEFT, SSide::RIGHT})
-      for (uint i=0; i<Critter::SPLINES_COUNT; i++)
-        footprint[f++] = t0_avg(&Critter::splineHealth, i, s);
+  uint f = 0;
+  const auto t0_avg = [&scenario] (auto f, auto... args) {
+    return simu::avg(scenario.teams()[0], f, args...);
+  };
+  using SSide = Critter::Side;
+  for (SSide s: {SSide::LEFT, SSide::RIGHT})
+    for (uint i=0; i<Critter::SPLINES_COUNT; i++)
+      footprint[f++] = t0_avg(&Critter::splineHealth, i, s);
 
 /// TODO Modular ANN (not implemented for 3d)
-//    std::unique_ptr<phenotype::ModularANN> mann;
-//    if (!logsSavePrefix.empty() && !annTagsFile.empty()) {
-//      applyNeuralFlags(scenario.subject()->brain(), annTagsFile);
-//      mann = std::make_unique<phenotype::ModularANN>(brain);
-//    }
-//    scenario.applyLesions(lesion);
+//  std::unique_ptr<phenotype::ModularANN> mann;
+//  if (!logsSavePrefix.empty() && !annTagsFile.empty()) {
+//    applyNeuralFlags(scenario.subject()->brain(), annTagsFile);
+//    mann = std::make_unique<phenotype::ModularANN>(brain);
+//  }
+//  scenario.applyLesions(lesion);
 
-    LogData log;
-    if (!logsSavePrefix.empty())  logging_init(&log, logsSavePrefix);
+  LogData log;
+  if (!logsSavePrefix.empty())  logging_init(&log, logsSavePrefix, scenario);
 
-    while (!simulation.finished() && !aborted && !bothBrainless) {
-      simulation.step();
+  while (!simulation.finished() && !aborted && !bothBrainless) {
+    simulation.step();
 
-//      // Update modules values (if modular ann is used)
-//      if (mann) for (const auto &p: mann->modules()) p.second->update();
+//    // Update modules values (if modular ann is used)
+//    if (mann) for (const auto &p: mann->modules()) p.second->update();
 
-      if (!logsSavePrefix.empty()) logging_step(&log, scenario);
-    }
-
-    lhs_i.fitnesses["mk"] += c * scenario.score();
-//    lhs_i.stats["t"] = Scenario::DURATION - duration(simulation);
-    lhs_i.stats["b"] = !brainless[0];
-
-    footprint[f++] = t0_avg(&Critter::bodyHealth);
-    for (SSide s: {SSide::LEFT, SSide::RIGHT})
-      for (uint i=0; i<Critter::SPLINES_COUNT; i++)
-        footprint[f++] = t0_avg(&Critter::splineHealth, i, s);
-    footprint[f++] = t0_avg(&Critter::mass);
-    footprint[f++] = t0_avg(&Critter::momentOfInertia);
-    footprint[f++] = t0_avg(&Critter::x);
-    footprint[f++] = t0_avg(&Critter::y);
-    lhs_i.signature = footprint;
-    assert(f == FOOTPRINT_DIM);
-
-    lhs_i.infos = id(rhs_i);
-
-//    assert(!brainless[0] && !brainless[1]);
-    c++;
+    if (!logsSavePrefix.empty()) logging_step(&log, scenario);
   }
 
-  lhs_i.fitnesses["mk"] /= nChamps * (nChamps+1) / 2.f;
+  lhs_i.fitnesses["mk"] = scenario.score();
+//  lhs_i.stats["t"] = Scenario::DURATION - duration(simulation);
+  lhs_i.stats["b"] = !brainless[0];
+
+  footprint[f++] = t0_avg(&Critter::bodyHealth);
+  for (SSide s: {SSide::LEFT, SSide::RIGHT})
+    for (uint i=0; i<Critter::SPLINES_COUNT; i++)
+      footprint[f++] = t0_avg(&Critter::splineHealth, i, s);
+  footprint[f++] = t0_avg(&Critter::mass);
+  footprint[f++] = t0_avg(&Critter::momentOfInertia);
+  footprint[f++] = t0_avg(&Critter::x);
+  footprint[f++] = t0_avg(&Critter::y);
+  lhs_i.signature = footprint;
+  assert(f == FOOTPRINT_DIM);
+
+//    assert(!brainless[0] && !brainless[1]);
 }
 
 Evaluator::Ind Evaluator::fromJsonFile(const std::string &path) {
@@ -215,7 +261,7 @@ Evaluator::Ind Evaluator::fromJsonFile(const std::string &path) {
 }
 
 std::string Evaluator::kombatName (const std::string &lhsFile,
-                                   const std::string &rhsFile) {
+                                   const std::string &rhsArg) {
   static const std::regex regex
     (".*ID([0-9]+)/([AB])/gen([0-9]+)/.*_([0-9]+)\\.dna");
 
@@ -234,8 +280,13 @@ std::string Evaluator::kombatName (const std::string &lhsFile,
   merge(pieces);
 
   oss << "__";
-  std::regex_match(rhsFile, pieces, regex);
-  merge(pieces);
+
+  if (rhsArg[0] == ':')
+    oss << rhsArg.substr(1);
+  else {
+    std::regex_match(rhsArg, pieces, regex);
+    merge(pieces);
+  }
 
   return oss.str();
 }

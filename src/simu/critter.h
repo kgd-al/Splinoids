@@ -203,7 +203,7 @@ private:
    */
   std::array<decimal, 1+2*SPLINES_COUNT> _currHealth;
   std::bitset<2*SPLINES_COUNT> _destroyed;
-  decimal _previousHealth;
+  decimal _previousHealthness;
 
   // Cached-data for sounds emitted into the environment
   // 0 -> Involuntary (motion, feeding, ...)
@@ -494,7 +494,7 @@ public:
   }
 
   auto instantaneousPain (void) const {
-    return std::max(decimal(0), _previousHealth - bodyHealth());
+    return std::max(decimal(0), _previousHealthness - bodyHealthness());
   }
 
   auto splineHealthness (uint i, Side s) const {
@@ -513,6 +513,11 @@ public:
 
   const auto& healthArray (void) const {
     return _currHealth;
+  }
+
+  void overrideBodyHealthness(decimal h) {
+    assert(0 <= h && h <= 1);
+    _currHealth[0] = h * bodyMaxHealth();
   }
 
   auto activeSpline (uint i, Side s) const {

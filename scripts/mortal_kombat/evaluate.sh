@@ -46,12 +46,11 @@ then
   else
     echo "defaulting to '$rhs' for rhs"
   fi
-elif [ ! -f "$rhs" ]
+elif [ -f "$rhs" ]
 then
-  echo "ERRROR: file '$rhs' does not exist"
-  exit 1
-else
   rhs=$(readlink -m $rhs)
+  shift
+else
   shift
 fi
 
@@ -67,13 +66,14 @@ fi
 
 output=$(dirname $lhs)/$(basename $lhs .dna)
 
-set -x
+# set -x
+build=release
+[ ! -z ${BUILD+x} ] && build=$BUILD
 if [ -z "$gui" ]
 then
-  ./build/release/mk-evaluator --config $config --data-folder $output \
-    --overwrite 'p' --lhs $lhs --rhs $rhs
+  ./build/$build/mk-evaluator --config $config --data-folder $output \
+    --overwrite 'p' --lhs $lhs --rhs $rhs $@
 else
-  ./build/release/mk-visualizer --config $config --data-folder $output \
+  ./build/$build/mk-visualizer --config $config --data-folder $output \
     --overwrite 'p' --lhs $lhs --rhs $rhs $@
 fi
-set +x

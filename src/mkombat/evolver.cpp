@@ -52,6 +52,7 @@ int main(int argc, char *argv[]) {
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::SHOW;
   int gagaVerbosity = 1;
+  bool novelty = true;
 
 //  std::string load;
 
@@ -78,6 +79,7 @@ int main(int argc, char *argv[]) {
      cxxopts::value(verbosity))
     ("gaga-verbosity", "GAGA verbosity level. ",
      cxxopts::value(gagaVerbosity))
+    ("no-novelty", "Disable novelty fitness")
 
     ("f,data-folder", "Folder under which to store the computational outputs",
      cxxopts::value(outputFolder))
@@ -109,6 +111,8 @@ int main(int argc, char *argv[]) {
               << std::endl;
     return 0;
   }
+
+  novelty = (!result.count("no-novelty"));
 
   stdfs::path dataFolder = outputFolder;
   dataFolder /= "ID" + std::to_string(id);
@@ -174,7 +178,7 @@ int main(int argc, char *argv[]) {
   struct Evolution {
     GA ga;
     GAGA::NoveltyExtension<GA> nov;
-    simu::Evaluator::Champs lastChampions;
+    Ind lastChampion = Ind(Team());
   };
   static const auto p_name = [] (uint p) {
     return p == 0 ? "A" : "B";
@@ -210,9 +214,8 @@ int main(int argc, char *argv[]) {
       auto gen = ga.getCurrentGenerationNumber();
       if (gen == 0 && p == 0) symlink_as_last(ga.getSaveFolder().parent_path());
 
-      std::cout << "\tOpponents are:\n";
-      for (Ind &c: evos[1-p].lastChampions)
-        std::cout << "\t\t" << p_name(1-p) << simu::Evaluator::id(c)
+      const Ind &c = evos[1-p].lastChampion;
+      std::cout << "\tOpponent is " << p_name(1-p) << simu::Evaluator::id(c)
                   << " of fitness " << c.fitnesses.at("mk") << "\n";
     });
 
@@ -226,7 +229,7 @@ int main(int argc, char *argv[]) {
 //                          -> CGenome {assert(false);});
 
     ga.setEvaluator([&eval, &evos, p] (auto &i, auto) {
-        eval(i, evos[1-p].lastChampions);
+        eval(i, evos[1-p].lastChampion);
       }, "mortal-kombat");
 
   // -- -- -- -- -- -- SPECIFIC TO THE NOVELTY EXTENSION: -- -- -- -- -- -- --
@@ -242,7 +245,8 @@ int main(int argc, char *argv[]) {
     nov.K = 10;  // size of the neighbourhood to compute novelty.
     //(Novelty = avg dist to the K Nearest Neighbors)
 
-    ga.useExtension(nov);  // we have to tell gaga we want to use this extension
+    if (novelty)
+      ga.useExtension(nov);  // we have to tell gaga we want to use this extension
   // -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 //    if (load.empty()) {
@@ -283,23 +287,13 @@ int main(int argc, char *argv[]) {
     for (uint p = 0; p < 2; p++) {
       auto &ga = evos[p].ga;
       auto gen = ga.getCurrentGenerationNumber();
-      auto &champs = evos[p].lastChampions;
 
       bool first = (gen == 0);
       auto c = first ? ga.population[0]
                      : ga.getLastGenElites(1).at("mk").front();
       if (first)  c.fitnesses["mk"] = NAN;
 
-      auto dbg = [&champs] (auto msg){
-        std::cerr << "## " << msg << " ## champs: [";
-        for (const auto &c: champs) std::cerr << " " << simu::Evaluator::id(c);
-        std::cerr << " ]\n";
-      };
-      dbg("BEFORE INSERTION");
-      champs.push_back(c);
-      dbg(" AFTER INSERTION");
-      while (champs.size() > memory) champs.pop_front();
-      dbg(" AFTER CLEANUP ");
+      evos[p].lastChampion = c;
     }
 
     for (uint p = 0; p < 2; p++)

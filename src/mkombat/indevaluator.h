@@ -19,7 +19,6 @@ struct Evaluator {
   using Footprint = std::array<float, FOOTPRINT_DIM>;
 
   using Ind = GAGA::NoveltyIndividual<Genome, Footprint>;
-  using Champs = std::deque<Ind>;
   using GA = GAGA::GA<Genome, Ind>;
 
   Evaluator (void);
@@ -29,10 +28,14 @@ struct Evaluator {
 //  static void applyNeuralFlags (phenotype::ANN &ann,
 //                                const std::string &tagsfile);
 
-  void operator() (Ind &lhs, const Champs &rhs);
+  // Regular combat between individuals
+  void operator() (Ind &lhs, const Ind &rhs);
+
+  // Actual evaluator
+  void operator() (Ind &lhs, const Scenario::Params &params);
 
   static LogData* logging_getData (void);
-  static void logging_init (LogData *d, const stdfs::path &folder);
+  static void logging_init (LogData *d, const stdfs::path &folder, Scenario &s);
   static void logging_step (LogData *d, Scenario &s);
   static void logging_freeData (LogData **d);
 
@@ -43,13 +46,17 @@ struct Evaluator {
 
   static Ind fromJsonFile (const std::string &path);
 
+  static Scenario::Params fromString (const std::string &lhsArg,
+                                      const std::string &rhsArg);
   static std::string kombatName (const std::string &lhsFile,
-                                 const std::string &rhsFile);
+                                 const std::string &rhsArg);
 
   stdfs::path logsSavePrefix, annTagsFile;
 
 //  std::vector<int> lesions;
   static constexpr std::array<int,1> lesions {0};
+
+  static const std::set<std::string> canonicalScenarios;
 
   static std::atomic<bool> aborted;
 };

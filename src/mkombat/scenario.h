@@ -41,10 +41,23 @@ struct Team {
 class Scenario {
 public:
   static constexpr uint DURATION = 20; //seconds
+  struct Params {
+    std::string desc;
+    std::string kombatName;
+
+    Team rhs;
+
+    bool neuralEvaluation;
+
+    using Flags = std::bitset<3>;
+    Flags flags;
+
+    enum Pain { INSTANTANEOUS, ABSOLUTE, OPPONENT };
+  };
 
   Scenario(Simulation &simulation, uint tSize);
 
-  void init (const Team &lhs, const Team &rhs);
+  void init (Team &lhs, const Params &params);
   void postEnvStep (void);
   void postStep (void);
   void preDelCritter (Critter *c);
@@ -62,6 +75,22 @@ public:
     return _teams;
   }
 
+  bool neuralEvaluation (void) const {
+    return _flags.any();
+  }
+
+  const auto& currentFlags (void) const {
+    return _currentFlags;
+  }
+
+  Critter* subject (void) {
+    return *_teams[0].begin();
+  }
+
+  Critter* opponent (void) {
+    return *_teams[1].begin();
+  }
+
   static const Simulation::InitData commonInitData;
 
 private:
@@ -69,6 +98,7 @@ private:
   const uint _teamsSize;
 
   std::array<std::set<simu::Critter*>, 2> _teams;
+  Params::Flags _flags, _currentFlags;
 
   static genotype::Environment environmentGenome (uint tSize);
 };

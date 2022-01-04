@@ -58,9 +58,7 @@ int main(int argc, char *argv[]) {
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::QUIET;
 
-  std::string lhsTeamArg, rhsTeamArg;
-
-  std::string kombatName;
+  std::string lhsTeamArg, rhsArg;
 
   std::string outputFolder = "tmp/mk-eval/";
   char overwrite = simu::Simulation::PURGE;
@@ -88,8 +86,10 @@ int main(int argc, char *argv[]) {
 
     ("lhs", "Splinoid genomes for left-hand side team",
      cxxopts::value(lhsTeamArg))
-    ("rhs", "Splinoid genomes for right-hand side team",
-     cxxopts::value(rhsTeamArg))
+    ("rhs", "Splinoid genomes for right-hand side team (for live evaluation)",
+     cxxopts::value(rhsArg))
+    ("scenario", "Scenario name for canonical evaluations",
+     cxxopts::value(rhsArg))
 
     ("lesions", "Lesion type to apply (def: {})", cxxopts::value(lesions))
 
@@ -119,12 +119,11 @@ int main(int argc, char *argv[]) {
 
   if (lhsTeamArg.empty())
     utils::doThrow<std::invalid_argument>("No data provided for lhs team");
-  if (rhsTeamArg.empty())
-    utils::doThrow<std::invalid_argument>("No data provided for rhs team");
 
-  Ind lhsTeam = simu::Evaluator::fromJsonFile(lhsTeamArg);
-  Ind rhsTeam = simu::Evaluator::fromJsonFile(rhsTeamArg);
-  kombatName = simu::Evaluator::kombatName(lhsTeamArg, rhsTeamArg);
+  if (rhsArg.empty())
+    utils::doThrow<std::invalid_argument>(
+      "No evaluation context provided. Either specify an opponent team (via rhs)"
+      " or a canonical scenario (via scenario)");
 
   // ===========================================================================
   // == SIGINT management
@@ -139,6 +138,7 @@ int main(int argc, char *argv[]) {
   // ===========================================================================
   // == Core setup
 
+  Ind lhsTeam = simu::Evaluator::fromJsonFile(lhsTeamArg);
 
   auto start = simu::Simulation::now();
   const auto prevFitness = lhsTeam.fitnesses;
@@ -147,9 +147,11 @@ int main(int argc, char *argv[]) {
   simu::Evaluator eval;
 //  eval.setLesionTypes(lesions);
 
-  eval.logsSavePrefix = stdfs::path(outputFolder) / kombatName;
+  auto params = simu::Evaluator::fromString(lhsTeamArg, rhsArg);
+
+  eval.logsSavePrefix = stdfs::path(outputFolder) / params.kombatName;
   eval.annTagsFile = annNeuralTags;
-  eval(lhsTeam, {rhsTeam});
+  eval(lhsTeam, params);
 
   auto duration = simu::Simulation::durationFrom(start);
   uint days, hours, minutes, seconds, mseconds;
@@ -174,14 +176,17 @@ int main(int argc, char *argv[]) {
     std::cout << seconds << "s ";
   std::cout << mseconds << "ms" << std::endl;
 
-  std::cout << prevInfos << " =?= " << simu::Evaluator::id(rhsTeam) << "\n";
-  if (prevInfos == simu::Evaluator::id(rhsTeam)) {
-    std::cout << "Rhs id matching lhs memory. Comparison result for lhs:\n";
-    diffStats(prevFitness, lhsTeam.fitnesses);
+  if (!params.neuralEvaluation) {
+    auto rhsId = simu::Evaluator::id(params.rhs);
+    std::cout << prevInfos << " =?= " << rhsId << "\n";
+    if (prevInfos == rhsId) {
+      std::cout << "Rhs id matching lhs memory. Comparison result for lhs:\n";
+      diffStats(prevFitness, lhsTeam.fitnesses);
 
-  } else {
-    std::cout << "Result for lhs:\n";
-    diffStats({}, lhsTeam.fitnesses);
+    } else {
+      std::cout << "Result for lhs:\n";
+      diffStats({}, lhsTeam.fitnesses);
+    }
   }
 
 //  s.destroy();

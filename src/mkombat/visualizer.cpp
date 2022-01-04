@@ -49,8 +49,8 @@ int main(int argc, char *argv[]) {
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::QUIET;
 
-  std::string lhsTeamArg, rhsTeamArg;
-  std::string kombatName;
+  std::string lhsTeamArg;
+  std::string rhsArg;
 
   int startspeed = 1;
   bool autoquit = false;
@@ -89,7 +89,10 @@ int main(int argc, char *argv[]) {
      cxxopts::value(verbosity))
 
     ("lhs", "Left-hand side team", cxxopts::value(lhsTeamArg))
-    ("rhs", "Right-hand side team", cxxopts::value(rhsTeamArg))
+    ("rhs", "Splinoid genomes for right-hand side team (for live evaluation)",
+     cxxopts::value(rhsArg))
+    ("scenario", "Scenario name for canonical evaluations",
+     cxxopts::value(rhsArg))
 
     ("start", "Whether to start running immendiatly after initialisation"
               " (and optionally at which speed > 1)",
@@ -136,7 +139,10 @@ int main(int argc, char *argv[]) {
   auto result = options.parse(argc, argv);
 
   if (result.count("help")) {
-    std::cout << options.help() << std::endl;
+    using utils::operator<<;
+    std::cout << options.help()
+              << "\nCanonical scenarios:" << simu::Evaluator::canonicalScenarios
+              << std::endl;
     return 0;
   }
 
@@ -152,12 +158,12 @@ int main(int argc, char *argv[]) {
 
   if (lhsTeamArg.empty())
     utils::doThrow<std::invalid_argument>("No data provided for lhs team");
-  if (rhsTeamArg.empty())
-    utils::doThrow<std::invalid_argument>("No data provided for rhs team");
 
-  Ind lhsTeam = simu::Evaluator::fromJsonFile(lhsTeamArg);
-  Ind rhsTeam = simu::Evaluator::fromJsonFile(rhsTeamArg);
-  kombatName = simu::Evaluator::kombatName(lhsTeamArg, rhsTeamArg);
+  if (rhsArg.empty())
+    utils::doThrow<std::invalid_argument>(
+      "No evaluation context provided. Either specify an opponent team (via rhs)"
+      " or a canonical scenario (via scenario)");
+
 
   // ===========================================================================
   // == Qt setup
@@ -205,6 +211,13 @@ int main(int argc, char *argv[]) {
   if (verbosity != Verbosity::QUIET)
     config::Visualisation::printConfig(std::cout);
 
+
+  // ===========================================================================
+  // == Data load
+
+  Ind lhsTeam = simu::Evaluator::fromJsonFile(lhsTeamArg);
+  auto params = simu::Evaluator::fromString(lhsTeamArg, rhsArg);
+
   // ===========================================================================
   // == Window/layout setup
 
@@ -226,7 +239,7 @@ int main(int argc, char *argv[]) {
   // ===========================================================================
   // == Simulation setup
 
-  scenario.init(lhsTeam.dna, rhsTeam.dna);
+  scenario.init(lhsTeam.dna, params);
 //  if (!annNeuralTags.empty() /*&& snapshots == -1 && annRender.empty()*/) {
 //    phenotype::ANN &ann = scenario.subject()->brain();
 //    simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);
@@ -267,9 +280,10 @@ int main(int argc, char *argv[]) {
   if (!picture.empty()) {
     bool atomic = (lhsTeam.dna.size() == 1);
 
-    std::array<std::string, 2> paths { lhsTeamArg, rhsTeamArg };
+    std::vector<std::string> paths { lhsTeamArg };
+    if (!params.neuralEvaluation) paths.push_back(rhsArg);
     auto teams = scenario.teams();
-    for (uint i=0; i<2; i++) {
+    for (uint i=0; i<paths.size(); i++) {
       stdfs::path obase = stdfs::path(paths[i]).replace_extension();
       auto &t = teams[i];
 
@@ -505,9 +519,8 @@ int main(int argc, char *argv[]) {
 
     using Eval = simu::Evaluator;
     auto log = Eval::logging_getData();
-    Eval::logging_init(log,
-                    stdfs::path(outputFolder)
-                    /  Eval::kombatName(lhsTeamArg, rhsTeamArg));
+    Eval::logging_init(log, stdfs::path(outputFolder) /  params.kombatName,
+                       scenario);
     QObject::connect(v, &gui::MainView::stepped,
                      [log,&scenario] {
       Eval::logging_step(log, scenario);
