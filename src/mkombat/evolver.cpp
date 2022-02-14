@@ -115,10 +115,16 @@ int main(int argc, char *argv[]) {
   novelty = (!result.count("no-novelty"));
 
   stdfs::path dataFolder = outputFolder;
+#ifndef CLUSTER_BUILD
   dataFolder /= "ID" + std::to_string(id);
   std::cerr << "provided id: " << id << " of type "
             << utils::className<decltype(id)>()
             << ". data folder: " << dataFolder << "\n";
+#else
+  std::cerr << "[CLUSTER BUILD] Ignoring id. Using "
+            << stdfs::current_path()
+            << " as datafolder\n";
+#endif
 
   if (result.count("auto-config") && result["auto-config"].as<bool>())
     configFile = "auto";
@@ -165,7 +171,8 @@ int main(int argc, char *argv[]) {
   }
   std::cout << dice.getSeed() << "\n";
 
-  std::cout << "Team size: " << teamSize << "\n"
+  std::cout << "CPU Threads: " << threads << omp_ "\n"
+            << "Team size: " << teamSize << "\n"
             << "Memory: " << memory << "\n";
 
   genotype::Critter::printMutationRates(std::cout, 2);
@@ -204,7 +211,7 @@ int main(int argc, char *argv[]) {
     ga.setSaveParetoFront(false);
     ga.disableGenerationHistory();
 
-    ga.enablePopulationSave();
+    ga.disablePopulationSave();
 
     ga.setSaveFolderGenerator([p, id, dataFolder] (auto) {
       return dataFolder / p_name(p);
@@ -214,7 +221,10 @@ int main(int argc, char *argv[]) {
       std::cout << "\n[POP " << p_name(p) << "] New generation at "
                 << utils::CurrentTime{} << "\n";
       auto gen = ga.getCurrentGenerationNumber();
+
+#ifndef CLUSTER_BUILD
       if (gen == 0 && p == 0) symlink_as_last(ga.getSaveFolder().parent_path());
+#endif
 
       const Ind &c = evos[1-p].lastChampion;
       std::cout << "\tOpponent is " << p_name(1-p) << simu::Evaluator::id(c)
