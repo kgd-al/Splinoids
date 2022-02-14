@@ -96,7 +96,7 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
   std::cerr << f << " should exist!\n";
 
   static const auto header = [] (auto &os) {
-    os << "Time Count LSpeed ASpeed Health TotalHealth\n";
+    os << "Time Count LSpeed ASpeed Health TotalHealth Energy\n";
   };
 
   d->lhs.open(f / "lhs.dat");
@@ -125,6 +125,7 @@ void Evaluator::logging_step(LogData *d, Scenario &s) {
        << " " << avg(&Critter::angularSpeed)
        << " " << avg(&Critter::bodyHealthness)
        << " " << avg(&Critter::healthness)
+       << " " << avg(&Critter::usableEnergy)
        << "\n";
   };
   auto t = duration(s.simulation());
@@ -143,22 +144,26 @@ void Evaluator::logging_step(LogData *d, Scenario &s) {
 
 // ===
 
-Scenario::Params Evaluator::fromString(
+Scenario::Params Evaluator::scenarioFromStrings(
     const std::string &lhsArg, const std::string &rhsArg) {
   Scenario::Params params;
   params.desc = rhsArg;
   params.neuralEvaluation = (rhsArg[0] == ':');
   if (!params.neuralEvaluation) {
-    params.rhs = fromJsonFile(rhsArg).dna;
+    auto rhs = fromJsonFile(rhsArg);
+    params.rhs = rhs.dna;
+    params.rhsId = simu::Evaluator::id(rhs);
     params.flags.reset();
 
   } else {
     params.flags.reset();
 
+    using F = simu::Scenario::Params::Flag;
     std::string s = rhsArg.substr(1);
-    if (s == "pain_i" || s == "pain_b") params.flags.set(0);
-    if (s == "pain_a" || s == "pain_b") params.flags.set(1);
-    if (s == "vind") params.flags.set(2);
+    if (s == "test") params.flags.set(F::TEST);
+    if (s == "pain_i" || s == "pain_b") params.flags.set(F::PAIN_INSTANTANEOUS);
+    if (s == "pain_a" || s == "pain_b") params.flags.set(F::PAIN_ABSOLUTE);
+    if (s == "vind") params.flags.set(F::PAIN_OPPONENT);
     assert(params.flags.any());
   }
 
@@ -197,7 +202,16 @@ void Evaluator::operator() (Ind &lhs_i, const Scenario::Params &params) {
   scenario.init(lhs_i.dna, params);
 
   brainless = scenario.brainless();
+  lhs_i.stats["brain"] = !brainless[0];
   bool bothBrainless = brainless[0] && brainless[1];
+
+  {
+    phenotype::ANN &b = scenario.subject()->brain();
+    lhs_i.stats["neurons"] = b.neurons().size()
+                           - b.inputs().size()
+                           - b.outputs().size();
+    lhs_i.stats["cxts"] = b.stats().edges;
+  }
 
   uint f = 0;
   const auto t0_avg = [&scenario] (auto f, auto... args) {
@@ -219,8 +233,13 @@ void Evaluator::operator() (Ind &lhs_i, const Scenario::Params &params) {
   LogData log;
   if (!logsSavePrefix.empty())  logging_init(&log, logsSavePrefix, scenario);
 
-  while (!simulation.finished() && !aborted && !bothBrainless) {
+  auto start_time = Simulation::now();
+  bool fail = brainless[0];
+
+  while (!simulation.finished() && !aborted && !fail) {
     simulation.step();
+
+    fail |= (Simulation::durationFrom(start_time) >= 1000);
 
 //    // Update modules values (if modular ann is used)
 //    if (mann) for (const auto &p: mann->modules()) p.second->update();
@@ -228,9 +247,14 @@ void Evaluator::operator() (Ind &lhs_i, const Scenario::Params &params) {
     if (!logsSavePrefix.empty()) logging_step(&log, scenario);
   }
 
-  lhs_i.fitnesses["mk"] = scenario.score();
-//  lhs_i.stats["t"] = Scenario::DURATION - duration(simulation);
-  lhs_i.stats["b"] = !brainless[0];
+  lhs_i.fitnesses["mk"] = fail ? -4 : scenario.score();
+
+  lhs_i.stats["wtime"] = -Simulation::durationFrom(start_time);
+  lhs_i.stats["stime"] = Scenario::DURATION - duration(simulation);
+
+//  const auto &autopsies = scenario.autopsies();
+//  lhs_i.stats["injury"] = autopsies[1][Scenario::DeathCause::INJURY];
+//  lhs_i.stats["starvation"] = 1-autopsies[1][Scenario::DeathCause::STARVATION];
 
   footprint[f++] = t0_avg(&Critter::bodyHealth);
   for (SSide s: {SSide::LEFT, SSide::RIGHT})
@@ -242,6 +266,9 @@ void Evaluator::operator() (Ind &lhs_i, const Scenario::Params &params) {
   footprint[f++] = t0_avg(&Critter::y);
   lhs_i.signature = footprint;
   assert(f == FOOTPRINT_DIM);
+
+//  std::cerr << __PRETTY_FUNCTION__ << simulation.currTime().timestamp()
+//            << " " << brainless[0] << " " << brainless[1] << "\n";
 
 //    assert(!brainless[0] && !brainless[1]);
 }
@@ -263,7 +290,7 @@ Evaluator::Ind Evaluator::fromJsonFile(const std::string &path) {
 std::string Evaluator::kombatName (const std::string &lhsFile,
                                    const std::string &rhsArg) {
   static const std::regex regex
-    (".*ID([0-9]+)/([AB])/gen([0-9]+)/.*_([0-9]+)\\.dna");
+    (".*ID(\\w+)/([AB])/gen(\\d+)/.*_(\\d+)\\.dna");
 
   std::ostringstream oss;
   const auto merge = [&oss] (std::smatch tokens) {

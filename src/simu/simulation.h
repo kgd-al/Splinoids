@@ -30,7 +30,12 @@ protected:
   std::unique_ptr<Environment> _environment;
 
   phylogeny::GIDManager _gidManager;
-  std::set<Critter*> _critters;
+  struct ID_CMP {
+    bool operator() (const Critter *lhs, const Critter *rhs) const {
+      return lhs->id() < rhs->id();
+    }
+  };
+  std::set<Critter*, ID_CMP> _critters;
 
   uint _nextFoodletID;
   std::set<Foodlet*> _foodlets;

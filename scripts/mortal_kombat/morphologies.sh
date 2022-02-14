@@ -50,7 +50,7 @@ do
     
     drawVision=0 ./build/release/mk-visualizer --config $config \
       --lhs $lhs --rhs $rhs \
-      --picture=$S --no-restore >> $log 2>&1
+      --picture=$S --no-restore --overwrite 'i' >> $log 2>&1
   else
     log "[$g / $gens] Pictures for lhs/rhs already generated"
   fi

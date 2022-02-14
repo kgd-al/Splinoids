@@ -46,14 +46,17 @@ public:
     std::string kombatName;
 
     Team rhs;
+    std::string rhsId;
 
     bool neuralEvaluation;
 
-    using Flags = std::bitset<3>;
+    enum Flag { TEST, PAIN_INSTANTANEOUS, PAIN_ABSOLUTE, PAIN_OPPONENT };
+    using Flags = std::bitset<4>;
     Flags flags;
 
-    enum Pain { INSTANTANEOUS, ABSOLUTE, OPPONENT };
   };
+  using DeathCause = Simulation::Autopsies::Death;
+  static constexpr DeathCause UNKNOWN_DEATH_CAUSE = DeathCause(-1);
 
   Scenario(Simulation &simulation, uint tSize);
 
@@ -70,6 +73,9 @@ public:
 
   float score (void) const;
   std::array<bool,2> brainless (void) const;
+  const auto& autopsies (void) const {
+    return _autopsies;
+  }
 
   const auto& teams (void) const {
     return _teams;
@@ -99,6 +105,8 @@ private:
 
   std::array<std::set<simu::Critter*>, 2> _teams;
   Params::Flags _flags, _currentFlags;
+
+  std::array<std::array<uint, 2>, 2> _autopsies;
 
   static genotype::Environment environmentGenome (uint tSize);
 };

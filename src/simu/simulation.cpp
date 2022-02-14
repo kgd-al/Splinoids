@@ -385,7 +385,6 @@ void Simulation::delCritter (Critter *critter) {
   if (debugCritterManagement) critter->autopsy();
 //  if (_ssga.watching()) _ssga.registerDeath(critter);
   _critters.erase(critter);
-  physics().DestroyBody(&critter->body());
   delete critter;
 }
 

@@ -46,7 +46,7 @@ struct Evaluator {
 
   static Ind fromJsonFile (const std::string &path);
 
-  static Scenario::Params fromString (const std::string &lhsArg,
+  static Scenario::Params scenarioFromStrings (const std::string &lhsArg,
                                       const std::string &rhsArg);
   static std::string kombatName (const std::string &lhsFile,
                                  const std::string &rhsArg);

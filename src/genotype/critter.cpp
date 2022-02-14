@@ -41,7 +41,7 @@ DEFINE_GENOME_FIELD_WITH_BOUNDS(D, data, "",
   SplineMaker()
     (I::SA, EPSILON)
     (I::EA, -M_PI/2) (I::EL, 0)
-    (I::DX0, 0)(I::DY0, -1)(I::DX1, 0)(I::DY1, -1)
+    (I::DX0, 0)(I::DY0, -.5)(I::DX1, 0)(I::DY1, -.5)
     (I::W0, 0) (I::W1, 0) (I::W2, 0)
     (),
 
@@ -62,7 +62,7 @@ DEFINE_GENOME_FIELD_WITH_BOUNDS(D, data, "",
   SplineMaker()
     (I::SA, M_PI-EPSILON)
     (I::EA, M_PI/2) (I::EL, 1)
-    (I::DX0, 1)(I::DY0, 1)(I::DX1, 1)(I::DY1, 1)
+    (I::DX0, 1)(I::DY0, .5)(I::DX1, 1)(I::DY1, .5)
     (I::W0, .5) (I::W1, .5) (I::W2, .5)
     (),
 

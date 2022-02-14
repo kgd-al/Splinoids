@@ -13,6 +13,9 @@ static constexpr int debugHearing = 0;
 static constexpr int debugMating = 0;
 static constexpr int debugTouching = 0;
 
+// between arms of a single critter
+static constexpr bool ignoreSelfCollisions = true;
+
 const bool Environment::boxEdges = true;
 
 struct CollisionMonitor : public b2ContactListener {
@@ -39,16 +42,19 @@ struct CollisionMonitor : public b2ContactListener {
     return (uint16(lhs) << 8) | uint16(rhs);
   }
 
-  Critter* isTouch (const b2BodyUserData &bd, b2Fixture *fA, b2Fixture *fB) {
+  Critter* isTouch (const b2BodyUserData &dA, b2Fixture *fA,
+                    const b2BodyUserData &dB, b2Fixture *fB) {
     if (fB->IsSensor()) return nullptr;
 
-    auto c = critter(bd);
-    if (!c) return nullptr;
+    auto cA = critter(dA);
+    if (!cA) return nullptr;
+
+    if (critter(dB) == cA)  return nullptr;
 
     switch (Critter::get(fA)->type) {
     case Critter::FixtureType::BODY:
     case Critter::FixtureType::ARTIFACT:
-      return c;
+      return cA;
     case Critter::FixtureType::AUDITION:
     case Critter::FixtureType::REPRODUCTION:
       return nullptr;
@@ -76,8 +82,8 @@ struct CollisionMonitor : public b2ContactListener {
     const b2BodyUserData &dA = *Critter::get(bA),
                          &dB = *Critter::get(bB);
 
-    if (auto c = isTouch(dA, fA, fB)) registerTouchStart(c, fA);
-    if (auto c = isTouch(dB, fB, fA)) registerTouchStart(c, fB);
+    if (auto c = isTouch(dA, fA, dB, fB)) registerTouchStart(c, fA);
+    if (auto c = isTouch(dB, fB, dA, fA)) registerTouchStart(c, fB);
 
     switch (pair(dA.type, dB.type)) {
     case pair(BodyType::CRITTER, BodyType::CRITTER):
@@ -120,10 +126,17 @@ struct CollisionMonitor : public b2ContactListener {
     const b2BodyUserData &dA = *Critter::get(bA),
                          &dB = *Critter::get(bB);
 
+    // Disable collisions between moving parts of a critter
+    if (dA.type == BodyType::CRITTER && dB.type == BodyType::CRITTER
+        && dA.ptr.critter == dB.ptr.critter) {
+      if (ignoreSelfCollisions) c->SetEnabled(false);
+      return;
+    }
+
     switch (pair(dA.type, dB.type)) {
     case pair(BodyType::CRITTER, BodyType::CRITTER):
       if (!isMatingAttempt(fA, fB))
-        processFightPreStep(critter(dA), critter(dB));
+        processFightPreStep(critter(dA), fA, critter(dB), fB);
       break;
 
     case pair(BodyType::CRITTER, BodyType::PLANT):
@@ -166,8 +179,8 @@ struct CollisionMonitor : public b2ContactListener {
     const b2BodyUserData &dA = *Critter::get(bA),
                          &dB = *Critter::get(bB);
 
-    if (auto c = isTouch(dA, fA, fB)) registerTouchEnd(c, fA);
-    if (auto c = isTouch(dB, fB, fA)) registerTouchEnd(c, fB);
+    if (auto c = isTouch(dA, fA, dB, fB)) registerTouchEnd(c, fA);
+    if (auto c = isTouch(dB, fB, dA, fA)) registerTouchEnd(c, fB);
 
     switch (pair(dA.type, dB.type)) {
     case pair(BodyType::CRITTER, BodyType::CRITTER):
@@ -239,6 +252,8 @@ struct CollisionMonitor : public b2ContactListener {
   void registerFightStart (Critter *cA, b2Fixture *fA,
                            Critter *cB, b2Fixture *fB) {
 
+    if (cA == cB) return; // Different moving parts of the same critter
+
     if (cA->id() > cB->id()) {  // ensure order
       std::swap(cA, cB);  std::swap(fA, fB);
     }
@@ -252,16 +267,19 @@ struct CollisionMonitor : public b2ContactListener {
     }
 
     Environment::FightingData &d = e._fightingEvents[std::make_pair(cA,cB)];
-    d.fixtures.insert({{fA,fB},0});
+    d.fixtures.insert({{fA,fB}, Environment::FightingData::FixturesData{}});
   }
 
-  void processFightPreStep (Critter *cA, Critter *cB) {
-    if (cA->id() > cB->id())  // ensure order
-      std::swap(cA, cB);
+  void processFightPreStep (Critter *cA, b2Fixture *fA,
+                            Critter *cB, b2Fixture *fB) {
+    if (cA == cB) return; // Different moving parts of the same critter
+
+    if (cA->id() > cB->id()) { // ensure order
+      std::swap(cA, cB); std::swap(fA, fB);
+    }
 
     for (Critter *c: { cA, cB }) {
       Environment::CritterData &d = e._critterData.at(c);
-      d.previousVelocities = { c->linearSpeed(), c->angularSpeed() };
       d.totalImpulsions = 0;
     }
   }
@@ -269,6 +287,8 @@ struct CollisionMonitor : public b2ContactListener {
   void processFightPostStep (Critter *cA, b2Fixture *fA,
                              Critter *cB, b2Fixture *fB,
                              const b2ContactImpulse *impulse) {
+    if (cA == cB) return; // Different moving parts of the same critter
+
     if (cA->id() > cB->id()) {  // ensure order
       std::swap(cA, cB);  std::swap(fA, fB);
     }
@@ -281,11 +301,13 @@ struct CollisionMonitor : public b2ContactListener {
       e._critterData.at(c).totalImpulsions += totalImpulse;
 
     Environment::FightingData &d = e._fightingEvents.at({ cA, cB });
-    d.fixtures.at({fA,fB}) = totalImpulse;
+    d.fixtures.at({fA,fB}).impulse = totalImpulse;
   }
 
   void registerFightEnd (Critter *cA, b2Fixture *fA,
                          Critter *cB, b2Fixture *fB) {
+    if (cA == cB) return; // Different moving parts of the same critter
+
     if (cA->id() > cB->id()) {  // ensure order
       std::swap(cA, cB);  std::swap(fA, fB);
     }
@@ -392,6 +414,14 @@ struct CollisionMonitor : public b2ContactListener {
   }
 };
 
+bool Environment::ID_CMP::operator() (const DestroyedSpline &lhs,
+                                      const DestroyedSpline &rhs) const {
+  if (lhs.first->id() != rhs.first->id())
+    return lhs.first->id() < rhs.first->id();
+  return lhs.second < rhs.second;
+}
+
+
 Environment::Environment(const Genome &g)
   : _genome(g), _physics({0,0}),
     _cmonitor(new CollisionMonitor(*this)) {
@@ -437,7 +467,7 @@ void Environment::step (void) {
   if (debugFighting && !_fightingEvents.empty())
     std::cerr << ">> Processing fight events\n";
 
-  std::set<std::pair<Critter*,uint>> destroyedSplines;
+  DestroyedSplines destroyedSplines;
   for (const auto &f: _fightingEvents)
     processFight(f.first.first, f.first.second, f.second, destroyedSplines);
   for (const auto &p: destroyedSplines)
@@ -534,14 +564,10 @@ auto densityCollisionFactor (float d) {
 }
 
 void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
-                               std::set<std::pair<Critter*, uint>> &ds) {
+                               DestroyedSplines &ds) {
+
   static const auto &CMV = config::Simulation::combatMinVelocity();
   static const auto &CBI = config::Simulation::combatBaselineIntensity();
-
-  static const auto energy = [] (float m, float v) { return .5 * m * v * v; };
-  static const auto diff =
-      [] (float t0, float t1) { return std::max(0.f, t0 - t1); };
-  static const auto agg = [] (float l, float r) { return CBI * (l + r); };
 
   const CritterData &dA = _critterData.at(cA),
                     &dB = _critterData.at(cB);
@@ -555,48 +581,20 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
     std::cerr << "\nFight step of " << CID(cA) << " & " << CID(cB) << "\n"
               << "\tat " << cA->pos() << " & " << cB->pos() << "\n";
 
-  float D_A = 0, D_B = 0;
-
-  if (!ignoreA) {
-    float mA = cA->mass(), iA = cA->momentOfInertia();
-    float E_A_l_0 = energy(mA, dA.previousVelocities.linear),
-          E_A_l_1 = energy(mA, cA->linearSpeed()),
-          E_A_r_0 = energy(iA, dA.previousVelocities.angular),
-          E_A_r_1 = energy(iA, cA->angularSpeed());
-    D_A = agg(diff(E_A_l_0, E_A_l_1), diff(E_A_r_0, E_A_r_1));
-
-    if (debugFighting > 2)
-      std::cerr << "\tdV_A_l = " << diff(E_A_l_0, E_A_l_1)
-                  << " = " << E_A_l_0 << " - " << E_A_l_1 << "\n"
-                << "\tdV_A_r = " << diff(E_A_r_0, E_A_r_1)
-                  << " = " << E_A_r_0 << " - " << E_A_r_1 << "\n";
-  }
-
-  if (!ignoreB) {
-    float mB = cB->mass(), iB = cB->momentOfInertia();
-    float E_B_l_0 = energy(mB, dB.previousVelocities.linear),
-          E_B_l_1 = energy(mB, cB->linearSpeed()),
-          E_B_r_0 = energy(iB, dB.previousVelocities.angular),
-          E_B_r_1 = energy(iB, cB->angularSpeed());
-    D_B = agg(diff(E_B_l_0, E_B_l_1), diff(E_B_r_0, E_B_r_1));
-
-    if (debugFighting > 2)
-      std::cerr << "\tdV_B_l = " << diff(E_B_l_0, E_B_l_1)
-                  << " = " << E_B_l_0 << " - " << E_B_l_1 << "\n"
-                << "\tdV_B_r = " << diff(E_B_r_0, E_B_r_1)
-                  << " = " << E_B_r_0 << " - " << E_B_r_1 << "\n";
-  }
-
-  if (debugFighting > 1)
-    std::cerr << "\t     D = " << D_A+D_B << " = "
-                << D_A << " + " << D_B << "\n";
-
   if (debugFighting > 2)
     std::cerr << "Fixture-Fixture collisions details:\n";
 
+  static const auto skip = [] (auto p) {
+    return p.second.impulse < CMV /*&& p.second.velocity < CMV*/;
+  };
+
+  float fixtureCount = 0;
+  for (const auto &p: d.fixtures) if (!skip(p)) fixtureCount++;
+
   for (const auto &p: d.fixtures) {
-    float impulse = p.second;
-    if (impulse < CMV) continue;
+    if (skip(p)) continue;
+
+    float impulse = p.second.impulse;
 
     b2Fixture *fA = p.first.first, *fB = p.first.second;
     const Critter::FixtureData &fdA = *Critter::get(fA);
@@ -608,11 +606,14 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
     if (alpha_a == 0 && alpha_b == 0) continue;
     float alpha = (alpha_b) / (alpha_a + alpha_b);
 
-    float D = D_A * impulse / dA.totalImpulsions
-            + D_B * impulse / dB.totalImpulsions;
-    float deA = alpha * D, deB = (1 - alpha) * D;
+    float D = CBI * impulse / fixtureCount;
 
-    if (debugFighting > 2)
+    float hA = cA->currentHealth(fdA), hB = cB->currentHealth(fdB);
+    float D_ = std::min(D, std::min(hA / alpha, hB / (1-alpha)));
+
+    float deA = alpha * D_, deB = (1 - alpha) * D_;
+
+    if (debugFighting > 2) {
       std::cerr << "\tFixtures " << CID(cA) << "F" << fdA << " and "
                 << CID(cB) << "F" << fdB << "\n"
                 << "\t\trA = " << fA->GetDensity()
@@ -620,9 +621,11 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
                 << "\t\trB = " << fB->GetDensity()
                   << "\t" << alpha_b << "\t" << 1-alpha << "\n"
                 << "\t\t D = " << D << " = "
-                  << D_A << " * " << impulse << " / " << dA.totalImpulsions
-                  << " + " << D_B << " * " << impulse << " / "
-                  << dB.totalImpulsions << "\n";
+                  << CBI << " * " << impulse << " / " << fixtureCount << "\n";
+      if (D != D_)
+        std::cerr << "\t\tD' = " << D_ << " (clamped to hA = " << hA << ", "
+                  << "hB = " << hB << ")\n";
+    }
 
     bool sADestroyed = cA->applyHealthDamage(fdA, deA, *this);
     if (sADestroyed)  ds.insert({cA, Critter::splineIndex(fdA)});
@@ -638,8 +641,8 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
       std::cerr << "\n";
     }
 
-    float sum_ = deA+deB, diff_ = D - sum_;
-    assert(std::fabs(deA + deB - D) < 1e-3);
+    float sum_ = deA+deB, diff_ = D_ - sum_;
+    assert(std::fabs(deA + deB - D_) < 1e-3);
 
 //  #ifndef NDEBUG
 //    fightingDrawData.push_back(fdd);

@@ -32,6 +32,7 @@ Environment::Environment (simu::Environment &e,
   _environment.physics().SetDebugDraw(_ddrawer);
   _ddrawer->SetFlags(
       b2Draw::e_shapeBit
+    | b2Draw::e_jointBit
 //    | b2Draw::e_aabbBit
     | b2Draw::e_pairBit
 //    | b2Draw::e_centerOfMassBit

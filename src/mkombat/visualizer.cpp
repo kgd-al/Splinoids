@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
   bool noRestore = false;
 
   static const std::vector<std::string> validSnapshotViews {
-    "simu", "ann", "mann", "io"
+    "simu"/*, "ann", "mann", "io"*/
   };
   std::vector<std::string> snapshotViews;
   std::string background;
@@ -206,6 +206,10 @@ int main(int argc, char *argv[]) {
   } else
     config::Visualisation::setupConfig(configFile, Verbosity::QUIET);
 
+//#ifndef NDEBUG
+//  std::cerr << "Overriding config values\n";
+//  config::Simulation::auditionRange.overrideWith(0);
+//#endif
 
   config::Simulation::verbosity.overrideWith(0);
   if (verbosity != Verbosity::QUIET)
@@ -216,7 +220,8 @@ int main(int argc, char *argv[]) {
   // == Data load
 
   Ind lhsTeam = simu::Evaluator::fromJsonFile(lhsTeamArg);
-  auto params = simu::Evaluator::fromString(lhsTeamArg, rhsArg);
+  auto params = simu::Evaluator::scenarioFromStrings(lhsTeamArg, rhsArg);
+
 
   // ===========================================================================
   // == Window/layout setup
@@ -264,6 +269,13 @@ int main(int argc, char *argv[]) {
 //    if (auto f = scenario.foodlet())  simulation.visuFoodlet(f)->tag = "G";
   }
 
+//#ifndef NDEBUG
+//  std::cerr << "Forcing debug view\n";
+//  v->action("b2 debug draw")->trigger();
+//  v->action("Stats")->trigger();
+//#endif
+
+
   if (!background.empty()) {
     auto p = a.palette();
     QColor c = QColor(QString::fromStdString(background));
@@ -305,105 +317,103 @@ int main(int argc, char *argv[]) {
   // ===========================================================================
   // Batch snapshot mode
 
-//    stdfs::path savefolder = cGenomeArg;
-//    savefolder = savefolder.replace_extension()
-//                / simu::IndEvaluator::specToString(scenario.specs(), lesions)
-//                / "screenshots";
-//    stdfs::create_directories(savefolder);
+    stdfs::path savefolder = lhsTeamArg;
+    savefolder = stdfs::path(outputFolder) / params.kombatName / "screenshots";
+    stdfs::create_directories(savefolder);
 
-//    config::Visualisation::brainDeadSelection.overrideWith(BrainDead::UNSET);
-////    config::Visualisation::drawVision.overrideWith(2);
-//    config::Visualisation::drawAudition.overrideWith(0);
+    config::Visualisation::brainDeadSelection.overrideWith(BrainDead::UNSET);
+//    config::Visualisation::drawVision.overrideWith(2);
+    config::Visualisation::drawAudition.overrideWith(0);
 
-////    config::Visualisation::printConfig(std::cout);
+//    config::Visualisation::printConfig(std::cout);
 
-//    if (snapshotViews.empty())  snapshotViews = validSnapshotViews;
+    if (snapshotViews.empty())  snapshotViews = validSnapshotViews;
 
-//    // Build list of views requested for rendering
-//    std::map<std::string, QWidget*> views;
-//    std::unique_ptr<phenotype::ModularANN> mann;
-//    for (const std::string &v_name: snapshotViews) {
-//      QWidget *view = nullptr;
-//      if (v_name == "simu") {
-//        view = v;
-//        v->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-//        v->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    // Build list of views requested for rendering
+    std::map<std::string, QWidget*> views;
+    std::unique_ptr<phenotype::ModularANN> mann;
+    for (const std::string &v_name: snapshotViews) {
+      QWidget *view = nullptr;
+      if (v_name == "simu") {
+        view = v;
+        v->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        v->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
-//        QRectF b = simulation.bounds();
-//        view->setFixedSize(snapshots, snapshots * b.height() / b.width());
+        QRectF b = simulation.bounds();
+        view->setFixedSize(snapshots, snapshots * b.height() / b.width());
 
-//      } else if (v_name == "ann") {
-//        view = cs->brainPanel()->annViewerWidget;
-//        view->setMinimumSize(snapshots, snapshots);
+      }/* else if (v_name == "ann") {
+        view = cs->brainPanel()->annViewerWidget;
+        view->setMinimumSize(snapshots, snapshots);
 
-//      } else if (v_name == "io") {
-//        view = cs->brainIO();
-//        view->setMaximumWidth(snapshots);
+      } else if (v_name == "io") {
+        view = cs->brainIO();
+        view->setMaximumWidth(snapshots);
 
-//      } else if (v_name == "mann" && !annNeuralTags.empty()
-//               && annAggregateNeurons) {
-//        phenotype::ANN &ann = scenario.subject()->brain();
-//        simu::IndEvaluator::applyNeuralFlags(ann, annNeuralTags);
+      } else if (v_name == "mann" && !annNeuralTags.empty()
+               && annAggregateNeurons) {
+        phenotype::ANN &ann = scenario.subject()->brain();
+        simu::IndEvaluator::applyNeuralFlags(ann, annNeuralTags);
 
-//        ANNViewer *av = cs->brainPanel()->annViewer;
-//        av->updateCustomColors();
+        ANNViewer *av = cs->brainPanel()->annViewer;
+        av->updateCustomColors();
 
-//        // Also aggregate similar inputs
-//        for (auto &p: ann.neurons()) {
-//          phenotype::Point pos = p->pos;
-//          phenotype::ANN::Neuron &n = *p;
-//          if (n.type == phenotype::ANN::Neuron::I)
-//            n.flags = (pos.x() < 0)<<1 | (pos.y() < -.75)<<2 | 1<<3;
-//        }
+        // Also aggregate similar inputs
+        for (auto &p: ann.neurons()) {
+          phenotype::Point pos = p->pos;
+          phenotype::ANN::Neuron &n = *p;
+          if (n.type == phenotype::ANN::Neuron::I)
+            n.flags = (pos.x() < 0)<<1 | (pos.y() < -.75)<<2 | 1<<3;
+        }
 
-//        mann.reset(new phenotype::ModularANN(ann));
-//        auto mav = new ANNViewer;
-//        mav->setGraph(*mann);
-//        mav->updateCustomColors();
-//        mav->startAnimation();
+        mann.reset(new phenotype::ModularANN(ann));
+        auto mav = new ANNViewer;
+        mav->setGraph(*mann);
+        mav->updateCustomColors();
+        mav->startAnimation();
 
-//        view = mav;
-//        view->setMinimumSize(snapshots, snapshots);
-//      }
+        view = mav;
+        view->setMinimumSize(snapshots, snapshots);
+      }*/
 
-//      if (view) views[v_name] = view;
-//    }
+      if (view) views[v_name] = view;
+    }
 
-//    // On each step, render all views
-//    const auto generate =
-//      [v, &simulation, &savefolder, &views, &mann, snapshots] {
-//      v->focusOnSelection();
-//      v->characterSheet()->readCurrentStatus();
+    // On each step, render all views
+    const auto generate =
+      [v, &simulation, &savefolder, &views, &mann, snapshots] {
+      v->focusOnSelection();
+      v->characterSheet()->readCurrentStatus();
 
-//      for (const auto &p: views) {
+      for (const auto &p: views) {
 //        if (p.first == "mann") {
 //          mann->update();
 //          static_cast<ANNViewer*>(p.second)->updateAnimation();
 //        }
 
-//        std::ostringstream oss;
-//        oss << savefolder.string() << "/" << std::setfill('0') << std::setw(5)
-//            << simulation.currTime().timestamp() << "_" << p.first << ".png";
-//        auto savepath = oss.str();
-//        auto qsavepath = QString::fromStdString(savepath);
+        std::ostringstream oss;
+        oss << savefolder.string() << "/" << std::setfill('0') << std::setw(5)
+            << simulation.currTime().timestamp() << "_" << p.first << ".png";
+        auto savepath = oss.str();
+        auto qsavepath = QString::fromStdString(savepath);
 
-//        std::cout << "Saving to " << savepath << ": ";
-//        if (p.second->grab().save(qsavepath))
-//          std::cout << "OK     \r";
-//        else {
-//          std::cout << "FAILED !";
-//          exit (1);
-//        }
-//      }
-//    };
+        std::cout << "Saving to " << savepath << ": ";
+        if (p.second->grab().save(qsavepath))
+          std::cout << "OK     \r";
+        else {
+          std::cout << "FAILED !";
+          exit (1);
+        }
+      }
+    };
 
-//    generate();
-//    while (!simulation.finished()) {
-//      simulation.step();
-//      generate();
-//    }
+    generate();
+    while (!simulation.finished()) {
+      simulation.step();
+      generate();
+    }
 
-//    r = 0;
+    r = 0;
     std::cerr << "Batch snapshot mode incompatible with 3D ANN Viewer\n";
 
   } else if (trace > 0) {

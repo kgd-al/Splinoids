@@ -66,9 +66,9 @@ fi
 
 output=$(dirname $lhs)/$(basename $lhs .dna)
 
-# set -x
 build=release
 [ ! -z ${BUILD+x} ] && build=$BUILD
+[ ! -z ${CMD+x} ] && set -x
 if [ -z "$gui" ]
 then
   ./build/$build/mk-evaluator --config $config --data-folder $output \

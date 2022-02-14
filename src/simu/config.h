@@ -106,6 +106,7 @@ struct CONFIG_FILE(Simulation) {
   DECLARE_PARAMETER(float, visionWidthToLength)
   DECLARE_PARAMETER(decimal, healthToEnergyRatio)
   DECLARE_PARAMETER(float, critterBaseSpeed)
+  DECLARE_PARAMETER(float, critterArmSpeed)
   DECLARE_PARAMETER(float, combatBaselineIntensity)
   DECLARE_PARAMETER(float, combatMinVelocity)
   DECLARE_PARAMETER(float, auditionRange)     // With respect to body size
@@ -116,6 +117,7 @@ struct CONFIG_FILE(Simulation) {
   DECLARE_PARAMETER(float, baselineAgingSpeed)
   DECLARE_PARAMETER(decimal, baselineEnergyConsumption)
   DECLARE_PARAMETER(decimal, motorEnergyConsumption)
+  DECLARE_PARAMETER(decimal, armEnergyConsumption)
   DECLARE_PARAMETER(decimal, neuronEnergyConsumption)   // Per neuron
   DECLARE_PARAMETER(decimal, axonEnergyConsumption)     // For 1 meter
   DECLARE_PARAMETER(decimal, baselineRegenerationRate)  // Portion of energy

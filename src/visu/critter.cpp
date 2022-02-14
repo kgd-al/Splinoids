@@ -95,7 +95,7 @@ b2AABB Critter::computeb2ABBB (void) const {
   b2AABB aabb;
   aabb.lowerBound.Set( FLT_MAX,  FLT_MAX);
   aabb.upperBound.Set(-FLT_MAX, -FLT_MAX);
-  const b2Fixture *f = _critter.fixturesList();
+  const b2Fixture *f = _critter.body().GetFixtureList();
   while (f) {
     if (!f->IsSensor()) {
       const b2Shape *s = f->GetShape();
@@ -133,8 +133,18 @@ void Critter::updateShape (void) {
             -qRadiansToDegrees(s.al0-s.ar0));
     p.closeSubpath();
     p.setFillRule(Qt::WindingFill);
-    abr = abr.united(p.boundingRect());
+
+    if (!simu::Critter::isStaticSpline(i))
+      p.translate(-toQt(s.p0));
+
+    if (simu::Critter::isStaticSpline(i))
+      abr = abr.united(p.boundingRect());
   }
+
+  float arms_radius = _critter.bodyRadius()
+      + (splines[0].p1 - splines[0].p0).Length()
+      + (splines[1].p1 - splines[1].p0).Length();
+  QRectF armsbr (-arms_radius, -arms_radius, 2*arms_radius, 2*arms_radius);
 
   updateVision();
 
@@ -150,7 +160,7 @@ void Critter::updateShape (void) {
     }
   }
   _b2polygons.clear();  uint fixtures = 0;
-  const b2Fixture *f = _critter.fixturesList();
+  const b2Fixture *f = _critter.body().GetFixtureList();
   while (f) {
     const b2Shape *s = f->GetShape();
     b2Shape::Type t = s->GetType();
@@ -169,6 +179,7 @@ void Critter::updateShape (void) {
                         abr.width(), abr.height());
 
   _minimalBoundingRect = _body.boundingRect().united(b2br)
+                                             .united(armsbr)
                                              .united(abr).united(abr_f);
 
   _critterBoundingRect = squarify(_minimalBoundingRect);
@@ -278,6 +289,7 @@ QColor Critter::splineColor(uint i, Side s) const {
 
 bool Critter::shouldDrawSpline(uint i, Side s) const {
   if (_critter.destroyedSpline(i, s)) return false;
+  if (!simu::Critter::isStaticSpline(i)) return false;
   switch (config::Visualisation::renderType()) {
   case RenderingType::REGULAR:  return true;
   case RenderingType::ENERGY:   return false;
@@ -365,12 +377,30 @@ void Critter::doPaint (QPainter *painter) const {
                   p->drawPath(_artifacts[i]);
               });
 
-          if (config::Visualisation::opaqueBodies())
+          if (config::Visualisation::opaqueBodies()) {
             for (uint i=0; i<SPLINES_COUNT; i++)
               doSymmetrical(painter, [this, i] (QPainter *p, Side s) {
                 if (shouldDrawSpline(i, s))
                     p->fillPath(_artifacts[i], splineColor(i, s));
               });
+
+            const auto &arms = _critter.arms();
+            for (uint i=0; i<2; i++) {
+              for (Side s: {Critter::Side::LEFT, Critter::Side::RIGHT}) {
+                b2Body *a = arms[i+uint(s)*2];
+                if (!a) continue;
+
+                auto offset = toQt(a->GetPosition()) - pos();
+                painter->save();
+                  painter->rotate(-qRadiansToDegrees(_critter.rotation()));
+                  painter->translate(offset);
+                  painter->rotate(qRadiansToDegrees(a->GetAngle()));
+                  if (s == Critter::Side::RIGHT) painter->scale(1, -1);
+                  painter->fillPath(_artifacts[i], splineColor(i, s));
+                painter->restore();
+              }
+            }
+          }
 
           if (config::Visualisation::drawInnerEdges())
             doSymmetrical(painter, [this] (QPainter *p, Side s) {
@@ -429,14 +459,14 @@ void Critter::doPaint (QPainter *painter) const {
       painter->restore();
     }
 
-//    float e = _critter.sizeRatio();
-//    pen.setColor(sexColors.value(_critter.sex()));
-//    pen.setStyle(Qt::SolidLine);
-//    pen.setJoinStyle(Qt::RoundJoin);
-//    pen.setWidthF(.05 * e);
-//    painter->setPen(pen);
-//    painter->drawPolyline(
-//      QPolygonF({ QPointF(0., -.1*e), QPointF(.1*e, 0.), QPointF(0.,  .1*e) }));
+    float e = _critter.sizeRatio();
+    pen.setColor(Qt::black);//sexColors.value(_critter.sex()));
+    pen.setStyle(Qt::SolidLine);
+    pen.setJoinStyle(Qt::RoundJoin);
+    pen.setWidthF(.05 * e);
+    painter->setPen(pen);
+    painter->drawPolyline(
+      QPolygonF({ QPointF(0., -.1*e), QPointF(.1*e, 0.), QPointF(0.,  .1*e) }));
   painter->restore();
 
 

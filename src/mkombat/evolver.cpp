@@ -204,6 +204,8 @@ int main(int argc, char *argv[]) {
     ga.setSaveParetoFront(false);
     ga.disableGenerationHistory();
 
+    ga.enablePopulationSave();
+
     ga.setSaveFolderGenerator([p, id, dataFolder] (auto) {
       return dataFolder / p_name(p);
     });
@@ -244,6 +246,7 @@ int main(int argc, char *argv[]) {
     nov.setComputeSignatureDistanceFunction(euclidianDist);
     nov.K = 10;  // size of the neighbourhood to compute novelty.
     //(Novelty = avg dist to the K Nearest Neighbors)
+    nov.saveArchiveEnabled = false;
 
     if (novelty)
       ga.useExtension(nov);  // we have to tell gaga we want to use this extension
@@ -283,7 +286,7 @@ int main(int argc, char *argv[]) {
   auto start = simu::Simulation::now();
   int success = 0;
 
-  for (uint i=0; i<generations; i++) {
+  for (uint i=0; i<generations && !simu::Evaluator::aborted; i++) {
     for (uint p = 0; p < 2; p++) {
       auto &ga = evos[p].ga;
       auto gen = ga.getCurrentGenerationNumber();
@@ -295,6 +298,10 @@ int main(int argc, char *argv[]) {
 
       evos[p].lastChampion = c;
     }
+
+    if (i == generations-1)
+      for (uint p = 0; p < 2; p++)
+        evos[p].nov.saveArchiveEnabled = true;
 
     for (uint p = 0; p < 2; p++)
       evos[p].ga.step();

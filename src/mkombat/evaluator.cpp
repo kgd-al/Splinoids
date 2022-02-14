@@ -27,20 +27,26 @@ void sigint_manager (int) {
 //}
 
 template <typename T>
-void diffStats (const T &prev, const T &curr) {
+bool diffStats (const T &prev, const T &curr) {
+  bool allOk = true;
   for (const auto &p: curr) {
     auto it = prev.find(p.first);
     std::cout << "\t" << std::setw(10) << p.first << ": ";
     if (it != prev.end()) {
-      if (p.second == it->second)
+      bool ok = (p.second == it->second);
+      if (ok)
         std::cout << GAGA_COLOR_GREEN;
       else
         std::cout << GAGA_COLOR_RED << it->second << " >> ";
       std::cout << p.second << GAGA_COLOR_NORMAL;
+      allOk &= ok;
+
     } else
       std::cout << "\t" << GAGA_COLOR_YELLOW << p.second << GAGA_COLOR_NORMAL;
     std::cout << "\n";
   }
+
+  return allOk;
 }
 
 int main(int argc, char *argv[]) {
@@ -147,7 +153,7 @@ int main(int argc, char *argv[]) {
   simu::Evaluator eval;
 //  eval.setLesionTypes(lesions);
 
-  auto params = simu::Evaluator::fromString(lhsTeamArg, rhsArg);
+  auto params = simu::Evaluator::scenarioFromStrings(lhsTeamArg, rhsArg);
 
   eval.logsSavePrefix = stdfs::path(outputFolder) / params.kombatName;
   eval.annTagsFile = annNeuralTags;
@@ -176,12 +182,12 @@ int main(int argc, char *argv[]) {
     std::cout << seconds << "s ";
   std::cout << mseconds << "ms" << std::endl;
 
+  bool ok = true;
   if (!params.neuralEvaluation) {
-    auto rhsId = simu::Evaluator::id(params.rhs);
-    std::cout << prevInfos << " =?= " << rhsId << "\n";
-    if (prevInfos == rhsId) {
+    std::cout << prevInfos << " =?= " << params.rhsId << "\n";
+    if (prevInfos == params.rhsId) {
       std::cout << "Rhs id matching lhs memory. Comparison result for lhs:\n";
-      diffStats(prevFitness, lhsTeam.fitnesses);
+      ok = diffStats(prevFitness, lhsTeam.fitnesses);
 
     } else {
       std::cout << "Result for lhs:\n";
@@ -190,5 +196,5 @@ int main(int argc, char *argv[]) {
   }
 
 //  s.destroy();
-  return 0;
+  return ok ? 0 : 42;
 }

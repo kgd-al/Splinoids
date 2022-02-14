@@ -9,13 +9,11 @@
 #include "config.h"
 
 #include "box2d/b2_body.h"
+#include "box2d/b2_revolute_joint.h"
 
 #include "../enumarray.hpp"
 
 DEFINE_PRETTY_ENUMERATION(Motor, LEFT = 1, RIGHT = -1)
-DEFINE_PRETTY_ENUMERATION(MotorOutput,
-                            FORWARD_LEFT = 0,  FORWARD_RIGHT = 1,
-                            BACKWARD_LEFT = 2, BACKWARD_RIGHT = 3)
 
 namespace simu {
 
@@ -36,6 +34,10 @@ public:
 
   static constexpr auto SPLINES_COUNT = Genome::SPLINES_COUNT;
 
+  static constexpr auto ARMS = 2;
+  static constexpr auto ARTICULATIONS_PER_ARM = 2;
+  static constexpr auto ARTICULATIONS = ARMS * ARTICULATIONS_PER_ARM;
+
   static constexpr uint VOCAL_CHANNELS = 3;
 
   using FixtureType_ut = uint8;
@@ -54,6 +56,8 @@ public:
 
   enum class Side : uint { LEFT = 0, RIGHT = 1 };
   struct FixtureData {
+    b2Body &body; // Somewhat redundant
+
     FixtureType type;
     const Color &color;
 
@@ -62,12 +66,13 @@ public:
     Side sside;  // Side (left if original, right if mirrored)
     uint aindex;  // Index of artifact sub-component (UNUSED)
 
+
 //    P2D centerOfMass; // Must be set after creation // WARNING Brittle
 
-    FixtureData (FixtureType t, const Color &c,
+    FixtureData (b2Body &b, FixtureType t, const Color &c,
                  uint si, Side fs, uint ai);
-    FixtureData (FixtureType t, const Color &c);
-    FixtureData (FixtureType t);
+    FixtureData (b2Body &b, FixtureType t, const Color &c);
+    FixtureData (b2Body &b, FixtureType t);
 
     friend std::ostream& operator<< (std::ostream &os, const FixtureData &fd);
     friend std::ostream& operator<< (std::ostream &os, const Side &s);
@@ -92,13 +97,13 @@ private:
   float _size; // in ]0,1] maturity-dependant
 
   b2Body &_body;
-  b2BodyUserData _objectUserData;
+  b2BodyUserData _bodyUserData;
   std::array<Color, 1+2*SPLINES_COUNT> _currentColors;
 
   struct SplineData {
     // Central spline
-#ifndef NDEBUG
     P2D p0;   // Origin
+#ifndef NDEBUG
     P2D c0;   // First control point
     P2D c1;   // Second control point
 #endif
@@ -155,6 +160,9 @@ private:
   std::map<b2Fixture*, FixtureData> _b2FixturesUserData;
   std::array<decimal, 1+2*SPLINES_COUNT> _masses;
 
+  std::array<b2Body*, ARTICULATIONS> _arms;
+  std::array<b2RevoluteJoint*, ARTICULATIONS> _joints;
+
   // ===========================================================================
   // == Vision cache data ==
   // (each vector of size 2*(2*genotype.vision.precision+1))
@@ -174,7 +182,8 @@ private:
 
   // ===========================================================================
   // == Neural outputs ==
-  std::map<Motor, float> _motors;
+  std::map<Motor, float> _lmotors;
+  std::array<float, ARTICULATIONS> _amotors;
   float _clockSpeed;
   std::array<float, 2> _voice;
   float _reproduction;
@@ -230,11 +239,12 @@ public:
 
   bool brainDead; // TODO for external control
   std::vector<bool> selectiveBrainDead; // deactivate specific neural outputs
-  bool immobile, mute;
+  bool immobile, mute, paralyzed;
 
   uint userIndex;  // To monitor source population
 
   Critter(const Genome &g, b2Body *body, decimal e, float age = 0);
+  ~Critter (void);
 
   void step (Environment &env);
 
@@ -298,6 +308,14 @@ public:
     return _body;
   }
 
+  const auto& arms (void) const {
+    return _arms;
+  }
+
+  auto& arms (void) {
+    return _arms;
+  }
+
   auto sizeRatio (void) const {
     return _size / MAX_SIZE;
   }
@@ -312,10 +330,6 @@ public:
 
   const auto& splinesData (void) const {
     return _splinesData;
-  }
-
-  const auto fixturesList (void) const {
-    return _body.GetFixtureList();
   }
 
   auto mass (void) const {
@@ -398,8 +412,11 @@ public:
   }
 
   static auto clockSpeed (const Genome &g, float v) {
-    assert(0 <= v && v <= 1);
-    return (1-v) * g.minClockSpeed + v * g.maxClockSpeed;
+    assert(-1 <= v && v <= 1);
+    assert(0 < g.minClockSpeed && g.minClockSpeed <= 1);
+    assert(1 <= g.maxClockSpeed && g.maxClockSpeed <= 2);
+    return 1 + v * (v < 0 ? 1 - g.minClockSpeed
+                          : g.maxClockSpeed - 1);
   }
 
   // v in [0;1]
@@ -468,6 +485,8 @@ public:
   static auto isSplineIndex (uint i) {
     return 1 <= i && i < 2*SPLINES_COUNT+1;
   }
+
+  static bool isStaticSpline (uint splineIndex);
 
   const auto& masses (void) const {
     return _masses;
@@ -560,15 +579,20 @@ public:
     return _touch[i] > 0;
   }
 
+  decimal currentHealth (const FixtureData &d) const;
   bool applyHealthDamage(const FixtureData &d, float amount, Environment &env);
-  void destroySpline(uint splineIndex);
+  void destroySpline(uint k);
 
   void updateShape (void);
 
   void setMotorOutput (float i, Motor m);
 
   float motorOutput (Motor m) const {
-    return _motors.at(m);
+    return _lmotors.at(m);
+  }
+
+  float armJointOutput (uint i) const {
+    return _amotors[i];
   }
 
   const auto& neuralOutputs (void) const {
@@ -749,6 +773,7 @@ private:
   // == Iteration substeps
 
   void drivingCorrections (void);
+  void articulationsManagement (void);
   void performVision (const Environment &env);
   void neuralStep (void);
   void energyConsumption (Environment &env);
@@ -774,6 +799,8 @@ private:
   b2Fixture* addReproFixture (void);
   b2Fixture* addFixture (const b2FixtureDef &def,
                          const FixtureData &data);
+
+  b2Body* arm (uint splineIndex, Side side);
 
   void delFixture (b2Fixture *f);
 

@@ -50,8 +50,7 @@ genotype::Environment Scenario::environmentGenome (uint tSize) {
   e.taurus = 0;
 
   if (tSize == 1) {
-    e.width = 20;
-    e.height = 8;
+    e.width = e.height = 5;
 
   } else
     utils::doThrow<std::logic_error>("Non atomic teams not implemented!");
@@ -79,7 +78,7 @@ void Scenario::init(Team &lhs, const Params &params) {
 
   _flags = params.flags;
   _currentFlags.reset();
-  std::cerr << "Using flags: " << _flags << "\n";
+  if (_flags.any()) std::cerr << "Using flags: " << _flags << "\n";
 
   _simulation.init(environmentGenome(_teamsSize), {}, commonInitData);
 
@@ -112,7 +111,7 @@ void Scenario::init(Team &lhs, const Params &params) {
       for (uint i=0; i<_teamsSize; i++)
         _teams[t].insert(
           _simulation.addCritter(team.members[i],
-                                 8*(2*t-1), 0, t*M_PI, E, .5, true));
+                                 1*R*(2*t-1), 0, t*M_PI, E, .5, true));
     }
 
   assert(_simulation.critters().size()
@@ -124,6 +123,27 @@ void Scenario::init(Team &lhs, const Params &params) {
       assert(r.second);
       (void)r;
     }
+  }
+
+  for (auto &a: _autopsies) a.fill(0);
+
+//  std::cerr << "Pinning subjects in place\n";
+  if (false) {
+    std::cerr << "Pinning subjects in place (by deactivating neural outputs)\n";
+    for (auto &team: _teams)
+      for (Critter *c: team)
+        c->immobile = true;
+
+  } else if (false) {
+    std::cerr << "Pinning rhs team in place (by deactivating neural outputs)\n";
+    for (Critter *c: _teams[1])
+        c->immobile = true;
+
+  } else if (false) {  // impolite pinning
+    std::cerr << "Pinning subjects in place (by settings mass to 0)\n";
+    for (auto &team: _teams)
+      for (Critter *c: team)
+        c->body().SetType(b2_staticBody);
   }
 }
 
@@ -174,14 +194,14 @@ void Scenario::postStep(void) {
 //    if (_flags[0])  // Instantaneous pain
 //      subject->
 
-    if (_flags[1]) {  // Absolute pain
+    if (_flags[Params::PAIN_ABSOLUTE]) {  // Absolute pain
       sbj->overrideBodyHealthness(.5 + (step % 2 == 0) * .5);
-      _currentFlags.flip(Params::ABSOLUTE);
+      _currentFlags.flip(Params::PAIN_ABSOLUTE);
     }
 
 //    if (_flags[2])  // Injured opponent
 
-    if (step >= 6) _simulation._finished = true;
+    if (_flags != Params::TEST && step >= 6) _simulation._finished = true;
 
     return;
   }
@@ -200,9 +220,24 @@ void Scenario::postStep(void) {
 }
 
 void Scenario::preDelCritter(Critter *c) {
-  std::cerr << CID(c) << " is dead\n";
-  for (auto &team: _teams)
-    team.erase(c);
+//  std::cerr << CID(c) << " is dead\n";
+  static const auto autopsy = [] (const Critter *c) {
+    if (c->starved())
+      return DeathCause::STARVATION;
+    else if (c->fatallyInjured())
+      return DeathCause::INJURY;
+    else
+      return UNKNOWN_DEATH_CAUSE;
+  };
+
+  for (uint i=0; i<_teams.size(); i++) {
+    auto &team = _teams[i];
+    auto it = team.find(c);
+    if (it != team.end()) {
+      _autopsies[i][autopsy(c)]++;
+      team.erase(it);
+    }
+  }
 }
 
 float Scenario::score (void) const {

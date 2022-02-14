@@ -85,6 +85,7 @@ private:
   QMap<QString, QLabel*> _dataWidgets;
   ColorLabels *_rLabels, *_eLabels, *_sLabels, *_tLabels, *_hLabels;
   std::array<LabeledSlider*, 3> _mSliders;
+  std::array<LabeledSlider*, simu::Critter::ARTICULATIONS> _aSliders;
   std::array<QLabel*, 2> _cLabels;
 
   QHBoxLayout *_contentsLayout;

@@ -12,26 +12,26 @@ static constexpr int debugMetabolism = 0;
 static constexpr int debugRegen = 0;
 static constexpr int debugGrowth = 0;
 static constexpr int debugReproduction = 0;
+static constexpr int debugShowNeurons = 0;
 
-static const auto& audioUserData (void) {
-  static const Critter::FixtureData data (Critter::FixtureType::AUDITION);
-  return data;
+auto audioUserData (b2Body &b) {
+  return Critter::FixtureData (b, Critter::FixtureType::AUDITION);
 }
 
-static const auto& reproUserData (void) {
-  static const Critter::FixtureData data (Critter::FixtureType::REPRODUCTION);
-  return data;
+auto reproUserData (b2Body &b) {
+  return Critter::FixtureData (b, Critter::FixtureType::REPRODUCTION);
 }
 
-Critter::FixtureData::FixtureData (FixtureType t, const Color &c,
+Critter::FixtureData::FixtureData (b2Body &b, FixtureType t, const Color &c,
                                    uint si, Side fs, uint ai)
-  : type(t), color(c), sindex(si), sside(fs), aindex(ai)/*, centerOfMass(P2D())*/ {}
+  : body(b), type(t), color(c), sindex(si), sside(fs), aindex(ai)
+  /*, centerOfMass(P2D())*/ {}
 
-Critter::FixtureData::FixtureData (FixtureType t, const Color &c)
-  : FixtureData(t, c, -1, Side(-1), -1) {}
+Critter::FixtureData::FixtureData (b2Body &b, FixtureType t, const Color &c)
+  : FixtureData(b, t, c, -1, Side(-1), -1) {}
 
-Critter::FixtureData::FixtureData (FixtureType t)
-  : FixtureData(t, config::Simulation::obstacleColor(), -1, Side(-1), -1) {}
+Critter::FixtureData::FixtureData (b2Body &b, FixtureType t)
+  : FixtureData(b, t, config::Simulation::obstacleColor(), -1, Side(-1), -1) {}
 
 std::ostream& operator<< (std::ostream &os, const Critter::Side &s) {
   return os << (s == Critter::Side::LEFT ? "L" : "R");
@@ -126,13 +126,15 @@ P2D pointAt (int t, const P2D &p0, const P2D &c0, const P2D &c1, const P2D &p1){
 // == Top-level methods
 
 Critter::Critter (const Genome &g, b2Body *b) : _genotype(g), _body(*b) {
-  _objectUserData.type = BodyType::CRITTER;
-  _objectUserData.ptr.critter = this;
-  _body.SetUserData(&_objectUserData);
+  _bodyUserData.type = BodyType::CRITTER;
+  _bodyUserData.ptr.critter = this;
+  _body.SetUserData(&_bodyUserData);
+
+  _arms.fill(nullptr);
+  _joints.fill(nullptr);
 
   brainDead = false;
-  immobile = false;
-  mute = false;
+  immobile = mute = paralyzed = false;
 }
 
 Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
@@ -172,7 +174,8 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
 
   updateShape();  
 
-  _motors = { { Motor::LEFT, 0 }, { Motor::RIGHT, 0 } };
+  _lmotors = { { Motor::LEFT, 0 }, { Motor::RIGHT, 0 } };
+  _amotors.fill(0);
   clockSpeed(.5); assert(0 <= _clockSpeed && _clockSpeed < 10);
   _reproduction = 0;
 
@@ -235,6 +238,13 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
   _feedingSources.fill(0);
 
   userIndex = 0;
+}
+
+Critter::~Critter (void) {
+  b2World *world = _body.GetWorld();
+  for (b2Joint *j: _joints)  if (j) world->DestroyJoint(j);
+  for (b2Body *b: _arms) if (b) world->DestroyBody(b);
+  world->DestroyBody(&_body);
 }
 
 void Critter::buildBrain(void) {
@@ -300,7 +310,7 @@ void Critter::buildBrain(void) {
       add(inputs, i*.5f, -.75f + .25f * j / (VOCAL_CHANNELS+1));
 #elif ESHN_SUBSTRATE_DIMENSION == 3
       // z in [-1,-1/3]
-      add(inputs, i*.5f, -1.f, -1.f + 2.f * j / float(VOCAL_CHANNELS * 3.f));
+      add(inputs, i, -1.f, -1.f + 2.f * j / float(VOCAL_CHANNELS * 3.f));
 #endif
     }
   }
@@ -330,17 +340,15 @@ void Critter::buildBrain(void) {
   add(outputs,  .0f,  .9f); //                frequency
 #elif ESHN_SUBSTRATE_DIMENSION == 3
 
-  std::array<Point, EnumUtils<MotorOutput>::size()> mcoords;
-  mcoords[uint(MotorOutput::FORWARD_LEFT)] =   { -.5f, 1.f,  .25f};
-  mcoords[uint(MotorOutput::FORWARD_RIGHT)] =  { +.5f, 1.f,  .25f};
-  mcoords[uint(MotorOutput::BACKWARD_LEFT)] =  { -.5f, 1.f, -.25f};
-  mcoords[uint(MotorOutput::BACKWARD_RIGHT)] = { +.5f, 1.f, -.25f};
-  for (const Point &p: mcoords) add(outputs, p);
+  for (float x: {-.5f, .5f}) add(outputs, x, 1.f, 0.f);
 
   add(outputs,  .0f, 1.f, -1.f);  // clock speed
 
   add(outputs,  .0f, 1.f,  1.f);  // vocalisation:  volume
   add(outputs,  .0f, 1.f,   .5f); //                frequency
+
+  for (uint i=0; i<_arms.size(); i++)
+    add(outputs, -1+2*i/float(_arms.size()-1), 1.f, -.5f);
 #endif
 
 /// TODO Integrate remaining actions
@@ -356,6 +364,9 @@ void Critter::buildBrain(void) {
 void Critter::step(Environment &env) {
   // Driving improvement
   drivingCorrections();
+
+  // Monitor articulations
+  articulationsManagement();
 
   // Launch a bunch of rays
   performVision(env);
@@ -407,13 +418,41 @@ void Critter::drivingCorrections(void) {
   _body.ApplyLinearImpulseToCenter(zeroImpulse, true);
 }
 
+void Critter::articulationsManagement(void) {
+//  static const auto &inv_dt = config::Simulation::ticksPerSecond();
+  static constexpr auto distanceThreshold = std::pow(.1, 2);
+//  std::cerr << "Critter " << CID(this) << " articulations:\n";
+  for (Side s: {Side::LEFT, Side::RIGHT}) {
+    for (int i=ARTICULATIONS_PER_ARM-1; i>=0; i--) {
+      auto ix = i + uint(s)*ARTICULATIONS_PER_ARM;
+      auto j = _joints[ix];
+      if (!j) continue;
+
+//      auto Nsq = j->GetReactionForce(inv_dt).LengthSquared();
+      auto Dsq = (j->GetAnchorA() - _arms[ix]->GetPosition()).LengthSquared();
+//      std::cerr << "\tJoint " << s << i << " exerting force of "
+//                << Nsq
+//                << "\t" << Dsq << " <? " << distanceThreshold
+//                << "\n";
+
+      //      if (Nsq >= 1)
+      //        destroySpline(splineIndex(i, s));
+      if (Dsq >= distanceThreshold)
+        destroySpline(splineIndex(i, s));
+    }
+  }
+}
+
 void Critter::performVision(const Environment &env) {
   struct CritterVisionCallback : public b2RayCastCallback {
     float closestFraction;
     b2Fixture *closestContact;
-    b2Body *self;
+    b2Body *body;
+    Critter *self;
 
-    CritterVisionCallback (b2Body *self) : self(self) {
+    CritterVisionCallback (b2Body *body)
+      : body(body), self(get(body)->ptr.critter) {
+      assert(body);
       assert(self);
       reset();
     }
@@ -429,8 +468,14 @@ void Critter::performVision(const Environment &env) {
   //              << " of type " << fixture->GetBody()->GetType()
   //              << std::endl;
 
-      if (self == fixture->GetBody()) return -1;
       if (fixture->IsSensor())  return -1;
+
+      const b2Body *thatBody = fixture->GetBody();
+      if (body == thatBody) return -1;
+
+      const b2BodyUserData *thatData = get(thatBody);
+      if (thatData->type == BodyType::CRITTER && self == thatData->ptr.critter)
+        return -1;
 
       closestContact = fixture;
       closestFraction = fraction;
@@ -503,14 +548,12 @@ void Critter::neuralStep(void) {
 
     // Collect outputs
 #ifndef NDEBUG
-    for (auto &v: _neuralOutputs)  assert(0 <= v && v <= 1);
+    for (auto &v: _neuralOutputs)  assert(-1 <= v && v <= 1);
 #endif
     if (!selectiveBrainDead[0])
-      _motors[Motor::LEFT] = _neuralOutputs[uint(MotorOutput::FORWARD_LEFT)]
-                           - _neuralOutputs[uint(MotorOutput::BACKWARD_LEFT)];
+      _lmotors[Motor::LEFT] = _neuralOutputs[0];
     if (!selectiveBrainDead[1])
-      _motors[Motor::RIGHT] = _neuralOutputs[uint(MotorOutput::FORWARD_RIGHT)]
-                            - _neuralOutputs[uint(MotorOutput::BACKWARD_RIGHT)];
+      _lmotors[Motor::RIGHT] = _neuralOutputs[1];
 
     if (!selectiveBrainDead[2])
       _clockSpeed = clockSpeed(_neuralOutputs[2]);
@@ -518,12 +561,49 @@ void Critter::neuralStep(void) {
     if (!selectiveBrainDead[3]) _voice[0] = _neuralOutputs[3];
     if (!selectiveBrainDead[4]) _voice[1] = _neuralOutputs[4];
 
+    for (uint i=5; i<9; i++)
+      if (!selectiveBrainDead[i])
+        _amotors[i-5] = _neuralOutputs[i];
+
 //    _reproduction = _neuralOutputs[?];
+
+    if (debugShowNeurons) {
+      std::cerr << std::setprecision(20);
+      std::cerr << CID(this) << "@" << _age << " " << pos() << "\n";
+
+      const auto inames = [this] {
+        std::vector<std::string> v;
+        v.push_back("h");
+        v.push_back("p");
+        for (const auto &_: _retina) {
+          static const std::string c = "rgb";
+          for (uint i=0; i<c.size(); i++)
+            v.push_back("r" + c.substr(i, 1));
+        }
+        for (const auto &_: _ears) v.push_back("e");
+        for (const auto &_: _touch) v.push_back("t");
+        return v;
+      }();
+      std::cerr << "\tinputs:\n";
+      for (uint i=0; i<inputs.size(); i++)
+        std::cerr << "\t\t" << inames[i] << "\t" << inputs[i] << "\n";
+      std::cerr << "\toutputs:\n";
+      for (auto v: _neuralOutputs) std::cerr << "\t\t" << v << "\n";
+      std::cerr << "\n\n";
+    }
   }
+
+  // Forced motion for calibration
+  /// TODO REMOVE
+//  if (id() == ID(1)) {
+//    _motors[Motor::LEFT] = _motors[Motor::RIGHT] = .25;
+//  }
+//  using utils::operator <<;
+//  std::cerr << "Overridden motors.\n";
 
   // Apply requested motor output
   if (!immobile) {
-    for (auto &m: _motors) {
+    for (auto &m: _lmotors) {
       float s = config::Simulation::critterBaseSpeed()
           * m.second * _clockSpeed * _efficiency * _size;
       P2D f = _body.GetWorldVector({s,0}),
@@ -542,11 +622,76 @@ void Critter::neuralStep(void) {
   // Emit sounds (requested and otherwise)
   if (!mute) {
     _sounds.fill(0);
-    uint vi =
-        _voice[1] == 1 ? VOCAL_CHANNELS - 1 : VOCAL_CHANNELS * _voice[1];
+    uint vi = std::min(VOCAL_CHANNELS - 1,
+                       uint(VOCAL_CHANNELS * .5f * (_voice[1]+1)));
+    assert(vi < VOCAL_CHANNELS);
     _sounds[0] = std::min(1.f, _body.GetLinearVelocity().Length());
-    _sounds[1+vi] = _voice[0];
+    _sounds[1+vi] = std::max(0.f, _voice[0]);
     assert(0 <= _sounds[1+vi] && _sounds[1+vi] <= 1);
+  }
+
+  // Test patterns for articulations
+  /// TODO REMOVE
+//  if (true)
+//    _amotors.fill(1);
+
+//  else if (id() == ID(1)) {
+//    if (false) {
+//      const auto f = [this] (double (*f) (double), auto x) -> float {
+//        return f(-50 * (x+uint(id())) * 2 * M_PI);
+//      };
+//      _amotors = {
+//        f(cos, _age), f(sin, _age),
+//        f(cos, _age+.5), f(sin, _age+.5)
+//      };
+//    } else
+//      for (uint i=0; i<ARTICULATIONS; i++)
+//        _amotors[i] = (i%2==0?1:-1)*cos(1250*(_age -.5f));
+
+//  } else
+//    _amotors.fill(0);
+//  using utils::operator <<;
+//  std::cerr << "Overridden articulations: " << _amotors << ". Age = "
+//            << _age << "\n";
+
+  // Activate/Lock joints
+  if (!paralyzed) {
+//    static const auto &CAS = config::Simulation::critterArmSpeed();
+    static const auto CAS = .5;
+    if (debugMotors)  std::cerr << CID(this) << " Articulations:\n";
+
+    for (uint i=0; i<_amotors.size(); i++) {
+      b2RevoluteJoint *j = _joints[i];
+      if (!j) continue;
+      float v = _amotors[i];
+//      bool lock = (v == 0);
+      int side = (i < ARTICULATIONS_PER_ARM) ? -1 : 1;
+
+//      if (lock && !j->IsLimitEnabled()) {
+//        float a = j->GetJointAngle();
+//        j->SetLimits(a, a);
+//        j->EnableLimit(true);
+//        j->EnableMotor(false);
+
+//        if (debugMotors)  std::cerr << "\t" << i << " locking\n";
+
+//       } else if (!lock && j->IsLimitEnabled()) {
+//        j->EnableLimit(false);
+//        j->EnableMotor(true);
+
+//        if (debugMotors)  std::cerr << "\t" << i << " unlocking\n";
+//      }
+
+//      if (!lock) {
+      if (v != 0) v *= CAS * side * _clockSpeed * _efficiency * 2*M_PI;
+      j->SetMotorSpeed(v);
+      if (debugMotors)
+        std::cerr << "\t" << i << " speed = " << CAS*v*side*2*M_PI
+                  << " = " << CAS << " * " << v << " * " << side
+                  << " * " << 2*M_PI << "\n";
+
+//      }
+    }
   }
 
 #undef DEBUG
@@ -554,6 +699,7 @@ void Critter::neuralStep(void) {
 
 void Critter::energyConsumption (Environment &env) {
   static const auto &M = config::Simulation::motorEnergyConsumption();
+  static const auto &J = config::Simulation::armEnergyConsumption();
   static const auto &N = config::Simulation::neuronEnergyConsumption();
   static const auto &A = config::Simulation::axonEnergyConsumption();
 
@@ -561,20 +707,27 @@ void Critter::energyConsumption (Environment &env) {
   decimal de = 0;
 
   de += baselineEnergyConsumption(_size, _clockSpeed);
-  de += M * (std::fabs(_motors[Motor::LEFT]) + std::fabs(_motors[Motor::RIGHT]))
+  de += M * (std::fabs(_lmotors[Motor::LEFT]) + std::fabs(_lmotors[Motor::RIGHT]))
         * _clockSpeed * _size;
+  de += std::accumulate(_amotors.begin(), _amotors.end(), 0,
+                        [] (float a, float b) { return a + fabs(b); }) * J;
   de += _brain.neurons().size() * N + _brain.stats().axons * A;
 
-  if (debugMetabolism)
+  if (debugMetabolism) {
     std::cerr << CID(this) << " de = " << de
               << "\n\t = " << baselineEnergyConsumption(_size, _clockSpeed)
               << "\n\t + " << M
-                << " * (" << std::fabs(_motors[Motor::LEFT])
-                << " + " << std::fabs(_motors[Motor::RIGHT]) << ") * "
+                << " * (" << std::fabs(_lmotors[Motor::LEFT])
+                << " + " << std::fabs(_lmotors[Motor::RIGHT]) << ") * "
                 << _clockSpeed << " * " << _size
+                << "\n\t + (" << fabs(_amotors[0]);
+    for (uint i=1; i < ARTICULATIONS; i++)
+      std::cerr << " + " << fabs(_amotors[i]);
+    std::cerr << ") * " << J
               << "\n\t + " << _brain.neurons().size() * N
               << "\n\t + " << _brain.stats().axons * A
               << std::endl;
+  }
 
   de *= dt;
 
@@ -789,7 +942,7 @@ void Critter::generateSplinesData (float r, float e, const Genome &g,
     w *= dimorphism(i, g);
 #endif
 
-    P2D p0 = fromPolar(d[S::SA], r); SET(sd.p0, p0)
+    sd.p0 = fromPolar(d[S::SA], r);
 
     sd.al0 = d[S::SA] + W0_RANGE * d[S::W0];
     sd.pl0 = fromPolar(sd.al0, r);
@@ -801,22 +954,22 @@ void Critter::generateSplinesData (float r, float e, const Genome &g,
     sd.p1 = fromPolar(d[S::SA] + d[S::EA], r + w * d[S::EL]);
 //    sd.p1 = p0 + fromPolar(d[S::EA], w * d[S::EL]);
 
-    P2D v = sd.p1 - p0;
+    P2D v = sd.p1 - sd.p0;
     P2D t (-v.y, v.x);
 
     P2D pc0, pc1;
-    pc0 = p0 + d[S::DX0] * v;  SET(sd.pc0, pc0)
-    pc1 = p0 + d[S::DX1] * v;  SET(sd.pc1, pc1)
+    pc0 = sd.p0 + d[S::DX0] * v;  SET(sd.pc0, pc0)
+    pc1 = sd.p0 + d[S::DX1] * v;  SET(sd.pc1, pc1)
 
     P2D c0, c1;
-    c0 = p0 + d[S::DX0] * v + d[S::DY0] * t; SET(sd.c0, c0)
-    c1 = p0 + d[S::DX1] * v + d[S::DY1] * t; SET(sd.c1, c1)
+    c0 = sd.p0 + d[S::DX0] * v + d[S::DY0] * t; SET(sd.c0, c0)
+    c1 = sd.p0 + d[S::DX1] * v + d[S::DY1] * t; SET(sd.c1, c1)
 
-    sd.cl0 = p0 + d[S::DX0] * v + d[S::DY0] * w * t * (1+d[S::W1]);
-    sd.cl1 = p0 + d[S::DX1] * v + d[S::DY1] * w * t * (1+d[S::W2]);
+    sd.cl0 = sd.p0 + d[S::DX0] * v + d[S::DY0] * w * t * (1+d[S::W1]);
+    sd.cl1 = sd.p0 + d[S::DX1] * v + d[S::DY1] * w * t * (1+d[S::W2]);
 
-    sd.cr0 = p0 + d[S::DX0] * v - d[S::DY0] * w * t * (1+d[S::W1]);
-    sd.cr1 = p0 + d[S::DX1] * v - d[S::DY1] * w * t * (1+d[S::W2]);
+    sd.cr0 = sd.p0 + d[S::DX0] * v - d[S::DY0] * w * t * (1+d[S::W1]);
+    sd.cr1 = sd.p0 + d[S::DX1] * v - d[S::DY1] * w * t * (1+d[S::W2]);
   }
 }
 
@@ -888,7 +1041,8 @@ bool box2dValidPolygon(const b2Vec2* vertices, int32 count) {
 
   for (;;)
   {
-    b2Assert(m < b2_maxPolygonVertices);
+//    b2Assert(m < b2_maxPolygonVertices);
+    if (m >= b2_maxPolygonVertices) return false;
     hull[m] = ih;
 
     int32 ie = 0;
@@ -1019,15 +1173,36 @@ b2Fixture* Critter::addBodyFixture (void) {
 
   b2FixtureDef fd;
   fd.shape = &s;
-  fd.density = MIN_DENSITY;
+  fd.density = MIN_DENSITY;  /// TODO decide
   fd.restitution = .1;
   fd.friction = .3;
   fd.filter.categoryBits = uint16(CollisionFlag::CRITTER_BODY_FLAG);
   fd.filter.maskBits = uint16(CollisionFlag::CRITTER_BODY_MASK);
 
-  FixtureData cfd (FixtureType::BODY, currentBodyColor());
+  FixtureData cfd (_body, FixtureType::BODY, currentBodyColor());
 
   return addFixture(fd, cfd);
+}
+
+/// TODO Make more robust
+bool Critter::isStaticSpline(uint splineIndex) {
+  return splineIndex >= 2;
+}
+
+/// TODO Hot-fix
+b2Body* Critter::arm (uint splineIndex, Side side) {
+  b2Body *&a = _arms[splineIndex + ARTICULATIONS_PER_ARM*uint(side)];
+  if (!a) {
+    b2BodyDef armDef;
+    armDef.type = b2_dynamicBody;
+  //  bodyDef.angularDamping = .95;
+  //  bodyDef.linearDamping = .9;
+
+    a = _body.GetWorld()->CreateBody(&armDef);
+    a->SetUserData(&_bodyUserData);
+  }
+
+  return a;
 }
 
 b2Fixture* Critter::addPolygonFixture (uint splineIndex, Side side,
@@ -1076,7 +1251,12 @@ b2Fixture* Critter::addPolygonFixture (uint splineIndex, Side side,
   fd.filter.categoryBits = uint16(CollisionFlag::CRITTER_SPLN_FLAG);
   fd.filter.maskBits = uint16(CollisionFlag::CRITTER_SPLN_MASK);
 
-  FixtureData cfd (FixtureType::ARTIFACT, currentSplineColor(splineIndex, side),
+  b2Body *refBody = &_body;
+  if (!isStaticSpline(splineIndex))
+    refBody = arm(splineIndex, side);
+
+  FixtureData cfd (*refBody,
+                   FixtureType::ARTIFACT, currentSplineColor(splineIndex, side),
                    splineIndex, side, artifactIndex);
 
   return addFixture(fd, cfd);
@@ -1094,7 +1274,7 @@ b2Fixture* Critter::addAuditionFixture(void) {
   fd.filter.categoryBits = uint16(CollisionFlag::CRITTER_AUDT_FLAG);
   fd.filter.maskBits = uint16(CollisionFlag::CRITTER_AUDT_MASK);
 
-  return addFixture(fd, audioUserData());
+  return addFixture(fd, audioUserData(_body));
 }
 
 b2Fixture* Critter::addReproFixture(void) {
@@ -1110,26 +1290,28 @@ b2Fixture* Critter::addReproFixture(void) {
   fd.filter.categoryBits = uint16(CollisionFlag::CRITTER_REPRO_FLAG);
   fd.filter.maskBits = uint16(CollisionFlag::CRITTER_REPRO_MASK);
 
-  return addFixture(fd, reproUserData());
+  return addFixture(fd, reproUserData(_body));
 }
 
 b2Fixture* Critter::addFixture (const b2FixtureDef &def,
                                 const FixtureData &data) {
 
-  b2Fixture *f = _body.CreateFixture(&def);
+  b2Fixture *f = data.body.CreateFixture(&def);
+  assert(f);
+
   auto pair = _b2FixturesUserData.emplace(f, data);
   if (!pair.second)
     utils::doThrow<std::logic_error>(
       "Unable to insert fixture ", data, " in collection");
 
   f->SetUserData(&pair.first->second);
-  assert(f);
   return f;
 }
 
 void Critter::delFixture (b2Fixture *f) {
-  _body.DestroyFixture(f);
-  _b2FixturesUserData.erase(f);
+  auto it = _b2FixturesUserData.find(f);
+  it->second.body.DestroyFixture(f);
+  _b2FixturesUserData.erase(it);
 }
 
 bool Critter::insideBody(const P2D &p) const {
@@ -1146,6 +1328,20 @@ void Critter::updateObjects(void) {
   static constexpr auto N = 2*SPLINES_PRECISION-1;
 
   for (auto &v: collisionObjects) v.clear();
+
+  // clean everything
+  b2World *world = _body.GetWorld();
+  for (uint i=0; i<SPLINES_COUNT; i++) {
+    for (Side s: {Side::LEFT, Side::RIGHT}) {
+      uint k = splineIndex(i, s);
+      for (b2Fixture *f: _b2Artifacts[k]) delFixture(f);
+      _b2Artifacts[k].clear();
+    }
+  }
+  for (b2Joint *j: _joints)  if (j) world->DestroyJoint(j);
+  for (b2Body *b: _arms) if (b) world->DestroyBody(b);
+  _joints.fill(nullptr);
+  _arms.fill(nullptr);
 
   if (_b2Body)  delFixture(_b2Body);
   _b2Body = addBodyFixture();
@@ -1165,11 +1361,6 @@ void Critter::updateObjects(void) {
 
     std::vector<Vertices> objects;
 
-    for (Side s: {Side::LEFT, Side::RIGHT}) {
-      uint k = splineIndex(i, s);
-      for (b2Fixture *f: _b2Artifacts[k]) delFixture(f);
-      _b2Artifacts[k].clear();
-    }
     _masses[1+splineIndex(i, Side::LEFT)] =
       _masses[1+splineIndex(i, Side::RIGHT)] = 0;
 
@@ -1199,8 +1390,13 @@ void Critter::updateObjects(void) {
         ++it;
     }
 
-    // Create right components
+    // Shift non-static fixtures
     uint n = objects.size();
+    if (!isStaticSpline(i))
+      for (uint j=0; j<n; j++)
+        for (P2D &p: objects[j]) p -= d.p0;
+
+    // Create right components
     for (uint i=0; i<n; i++) {
       const Vertices &v = objects[i];
       Vertices v_;
@@ -1216,8 +1412,12 @@ void Critter::updateObjects(void) {
       uint k = splineIndex(i, side);
       if (destroyedSpline(i, side)) continue;
 
+      /// TODO Hot fix. Do not try to generate second arm portion if first one
+      /// is empty
+      if (i==1 && !activeSpline(0, side)) continue;
+
       b2Fixture *f = addPolygonFixture(i, side, j%n, objects[j]);
-      if (!f) continue; // nullptr is returned is box2dValidPolygon returns false
+      if (!f) continue; // nullptr is returned if box2dValidPolygon returns false
 
       _b2Artifacts[k].push_back(f);
 
@@ -1257,6 +1457,43 @@ void Critter::updateObjects(void) {
     d.center = {0,0};
     _body.SetMassData(&d);
   }
+
+  // Place arm's bodies at appropriate (world) positions and create joints
+  b2RevoluteJointDef jointDef;
+  jointDef.collideConnected = false;
+  jointDef.enableLimit = false;
+//  jointDef.lowerAngle = 0;
+//  jointDef.upperAngle = 0;
+  jointDef.enableMotor = true;
+  jointDef.maxMotorTorque = .1;
+
+  for (Side s: {Side::LEFT, Side::RIGHT}) {
+    if (!activeSpline(0, s)) continue;
+
+    uint ix = ARTICULATIONS_PER_ARM*uint(s);
+    auto a = _arms[ix];
+    b2Vec2 p0 = _splinesData[0].p0;
+    if (s == Side::RIGHT) p0.y *= -1;
+    b2Vec2 p = _body.GetWorldPoint(p0);
+    a->SetTransform(p, rotation());
+
+    jointDef.Initialize(&_body, a, p);
+    _joints[ix] = (b2RevoluteJoint*)world->CreateJoint(&jointDef);
+  }
+
+  for (Side s: {Side::LEFT, Side::RIGHT}) {
+    if (!activeSpline(0, s)) continue;
+    if (!activeSpline(1, s)) continue;
+
+    uint ix = 1+ARTICULATIONS_PER_ARM*uint(s);
+    auto a = _arms[ix];
+    b2Vec2 p1 = _splinesData[0].p1;
+    if (s == Side::RIGHT) p1.y *= -1;
+    b2Vec2 p = _body.GetWorldPoint(p1);
+    a->SetTransform(p, rotation());
+    jointDef.Initialize(_arms[ix-1], a, p);
+    _joints[ix] = (b2RevoluteJoint*)world->CreateJoint(&jointDef);
+  }
 }
 
 // =============================================================================
@@ -1284,7 +1521,7 @@ void Critter::updateColors(void) {
 void Critter::setMotorOutput(float i, Motor m) {
   assert(-1 <= i && i <= 1);
   assert(EnumUtils<Motor>::isValid(m));
-  _motors.at(m) = i;
+  _lmotors.at(m) = i;
 }
 
 void Critter::setVocalisation(float v, float c) {
@@ -1299,6 +1536,12 @@ void Critter::setNoisy(bool n) {
 }
 
 static constexpr bool debugHealthLoss = false;
+decimal Critter::currentHealth(const FixtureData &d) const {
+  uint i = 0;
+  if (d.type != FixtureType::BODY) i += 1 + splineIndex(d.sindex, d.sside);
+  return _currHealth[i];
+}
+
 bool Critter::applyHealthDamage (const FixtureData &d, float amount,
                                  Environment &env) {
   decimal damount = amount;
@@ -1308,7 +1551,7 @@ bool Critter::applyHealthDamage (const FixtureData &d, float amount,
   decimal &v = _currHealth[i];
 
   if (debugHealthLoss)
-    std::cerr << "Applying " << damount << " of damage to " << CID(this) << d
+    std::cerr << "Applying " << damount << " of damage toc " << CID(this) << d
               << ", resulting health is " << v << " >> ";
 
   damount = std::min(damount, v);
@@ -1328,19 +1571,39 @@ bool Critter::applyHealthDamage (const FixtureData &d, float amount,
   return v <= 0 && i > 0;
 }
 
-void Critter::destroySpline(uint splineIndex) {
-  uint k = splineIndex;
-
-//  std::cerr << "Spline " << CID(this) << "S" << fd.sside << fd.sindex
-//            << " was destroyed" << std::endl;
+void Critter::destroySpline(uint k) {
+  if (debugHealthLoss)
+    std::cerr << "Spline " << CID(this) << "S" << k << " was destroyed"
+              << std::endl;
 
   _destroyed.set(k);
-//  _masses[1+k] = 0;
+  _masses[1+k] = 0;
 
   for (b2Fixture *f_: _b2Artifacts[k]) delFixture(f_);
   _b2Artifacts[k].clear();
 
   collisionObjects[k].clear();
+
+  uint sindex = k % SPLINES_COUNT;
+  if (!isStaticSpline(sindex)) { // also need to destroy the b2body
+    uint aindex = sindex + ARMS * (k / SPLINES_COUNT);
+//    std::cerr << __PRETTY_FUNCTION__ << " spline index to arm: "
+//              << splineIndex << " >> " << aindex << "\n";
+    assert(aindex < ARTICULATIONS);
+
+    if ((sindex % ARMS) == 0 && _arms[aindex+1]) {
+      // also need to destroy the rest of the arm
+      destroySpline(k+1);
+    }
+
+    b2World *world = _body.GetWorld();
+    world->DestroyBody(_arms[aindex]);
+    _arms[aindex] = nullptr;
+    _joints[aindex] = nullptr;
+
+    if (debugHealthLoss)
+      std::cerr << "\talongside arm/joint " << aindex << std::endl;
+  }
 
   if (config::Simulation::b2FixedBodyCOM()) {
     b2MassData d;
@@ -1529,36 +1792,39 @@ Critter* Critter::clone(const Critter *c, b2Body *b) {
       (d.type == FixtureType::BODY ? newC->currentBodyColor()
                                    : newC->currentSplineColor(d.sindex,
                                                               d.sside));
-    return FixtureData (d.type, c, d.sindex, d.sside, d.aindex);
+    assert(false);
+    return nullptr; //FixtureData (d.type, c, d.sindex, d.sside, d.aindex);
+    /// TODO Link to correct body after clone
   };
 
-  assert(get(b) == &this_c->_objectUserData);
-  assert(get(&this_c->_body) == &this_c->_objectUserData);
+  assert(get(b) == &this_c->_bodyUserData);
+  assert(get(&this_c->_body) == &this_c->_bodyUserData);
 
 #define COPY(X) this_c->X = c->X
 
   COPY(_visionRange);
   COPY(_size);
 
-  COPY(_objectUserData);
+  COPY(_bodyUserData);
   COPY(_currentColors);
 
   COPY(_splinesData);
 
   {
-    this_c->_b2Body = Box2DUtils::clone(c->_b2Body, b);
-    FixtureData d_ = cloneFixtureData(this_c, c, c->_b2Body);
-    auto pair = this_c->_b2FixturesUserData.emplace(this_c->_b2Body, d_);
-    this_c->_b2Body->SetUserData(&pair.first->second);
+    /// TODO Needs to relink to correct body
+//    this_c->_b2Body = Box2DUtils::clone(c->_b2Body, b);
+//    FixtureData d_ = cloneFixtureData(this_c, c, c->_b2Body);
+//    auto pair = this_c->_b2FixturesUserData.emplace(this_c->_b2Body, d_);
+//    this_c->_b2Body->SetUserData(&pair.first->second);
   }
 
   for (uint i=0; i<c->_b2Artifacts.size(); i++) {
     for (b2Fixture *f: c->_b2Artifacts[i]) {
-      b2Fixture *f_ = Box2DUtils::clone(f, b);
-      this_c->_b2Artifacts[i].push_back(f_);
-      FixtureData d_ = cloneFixtureData(this_c, c, f);
-      auto pair = this_c->_b2FixturesUserData.emplace(f_, d_);
-      f_->SetUserData(&pair.first->second);
+//      b2Fixture *f_ = Box2DUtils::clone(f, b);
+//      this_c->_b2Artifacts[i].push_back(f_);
+//      FixtureData d_ = cloneFixtureData(this_c, c, f);
+//      auto pair = this_c->_b2FixturesUserData.emplace(f_, d_);
+//      f_->SetUserData(&pair.first->second);
     }
   }
   COPY(_masses);
@@ -1568,9 +1834,10 @@ Critter* Critter::clone(const Critter *c, b2Body *b) {
   COPY(_raysEnd);
   COPY(_raysFraction);
 
-  COPY(_motors);
+  COPY(_lmotors);
   COPY(_clockSpeed);
   COPY(_reproduction);
+  assert(false); // not copying joints/arms ...
 
   COPY(_brain);
 
@@ -1583,10 +1850,12 @@ Critter* Critter::clone(const Critter *c, b2Body *b) {
 
   COPY(_reproductionReserve);
   if (c->_reproductionSensor) {
-    this_c->_reproductionSensor = Box2DUtils::clone(c->_reproductionSensor, b);
-    auto pair = this_c->_b2FixturesUserData.emplace(this_c->_reproductionSensor,
-                                                    reproUserData());
-    this_c->_reproductionSensor->SetUserData(&pair.first->second);
+    assert(false);
+    /// TODO Need to relink with appropriate body (main/arms)
+//    this_c->_reproductionSensor = Box2DUtils::clone(c->_reproductionSensor, b);
+//    auto pair = this_c->_b2FixturesUserData.emplace(this_c->_reproductionSensor,
+//                                                    reproUserData());
+//    this_c->_reproductionSensor->SetUserData(&pair.first->second);
   } else
     this_c->_reproductionSensor = nullptr;
 
@@ -1602,7 +1871,7 @@ Critter* Critter::clone(const Critter *c, b2Body *b) {
   assert(this_c->totalStoredEnergy() == c->totalStoredEnergy());
   assert(this_c->energyEquivalent() == c->energyEquivalent());
 
-  this_c->_objectUserData.ptr.critter = this_c;
+  this_c->_bodyUserData.ptr.critter = this_c;
 
   return this_c;
 }
@@ -1626,7 +1895,7 @@ void assertEqual (const Critter &lhs, const Critter &rhs, bool deepcopy) {
   ASRT(_visionRange);
   ASRT(_size);
   ASRT(_body);
-  ASRT(_objectUserData);
+  ASRT(_bodyUserData);
   ASRT(_currentColors);
   ASRT(_splinesData);
   ASRT(_b2Body);
@@ -1637,7 +1906,7 @@ void assertEqual (const Critter &lhs, const Critter &rhs, bool deepcopy) {
   ASRT(_raysStart);
   ASRT(_raysEnd);
   ASRT(_raysFraction);
-  ASRT(_motors);
+  ASRT(_lmotors);
   ASRT(_clockSpeed);
   ASRT(_reproduction);
   ASRT(_brain);

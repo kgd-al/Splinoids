@@ -712,6 +712,11 @@ void GeneticManipulator::buildStatsLayout(void) {
   addLRow( true, "Angle");  addLRow(true, "Rotation");
   addLRow( true, "Span");   addLRow(true, "Precision");
 
+  othersLayout->addWidget(line("Brain"), r++, 0, 1, 4);
+  addLRow(false, "Nrns");   addLRow(false, "Depth");
+  addLRow(false, "I/O");    addLRow(false, "Hidden");
+  addLRow(false, "Cnxt");   addLRow(false, "Axons");
+
   othersLayout->addWidget(line("Wellfare"), r++, 0, 1, 4);
   othersLayout->addLayout(buildBarsLayout(), r++, 0, 1, 4);
 
@@ -821,14 +826,20 @@ void GeneticManipulator::buildNeuralPanel(void) {
   g->addWidget(_mSliders[0] = new LabeledSlider(-1, 1), 1, 0);
   g->addWidget(_mSliders[1] = new LabeledSlider(-1, 1), 1, 1);
 
-  g->addWidget(new QLabel("Clock"), 0, 2, 1, 1, Qt::AlignCenter);
+  g->addWidget(new QLabel("Clock"), 0, 3, 1, 1, Qt::AlignCenter);
+
   auto ml = new QHBoxLayout;
   ml->addWidget(_cLabels[0] =  new QLabel);
   ml->addWidget(_mSliders[2] = new LabeledSlider(-1, 1));
   ml->addWidget(_cLabels[1] = new QLabel);
-  g->addLayout(ml, 1, 2);
+  g->addLayout(ml, 1, 3);
 
   iol->addRow(g);
+
+  auto al = new QHBoxLayout;
+  for (uint i=0; i<_aSliders.size(); i++)
+   al->addWidget(_aSliders[i] = new LabeledSlider(-1, 1));
+  iol->addRow("Arms", al);
 
   iol->addRow("Sound", _sLabels
              = new ColorLabels(simu::Critter::VOCAL_CHANNELS+1, false));
@@ -887,6 +898,8 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     _bSex->setEnabled(true && !_readonly);
     _bSex->setCurrentIndex(int(c.genotype().cdata.sex));
 
+    const auto integer = [] (float v) { return QString::number(v, 'f', 0); };
+
     const auto degrees = [] (float v) {
       return QString::number(180. * v / M_PI, 'f', 1) + tr("°");
     };
@@ -900,8 +913,17 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     set("Angle", &SCritter::visionBodyAngle, degrees);
     set("Rotation", &SCritter::visionRelativeRotation, degrees);
     set("Span", &SCritter::visionWidth, degrees);
-    set("Precision", &SCritter::visionPrecision,
-        [] (float v) { return QString::number(v, 'f', 0); });
+    set("Precision", &SCritter::visionPrecision, integer);
+
+    const phenotype::ANN &brain = _subject->object().brain();
+    auto n = brain.neurons().size(),
+        io = brain.inputsCount() + brain.outputsCount();
+    set("Nrns", n, integer);
+    set("Depth", brain.stats().depth, integer);
+    set("I/O", io, integer);
+    set("Hidden", n - io, integer);
+    set("Cnxt", brain.stats().edges, integer);
+    set("Axons", brain.stats().axons);
 
     auto rhs = c.retina().size()/2;
     auto lhs = _rLabels->size()/2;
@@ -981,6 +1003,7 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     for (PrettyBar *b: _sBars)  b->noValue();
 
     for (auto s: _mSliders) s->noValue();
+    for (auto s: _aSliders) s->noValue();
     for (auto l: _cLabels)  l->setText("");
 
     _cppn.release();
@@ -1015,6 +1038,7 @@ void GeneticManipulator::updateShapeData(void) {
 void GeneticManipulator::readCurrentStatus(void) {
   using SCritter = simu::Critter;
 
+  if (!_subject) return;
   const simu::Critter &c = _subject->object();
 
   const auto percent = [] (float v) {
@@ -1073,6 +1097,9 @@ void GeneticManipulator::readCurrentStatus(void) {
   _mSliders[0]->setValue(c.motorOutput(Motor::LEFT));
   _mSliders[1]->setValue(c.motorOutput(Motor::RIGHT));
   _mSliders[2]->setValue(100*c.clockSpeed());
+
+  for (uint i=0; i<_aSliders.size(); i++)
+    _aSliders[i]->setValue(c.armJointOutput(i));
 
   if (config::Visualisation::animateANN())
     _brainPanel->annViewer->updateAnimation();

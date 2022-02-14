@@ -31,17 +31,18 @@ public:
 
   struct CritterData {
     uint collisions = 0;
-    struct {
-      float linear, angular;
-    } previousVelocities;
-    float totalImpulsions;
+    float totalImpulsions = 0;
   };
   using CritterDataMap = std::map<Critter*, CritterData>;
 
   using FightingKey = std::pair<Critter*, Critter*>;
   struct FightingData {
     std::array<CritterData*, 2> critters;
-    std::map<std::pair<b2Fixture*,b2Fixture*>, float> fixtures;
+
+    struct FixturesData {
+      float impulse = 0;
+    };
+    std::map<std::pair<b2Fixture*,b2Fixture*>, FixturesData> fixtures;
   };
   using FightingEvents = std::map<FightingKey, FightingData>;
 
@@ -81,14 +82,19 @@ private:
   HearingEvents _hearingEvents;
   MatingEvents _matingEvents;
 
-  // Destroyed splines that must be deleted after the physical step
-//  PendingDeletions _pendingDeletions;
-
   EdgeCritters _edgeCritters;
 
   decimal _energyReserve;
 
   rng::FastDice _dice;
+
+  // Destroyed splines that must be deleted after the physical step
+  using DestroyedSpline = std::pair<Critter*,uint>;
+  struct ID_CMP {
+    bool operator() (const DestroyedSpline &lhs,
+                     const DestroyedSpline &rhs) const;
+  };
+  using DestroyedSplines = std::set<DestroyedSpline, ID_CMP>;
 
 public:
   Environment(const Genome &g);
@@ -188,7 +194,7 @@ private:
 
   void processFight (Critter *cA, Critter *cB,
                      const FightingData &d,
-                     std::set<std::pair<Critter*,uint>> &destroyedSplines);
+                     DestroyedSplines &destroyedSplines);
   void maybeTeleport (Critter *c);
 };
 

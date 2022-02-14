@@ -68,6 +68,10 @@ public:
 
   void showAll();
 
+  QAction* action (const QString &s) {
+    return _actions.value(s);
+  }
+
 signals:
   void stepped (void);
 

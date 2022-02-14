@@ -72,12 +72,20 @@ struct enumarray {
     size_type m = (l+r) / 2;
     const LUI &i = _lut[m];
     if (i.value == v)     return i.index;
-    else if (i.value < v) return indexOf(v, l, m-1);
+    else if (i.value > v) return indexOf(v, l, m-1);
     else                  return indexOf(v, m+1, r);
   }
 
   static constexpr size_type indexOf (E v) {
+#ifndef NDEBUG
+    assert(isValid(v));
+    auto j = indexOf(v, 0, SIZE-1);
+    assert(0 <= j);
+    assert(j < SIZE);
+    return j;
+#else
     return indexOf(v, 0, SIZE-1);
+#endif
   }
 
   using buffer_type = std::array<V, SIZE>;
