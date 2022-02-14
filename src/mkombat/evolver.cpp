@@ -114,17 +114,15 @@ int main(int argc, char *argv[]) {
 
   novelty = (!result.count("no-novelty"));
 
-  stdfs::path dataFolder = outputFolder;
+  stdfs::path dataFolder = stdfs::weakly_canonical(outputFolder);
 #ifndef CLUSTER_BUILD
   dataFolder /= "ID" + std::to_string(id);
   std::cerr << "provided id: " << id << " of type "
-            << utils::className<decltype(id)>()
-            << ". data folder: " << dataFolder << "\n";
+            << utils::className<decltype(id)>() << ". ";
 #else
-  std::cerr << "[CLUSTER BUILD] Ignoring id. Using "
-            << stdfs::current_path()
-            << " as datafolder\n";
+  std::cerr << "[CLUSTER BUILD] Ignoring id. ";
 #endif
+  std::cerr << "Using " << dataFolder << " as data folder.\n";
 
   if (result.count("auto-config") && result["auto-config"].as<bool>())
     configFile = "auto";
@@ -220,9 +218,9 @@ int main(int argc, char *argv[]) {
     ga.setNewGenerationFunction([&evos, &ga, p] {
       std::cout << "\n[POP " << p_name(p) << "] New generation at "
                 << utils::CurrentTime{} << "\n";
-      auto gen = ga.getCurrentGenerationNumber();
 
 #ifndef CLUSTER_BUILD
+      auto gen = ga.getCurrentGenerationNumber();
       if (gen == 0 && p == 0) symlink_as_last(ga.getSaveFolder().parent_path());
 #endif
 
