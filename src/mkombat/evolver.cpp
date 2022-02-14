@@ -171,7 +171,7 @@ int main(int argc, char *argv[]) {
   }
   std::cout << dice.getSeed() << "\n";
 
-  std::cout << "CPU Threads: " << threads << omp_ "\n"
+  std::cout << "CPU Threads: " << threads << "\n"
             << "Team size: " << teamSize << "\n"
             << "Memory: " << memory << "\n";
 
