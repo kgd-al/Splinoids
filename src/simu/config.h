@@ -108,6 +108,7 @@ struct CONFIG_FILE(Simulation) {
   DECLARE_PARAMETER(float, critterBaseSpeed)
   DECLARE_PARAMETER(float, critterArmSpeed)
   DECLARE_PARAMETER(float, combatBaselineIntensity)
+  DECLARE_PARAMETER(float, combatMinImpulse)
   DECLARE_PARAMETER(float, combatMinVelocity)
   DECLARE_PARAMETER(float, auditionRange)     // With respect to body size
   DECLARE_PARAMETER(float, reproductionRange) //

@@ -36,7 +36,7 @@ id=system('readlink -m '.folder);
 id=system('basename '.id);
 set multiplot layout 3,2 title id.' @ '.system('date') \
   margins char 5, 8, 2, 3 spacing char 12, 4;
-set key noenhanced horizontal center at graph .5, 1.05;
+set key noenhanced horizontal center at graph .5, 1 bottom;
 set format y2 "%.2h"
 
 mk_i=22

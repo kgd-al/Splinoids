@@ -1459,7 +1459,7 @@ void Critter::updateObjects(void) {
   }
 
   // Place arm's bodies at appropriate (world) positions and create joints
-  b2RevoluteJointDef jointDef;
+  b2RevoluteJointDef jointDef {};
   jointDef.collideConnected = false;
   jointDef.enableLimit = false;
 //  jointDef.lowerAngle = 0;

@@ -8,15 +8,35 @@
 namespace simu {
 
 static constexpr int debugFeeding = 0;
-static constexpr int debugFighting = 0;
 static constexpr int debugHearing = 0;
 static constexpr int debugMating = 0;
+static constexpr int debugFighting = 0;
 static constexpr int debugTouching = 0;
 
 // between arms of a single critter
 static constexpr bool ignoreSelfCollisions = true;
 
 const bool Environment::boxEdges = true;
+
+struct UDID {
+  const b2Body *b;
+  const b2BodyUserData &d;
+  const b2Fixture *f;
+  UDID(const b2Body *b, const b2BodyUserData &d, const b2Fixture *f)
+    : b(b), d(d), f(f) {}
+  friend std::ostream& operator<< (std::ostream &os, const UDID &udid) {
+    switch (udid.d.type) {
+    case BodyType::CRITTER:
+      return os << CID(udid.d.ptr.critter) << "F" << *Critter::get(udid.f);
+    case BodyType::CORPSE:
+    case BodyType::PLANT:
+    case BodyType::OBSTACLE:
+    case BodyType::WARP_ZONE:
+    default:
+      return os << "[" << uint(udid.d.type) << "@" << udid.b << "]";
+    }
+  }
+};
 
 struct CollisionMonitor : public b2ContactListener {
   Environment &e;
@@ -72,6 +92,17 @@ struct CollisionMonitor : public b2ContactListener {
   bool isMatingAttempt (const b2Fixture *fA, const b2Fixture *fB) {
     return (Critter::get(fA)->type & Critter::get(fB)->type)
         == Critter::FixtureType::REPRODUCTION;
+  }
+
+  struct Velocities { float A, B; };
+  Velocities velocities (const b2Contact *c, b2Fixture *fA, b2Fixture *fB) {
+    b2WorldManifold m;
+    c->GetWorldManifold(&m);
+    static const auto velocity = [] (const b2Body &b, const b2Vec2 &p) {
+      return b.GetLinearVelocityFromWorldPoint(p).Length();
+    };
+    return { velocity(Critter::get(fA)->body, m.points[0]),
+             velocity(Critter::get(fB)->body, m.points[0]) };
   }
 
   void BeginContact(b2Contact *c) override {
@@ -133,10 +164,19 @@ struct CollisionMonitor : public b2ContactListener {
       return;
     }
 
+//    std::cerr << __PRETTY_FUNCTION__ << "\n"
+//              << UDID(bA, dA, fA) << " & " << UDID(bB, dB, fB) << "\n";
+//    b2WorldManifold m;
+//    c->GetWorldManifold(&m);
+//    for (int i=0; i<c->GetManifold()->pointCount; i++)
+//      std::cerr << m.points[i] << "\n";
+//    for (b2Body *b: {bA, bB}) b->Dump();
+//    std::cerr << "\n";
+
     switch (pair(dA.type, dB.type)) {
     case pair(BodyType::CRITTER, BodyType::CRITTER):
       if (!isMatingAttempt(fA, fB))
-        processFightPreStep(critter(dA), fA, critter(dB), fB);
+        processFightPreStep(c, critter(dA), fA, critter(dB), fB);
       break;
 
     case pair(BodyType::CRITTER, BodyType::PLANT):
@@ -160,10 +200,18 @@ struct CollisionMonitor : public b2ContactListener {
     const b2BodyUserData &dA = *Critter::get(bA),
                          &dB = *Critter::get(bB);
 
+//    std::cerr << __PRETTY_FUNCTION__ << "\n" << std::setprecision(20)
+//              << UDID(bA, dA, fA) << " & " << UDID(bB, dB, fB) << "\n"
+//              << "Impulse:\n";
+//    for (uint i=0; i<impulse->count; i++)
+//      std::cerr << "\t" << impulse->normalImpulses[i]
+//                << "\t" << impulse->tangentImpulses[i]
+//                << "\n";
+
     switch (pair(dA.type, dB.type)) {
     case pair(BodyType::CRITTER, BodyType::CRITTER):
       if (!isMatingAttempt(fA, fB))
-        processFightPostStep(critter(dA), fA, critter(dB), fB, impulse);
+        processFightPostStep(c, critter(dA), fA, critter(dB), fB, impulse);
       break;
 
     default:
@@ -270,7 +318,8 @@ struct CollisionMonitor : public b2ContactListener {
     d.fixtures.insert({{fA,fB}, Environment::FightingData::FixturesData{}});
   }
 
-  void processFightPreStep (Critter *cA, b2Fixture *fA,
+  void processFightPreStep (b2Contact *contact,
+                            Critter *cA, b2Fixture *fA,
                             Critter *cB, b2Fixture *fB) {
     if (cA == cB) return; // Different moving parts of the same critter
 
@@ -282,9 +331,16 @@ struct CollisionMonitor : public b2ContactListener {
       Environment::CritterData &d = e._critterData.at(c);
       d.totalImpulsions = 0;
     }
+
+    Environment::FightingData &d = e._fightingEvents.at({ cA, cB });
+    auto &fd = d.fixtures.at({fA,fB});
+    auto v = velocities(contact, fA, fB);
+    fd.A.velocity[0] = v.A;
+    fd.B.velocity[0] = v.B;
   }
 
-  void processFightPostStep (Critter *cA, b2Fixture *fA,
+  void processFightPostStep (b2Contact *contact,
+                             Critter *cA, b2Fixture *fA,
                              Critter *cB, b2Fixture *fB,
                              const b2ContactImpulse *impulse) {
     if (cA == cB) return; // Different moving parts of the same critter
@@ -301,7 +357,12 @@ struct CollisionMonitor : public b2ContactListener {
       e._critterData.at(c).totalImpulsions += totalImpulse;
 
     Environment::FightingData &d = e._fightingEvents.at({ cA, cB });
-    d.fixtures.at({fA,fB}).impulse = totalImpulse;
+    auto &fd = d.fixtures.at({fA,fB});
+    fd.impulse = totalImpulse;
+
+    auto v = velocities(contact, fA, fB);
+    fd.A.velocity[1] = v.A;
+    fd.B.velocity[1] = v.B;
   }
 
   void registerFightEnd (Critter *cA, b2Fixture *fA,
@@ -566,8 +627,17 @@ auto densityCollisionFactor (float d) {
 void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
                                DestroyedSplines &ds) {
 
+  static const auto &CMI = config::Simulation::combatMinImpulse();
   static const auto &CMV = config::Simulation::combatMinVelocity();
   static const auto &CBI = config::Simulation::combatBaselineIntensity();
+
+  static const auto getDV = [] (auto v) { return v[0] - v[1]; };
+
+  static const auto skip = [] (auto p) {
+    return p.second.impulse < CMI
+        || getDV(p.second.A.velocity) < CMV
+        || getDV(p.second.B.velocity) < CMV;
+  };
 
   const CritterData &dA = _critterData.at(cA),
                     &dB = _critterData.at(cB);
@@ -581,20 +651,17 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
     std::cerr << "\nFight step of " << CID(cA) << " & " << CID(cB) << "\n"
               << "\tat " << cA->pos() << " & " << cB->pos() << "\n";
 
-  if (debugFighting > 2)
-    std::cerr << "Fixture-Fixture collisions details:\n";
-
-  static const auto skip = [] (auto p) {
-    return p.second.impulse < CMV /*&& p.second.velocity < CMV*/;
-  };
-
   float fixtureCount = 0;
   for (const auto &p: d.fixtures) if (!skip(p)) fixtureCount++;
+
+  if (debugFighting > 2 && fixtureCount > 0)
+    std::cerr << "Fixture-Fixture collisions details:\n";
 
   for (const auto &p: d.fixtures) {
     if (skip(p)) continue;
 
     float impulse = p.second.impulse;
+    const auto &VA = p.second.A.velocity, &VB = p.second.B.velocity;
 
     b2Fixture *fA = p.first.first, *fB = p.first.second;
     const Critter::FixtureData &fdA = *Critter::get(fA);
@@ -606,7 +673,10 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
     if (alpha_a == 0 && alpha_b == 0) continue;
     float alpha = (alpha_b) / (alpha_a + alpha_b);
 
-    float D = CBI * impulse / fixtureCount;
+    float dVA = std::max(0.f, getDV(VA)),
+          dVB = std::max(0.f, getDV(VB)),
+          dV = dVA*dVA + dVB*dVB;
+    float D = CBI * dV * impulse / fixtureCount;
 
     float hA = cA->currentHealth(fdA), hB = cB->currentHealth(fdB);
     float D_ = std::min(D, std::min(hA / alpha, hB / (1-alpha)));
@@ -616,12 +686,17 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
     if (debugFighting > 2) {
       std::cerr << "\tFixtures " << CID(cA) << "F" << fdA << " and "
                 << CID(cB) << "F" << fdB << "\n"
+                << "\t\tdVA = " << VA[0] - VA[1] << " = "
+                  << VA[0] << " - " << VA[1] << "\n"
+                << "\t\tdVB = " << VB[0] - VB[1] << " = "
+                  << VB[0] << " - " << VB[1] << "\n"
                 << "\t\trA = " << fA->GetDensity()
                   << "\t" << alpha_a << "\t" << alpha << "\n"
                 << "\t\trB = " << fB->GetDensity()
                   << "\t" << alpha_b << "\t" << 1-alpha << "\n"
                 << "\t\t D = " << D << " = "
-                  << CBI << " * " << impulse << " / " << fixtureCount << "\n";
+                  << CBI << " * " << dV << " * " << impulse
+                  << " / " << fixtureCount << "\n";
       if (D != D_)
         std::cerr << "\t\tD' = " << D_ << " (clamped to hA = " << hA << ", "
                   << "hB = " << hB << ")\n";

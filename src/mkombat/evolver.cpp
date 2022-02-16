@@ -63,7 +63,8 @@ int main(int argc, char *argv[]) {
   uint threads = 1;
   long seed = -1;
 
-  uint memory = 1;
+  uint memory = 1;  
+  static constexpr uint populations = 2;
 
   auto id = timestamp();
 
@@ -189,9 +190,9 @@ int main(int argc, char *argv[]) {
     return p == 0 ? "A" : "B";
   };
 
-  std::array<Evolution, 2> evos;
+  std::array<Evolution, populations> evos;
 
-  for (uint p = 0; p<2; p++) {
+  for (uint p = 0; p<populations; p++) {
     GA &ga = evos[p].ga;
     ga.setPopSize(popSize);
     ga.setNbThreads(threads);
@@ -207,8 +208,8 @@ int main(int argc, char *argv[]) {
     ga.setSaveGenStats(true);
     ga.setSaveIndStats(true);
     ga.setSaveParetoFront(false);
-    ga.disableGenerationHistory();
 
+    ga.disableGenerationHistory();
     ga.disablePopulationSave();
 
     ga.setSaveFolderGenerator([p, id, dataFolder] (auto) {

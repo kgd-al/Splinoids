@@ -1,6 +1,6 @@
 #!/bin/bash
 
-log=.determinism.log
+log=$1/determinism.log
 find $1 -name "mk*.dna" \
   | grep -v "gen0" \
   | sort -V \
@@ -13,9 +13,7 @@ find $1 -name "mk*.dna" \
     then
       echo $(sed 's|.*/\([AB]\)/gen\([0-9]*\)/.*|\1 \2|' <<< $dna) \
            $(awk '{ d=$3-$1; printf " %+g (%g >> %g) %g", d, $1, $3, d<0?-d:d }' <<< "$res")
-      fail=$(($fail + 1))
     fi
-    count=$(($count + 1))
   done \
   | awk 'BEGIN{printf "- gen diff (evo >> eval)%20s\n", ""}{ print $0, $3<0?-$3:$3 }' \
   | sort -k7g | cut -d ' ' -f1-6 | tee $log | column -t

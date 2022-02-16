@@ -41,6 +41,7 @@ public:
 
     struct FixturesData {
       float impulse = 0;
+      struct { std::array<float,2> velocity = {{0}}; } A, B;
     };
     std::map<std::pair<b2Fixture*,b2Fixture*>, FixturesData> fixtures;
   };
