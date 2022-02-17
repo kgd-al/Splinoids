@@ -63,7 +63,6 @@ int main(int argc, char *argv[]) {
   uint threads = 1;
   long seed = -1;
 
-  uint memory = 1;  
   static constexpr uint populations = 2;
 
   auto id = timestamp();
@@ -97,8 +96,8 @@ int main(int argc, char *argv[]) {
     ("team-count", "Number of teams", cxxopts::value(popSize))
     ("generations", "Number of generations to let the evolution run for",
      cxxopts::value(generations))
-    ("memory", "Number of previous champions to evaluate against",
-     cxxopts::value(memory))
+//    ("populations", "Number of concurrent populations (>1)",
+//     cxxopts::value(populations))
     ("threads", "Number of parallel threads", cxxopts::value(threads))
     ("id", "Run identificator (used to uniquely identify the output folder, "
            "defaults to the current timestamp)",
@@ -171,8 +170,8 @@ int main(int argc, char *argv[]) {
   std::cout << dice.getSeed() << "\n";
 
   std::cout << "CPU Threads: " << threads << "\n"
-            << "Team size: " << teamSize << "\n"
-            << "Memory: " << memory << "\n";
+            << "  Team size: " << teamSize << "\n"
+            << "Populations: " << populations << "\n";
 
   genotype::Critter::printMutationRates(std::cout, 2);
 //  simu::Simulation::printStaticStats();

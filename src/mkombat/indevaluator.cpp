@@ -203,7 +203,7 @@ void Evaluator::operator() (Ind &lhs_i, const Scenario::Params &params) {
 
   brainless = scenario.brainless();
   lhs_i.stats["brain"] = !brainless[0];
-  bool bothBrainless = brainless[0] && brainless[1];
+//  bool bothBrainless = brainless[0] && brainless[1];
 
   {
     phenotype::ANN &b = scenario.subject()->brain();
@@ -234,12 +234,9 @@ void Evaluator::operator() (Ind &lhs_i, const Scenario::Params &params) {
   if (!logsSavePrefix.empty())  logging_init(&log, logsSavePrefix, scenario);
 
   auto start_time = Simulation::now();
-  bool fail = brainless[0];
 
-  while (!simulation.finished() && !aborted && !fail) {
+  while (!simulation.finished() && !aborted) {
     simulation.step();
-
-    fail |= (Simulation::durationFrom(start_time) >= 1000);
 
 //    // Update modules values (if modular ann is used)
 //    if (mann) for (const auto &p: mann->modules()) p.second->update();
@@ -247,7 +244,7 @@ void Evaluator::operator() (Ind &lhs_i, const Scenario::Params &params) {
     if (!logsSavePrefix.empty()) logging_step(&log, scenario);
   }
 
-  lhs_i.fitnesses["mk"] = fail ? -4 : scenario.score();
+  lhs_i.fitnesses["mk"] = scenario.score();
 
   lhs_i.stats["wtime"] = -Simulation::durationFrom(start_time);
   lhs_i.stats["stime"] = Scenario::DURATION - duration(simulation);
