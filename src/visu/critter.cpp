@@ -221,10 +221,6 @@ QRectF Critter::boundingRect (void) const {
 
 void Critter::paint(QPainter *painter,
                     const QStyleOptionGraphicsItem*, QWidget*) {
-  painter->save();
-  painter->rotate(qRadiansToDegrees(_critter.rotation()));
-  doPaint(painter);
-  painter->restore();
 
   if (!trace.isEmpty()) {
     QPointF currPos = pos();
@@ -245,6 +241,11 @@ void Critter::paint(QPainter *painter,
     }
     setPos(currPos);
   }
+
+  painter->save();
+  painter->rotate(qRadiansToDegrees(_critter.rotation()));
+  doPaint(painter);
+  painter->restore();
 
   if (!tag.isEmpty()) {
     painter->save();

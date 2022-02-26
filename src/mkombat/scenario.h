@@ -42,25 +42,25 @@ class Scenario {
 public:
   static constexpr uint DURATION = 20; //seconds
   struct Params {
-    std::string desc;
-    std::string kombatName;
+//    std::string scenario;
+//    std::string desc;
+//    std::string kombatName;
 
-    Team rhs;
-    std::string rhsId;
+    Team lhs, rhs;
+//    std::string rhsId;
 
-    bool neuralEvaluation;
+//    bool neuralEvaluation;
 
-    enum Flag { TEST, PAIN_INSTANTANEOUS, PAIN_ABSOLUTE, PAIN_OPPONENT };
-    using Flags = std::bitset<4>;
+    enum Flag { PAIN_SELF, PAIN_OTHER, PAIN_ALLY };
+    using Flags = std::bitset<3>;
     Flags flags;
-
   };
   using DeathCause = Simulation::Autopsies::Death;
   static constexpr DeathCause UNKNOWN_DEATH_CAUSE = DeathCause(-1);
 
   Scenario(Simulation &simulation, uint tSize);
 
-  void init (Team &lhs, const Params &params);
+  void init (const Params &params);
   void postEnvStep (void);
   void postStep (void);
   void preDelCritter (Critter *c);

@@ -135,13 +135,13 @@ int main(int argc, char *argv[]) {
 
 //  if (missingArgument) {
 //    if (result.count("environment"))
-//      utils::doThrow<std::invalid_argument>("No value provided for the plant's genome");
+//      utils::Thrower("No value provided for the plant's genome");
 
 //    else if (result.count("plant"))
-//      utils::doThrow<std::invalid_argument>("No value provided for the environment's genome");
+//      utils::Thrower("No value provided for the environment's genome");
 
 //    else
-//      utils::doThrow<std::invalid_argument>(
+//      utils::Thrower(
 //        "No starting state provided. Either provide both an environment and plant genomes"
 //        " or load a previous simulation");
 //  }
@@ -206,9 +206,9 @@ int main(int argc, char *argv[]) {
   struct sigaction act = {};
   act.sa_handler = &sigint_manager;
   if (0 != sigaction(SIGINT, &act, nullptr))
-    utils::doThrow<std::logic_error>("Failed to trap SIGINT");
+    utils::Thrower<std::logic_error>("Failed to trap SIGINT");
   if (0 != sigaction(SIGTERM, &act, nullptr))
-    utils::doThrow<std::logic_error>("Failed to trap SIGTERM");
+    utils::Thrower<std::logic_error>("Failed to trap SIGTERM");
 
   // ===========================================================================
   // == Core setup
@@ -245,13 +245,11 @@ int main(int argc, char *argv[]) {
 
 //  if (!duration.empty()) {
 //    if (duration.size() < 2)
-//      utils::doThrow<std::invalid_argument>(
-//        "Invalid duration '", duration, "'. [+|=]<years>");
+//      utils::Thrower("Invalid duration '", duration, "'. [+|=]<years>");
 
 //    uint dvalue = 0;
 //    if (!(std::istringstream (duration.substr(1)) >> dvalue))
-//      utils::doThrow<std::invalid_argument>(
-//        "Failed to parse '", duration.substr(1), "' as a duration (uint)");
+//      utils::Thrower("Failed to parse '", duration.substr(1), "' as a duration (uint)");
 
 //    s.setDuration(simu::Environment::DurationSetType(duration[0]), dvalue);
 //  }

@@ -27,7 +27,7 @@ void sigint_manager (int) {
 //}
 
 template <typename T>
-bool diffStats (const T &prev, const T &curr) {
+bool diffStatsMap (const T &prev, const T &curr) {
   bool allOk = true;
   for (const auto &p: curr) {
     auto it = prev.find(p.first);
@@ -41,10 +41,43 @@ bool diffStats (const T &prev, const T &curr) {
       std::cout << p.second << GAGA_COLOR_NORMAL;
       allOk &= ok;
 
-    } else
-      std::cout << "\t" << GAGA_COLOR_YELLOW << p.second << GAGA_COLOR_NORMAL;
-    std::cout << "\n";
+    } else {
+      if (!prev.empty()) std::cout << GAGA_COLOR_YELLOW;
+      std::cout << p.second;
+    }
+    std::cout << GAGA_COLOR_NORMAL << "\n";
   }
+
+  return allOk;
+}
+
+template <typename T, typename U>
+bool diffStatsArray (const T &prev, const T &curr, const U &fields) {
+  bool allOk = (std::size(prev) == std::size(curr));
+  uint i=0;
+  auto it_p = prev.begin(), it_c = curr.begin(), it_l = fields.begin();
+  for (;
+       it_p != prev.end() && it_c != curr.end() && it_l != fields.end();
+       ++it_p, ++it_c, ++it_l, i++) {
+    auto v_p = *it_p, v_c = *it_c;
+    bool ok = (v_p == v_c);
+    std::cout << "\t" << std::setw(10) << *it_l << ": ";
+    if (ok)
+      std::cout << GAGA_COLOR_GREEN;
+    else
+      std::cout << GAGA_COLOR_RED << v_p << " >> ";
+    std::cout << v_c << GAGA_COLOR_NORMAL << "\n";
+    allOk &= ok;
+  }
+
+  if (it_p != prev.end())
+    std::cout << GAGA_COLOR_YELLOW << "! "
+              << std::distance(it_p, prev.end())
+              << " excess values in previous footprint\n";
+  if (it_c != curr.end())
+    std::cout << GAGA_COLOR_YELLOW << "! "
+              << std::distance(it_c, curr.end())
+              << " excess values in current footprint\n";
 
   return allOk;
 }
@@ -58,13 +91,14 @@ int main(int argc, char *argv[]) {
   // ===========================================================================
   // == Command line arguments parsing
 
-  using CGenome = genotype::Critter;
   using Verbosity = config::Verbosity;
 
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::QUIET;
 
-  std::string lhsTeamArg, rhsArg;
+  std::string lhsTeamArg;
+  std::vector<std::string> rhsTeamArgs;
+  std::string scenario;
 
   std::string outputFolder = "tmp/mk-eval/";
   char overwrite = simu::Simulation::PURGE;
@@ -90,16 +124,16 @@ int main(int argc, char *argv[]) {
                   "[a]bort or [p]urge",
      cxxopts::value(overwrite))
 
-    ("lhs", "Splinoid genomes for left-hand side team",
+    ("ind", "Splinoid genomes for left-hand side team",
      cxxopts::value(lhsTeamArg))
-    ("rhs", "Splinoid genomes for right-hand side team (for live evaluation)",
-     cxxopts::value(rhsArg))
+    ("opp", "Splinoid genomes for right-hand side team(s)",
+     cxxopts::value(rhsTeamArgs))
     ("scenario", "Scenario name for canonical evaluations",
-     cxxopts::value(rhsArg))
+     cxxopts::value(scenario))
 
     ("lesions", "Lesion type to apply (def: {})", cxxopts::value(lesions))
 
-    ("ann-aggregate", "Specifiy a collections of position -> tag for the ANN"
+    ("ann-aggregate", "Specify a collections of position -> tag for the ANN"
      " nodes", cxxopts::value(annNeuralTags))
     ;
 
@@ -116,20 +150,14 @@ int main(int argc, char *argv[]) {
 
   std::string configFileAbsolute = stdfs::canonical(configFile).string();
   if (!stdfs::exists(configFile))
-    utils::doThrow<std::invalid_argument>(
-      "Failed to find Simulation.config at ", configFileAbsolute);
+    utils::Thrower("Failed to find Simulation.config at ", configFileAbsolute);
   if (!config::Simulation::readConfig(configFile))
-    utils::doThrow<std::invalid_argument>(
-      "Error while parsing config file ", configFileAbsolute, " or dependency");
+    utils::Thrower("Error while parsing config file ", configFileAbsolute,
+                   " or dependency");
   if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
 
-  if (lhsTeamArg.empty())
-    utils::doThrow<std::invalid_argument>("No data provided for lhs team");
-
-  if (rhsArg.empty())
-    utils::doThrow<std::invalid_argument>(
-      "No evaluation context provided. Either specify an opponent team (via rhs)"
-      " or a canonical scenario (via scenario)");
+  if (lhsTeamArg.empty()) utils::Thrower("No data provided for lhs team");
+  if (rhsTeamArgs.empty()) utils::Thrower("No data provided for rhs team(s)");
 
   // ===========================================================================
   // == SIGINT management
@@ -137,27 +165,29 @@ int main(int argc, char *argv[]) {
   struct sigaction act = {};
   act.sa_handler = &sigint_manager;
   if (0 != sigaction(SIGINT, &act, nullptr))
-    utils::doThrow<std::logic_error>("Failed to trap SIGINT");
+    utils::Thrower<std::logic_error>("Failed to trap SIGINT");
   if (0 != sigaction(SIGTERM, &act, nullptr))
-    utils::doThrow<std::logic_error>("Failed to trap SIGTERM");
+    utils::Thrower<std::logic_error>("Failed to trap SIGTERM");
 
   // ===========================================================================
   // == Core setup
 
-  Ind lhsTeam = simu::Evaluator::fromJsonFile(lhsTeamArg);
+  auto params = simu::Evaluator::Params::fromArgv(lhsTeamArg, rhsTeamArgs,
+                                                  scenario);
+  Ind &ind = params.ind;
 
   auto start = simu::Simulation::now();
-  const auto prevFitness = lhsTeam.fitnesses;
-  const auto prevInfos = lhsTeam.infos;
+  const auto prevFitness = ind.fitnesses;
+  const auto prevSignature = ind.signature;
+  const auto prevInfos = ind.infos;
+  const auto prevStats = ind.stats;
 
   simu::Evaluator eval;
 //  eval.setLesionTypes(lesions);
 
-  auto params = simu::Evaluator::scenarioFromStrings(lhsTeamArg, rhsArg);
-
-  eval.logsSavePrefix = stdfs::path(outputFolder) / params.kombatName;
+  eval.logsSavePrefix = stdfs::path(outputFolder);
   eval.annTagsFile = annNeuralTags;
-  eval(lhsTeam, params);
+  eval(params);
 
   auto duration = simu::Simulation::durationFrom(start);
   uint days, hours, minutes, seconds, mseconds;
@@ -183,15 +213,22 @@ int main(int argc, char *argv[]) {
   std::cout << mseconds << "ms" << std::endl;
 
   bool ok = true;
-  if (!params.neuralEvaluation) {
-    std::cout << prevInfos << " =?= " << params.rhsId << "\n";
-    if (prevInfos == params.rhsId) {
-      std::cout << "Rhs id matching lhs memory. Comparison result for lhs:\n";
-      ok = diffStats(prevFitness, lhsTeam.fitnesses);
+  if (!params.flags.any()) {
+    auto oppsIds = params.opponentsIds();
+    std::cout << prevInfos << " =?= " << oppsIds << "\n";
+    if (prevInfos == oppsIds) {
+      std::cout << "Rhs id(s) matching lhs memory. Comparison result for lhs:\n"
+                << "\tfitness(es):\n";
+      ok &= diffStatsMap(prevFitness, ind.fitnesses);
+      std::cout << "\tStats:\n";
+      ok &= diffStatsMap(prevStats, ind.stats);
+      std::cout << "\tFootprint:\n";
+      ok &= diffStatsArray(prevSignature, ind.signature,
+                           simu::Evaluator::footprintFields(rhsTeamArgs.size()));
 
     } else {
       std::cout << "Result for lhs:\n";
-      diffStats({}, lhsTeam.fitnesses);
+      diffStatsMap({}, ind.fitnesses);
     }
   }
 

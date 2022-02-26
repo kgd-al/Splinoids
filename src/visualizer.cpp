@@ -155,19 +155,19 @@ int main(int argc, char *argv[]) {
 
 //  if (missingArgument) {
 //    if (result.count("environment"))
-//      utils::doThrow<std::invalid_argument>("No value provided for the plant's genome");
+//      utils::Thrower("No value provided for the plant's genome");
 
 //    else if (result.count("plant"))
-//      utils::doThrow<std::invalid_argument>("No value provided for the environment's genome");
+//      utils::Thrower("No value provided for the environment's genome");
 
 //    else
-//      utils::doThrow<std::invalid_argument>(
+//      utils::Thrower(
 //        "No starting state provided. Either provide both an environment and plant genomes"
 //        " or load a previous simulation");
 //  }
 
 ////  if (!morphologiesSaveFolder.empty() && loadSaveFile.empty())
-////    utils::doThrow<std::invalid_argument>(
+////    utils::Thrower(
 ////        "Generating morphologies is only meaningful when loading a simulation");
 
   if (result.count("auto-config") && result["auto-config"].as<bool>())
@@ -286,12 +286,12 @@ int main(int argc, char *argv[]) {
 
 //  if (!duration.empty()) {
 //    if (duration.size() < 2)
-//      utils::doThrow<std::invalid_argument>(
+//      utils::Thrower(
 //        "Invalid duration '", duration, "'. [+|=]<years>");
 
 //    uint dvalue = 0;
 //    if (!(std::istringstream (duration.substr(1)) >> dvalue))
-//      utils::doThrow<std::invalid_argument>(
+//      utils::Thrower(
 //        "Failed to parse '", duration.substr(1), "' as a duration (uint)");
 
 //    s.setDuration(simu::Environment::DurationSetType(duration[0]), dvalue);

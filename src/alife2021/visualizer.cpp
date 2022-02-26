@@ -150,8 +150,8 @@ int main(int argc, char *argv[]) {
         std::cout << "Warning: option '" << o << " is ignored in snapshot mode"
                   << "\n";
     if (!stdfs::exists(cGenomeArg))
-      utils::doThrow<std::invalid_argument>(
-        "Provided splinoid genome file '", cGenomeArg, " does not exist!");
+      utils::Thrower("Provided splinoid genome file '", cGenomeArg,
+                     " does not exist!");
   }
 
   // ===========================================================================

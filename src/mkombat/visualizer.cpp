@@ -37,7 +37,6 @@ int main(int argc, char *argv[]) {
 //  std::cerr << phylogeny::SID::INVALID << std::endl;
 
   using ANNViewer = kgd::es_hyperneat::gui::ann::Viewer;
-  using CGenome = genotype::Critter;
   using Ind = simu::Evaluator::Ind;
   using utils::operator<<;
 
@@ -49,13 +48,12 @@ int main(int argc, char *argv[]) {
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::QUIET;
 
-  std::string lhsTeamArg;
-  std::string rhsArg;
+  std::string lhsTeamArg, rhsTeamArg, scenarioArg;
 
   int startspeed = 1;
   bool autoquit = false;
 
-  std::string outputFolder = "tmp/mk-gui/";
+  stdfs::path outputFolder = "tmp/mk-gui/";
   char overwrite = simu::Simulation::ABORT;
 
   std::string picture;
@@ -74,7 +72,6 @@ int main(int argc, char *argv[]) {
 
   int lesions = 0;
 
-  bool tag = false;
   int trace = -1;
 
   cxxopts::Options options("Splinoids (mk-gui-evaluation)",
@@ -89,10 +86,9 @@ int main(int argc, char *argv[]) {
      cxxopts::value(verbosity))
 
     ("lhs", "Left-hand side team", cxxopts::value(lhsTeamArg))
-    ("rhs", "Splinoid genomes for right-hand side team (for live evaluation)",
-     cxxopts::value(rhsArg))
+    ("rhs", "Right-hand side team", cxxopts::value(rhsTeamArg))
     ("scenario", "Scenario name for canonical evaluations",
-     cxxopts::value(rhsArg))
+     cxxopts::value(scenarioArg))
 
     ("start", "Whether to start running immendiatly after initialisation"
               " (and optionally at which speed > 1)",
@@ -131,9 +127,6 @@ int main(int argc, char *argv[]) {
      cxxopts::value(annAggregateNeurons)->implicit_value("true"))
 
     ("lesions", "Lesion type to apply (def: 0/none)", cxxopts::value(lesions))
-
-    ("tags", "Tag items to facilitate reading",
-     cxxopts::value(tag)->implicit_value("true"))
     ;
 
   auto result = options.parse(argc, argv);
@@ -156,13 +149,8 @@ int main(int argc, char *argv[]) {
                   << "\n";
   }
 
-  if (lhsTeamArg.empty())
-    utils::doThrow<std::invalid_argument>("No data provided for lhs team");
-
-  if (rhsArg.empty())
-    utils::doThrow<std::invalid_argument>(
-      "No evaluation context provided. Either specify an opponent team (via rhs)"
-      " or a canonical scenario (via scenario)");
+  if (lhsTeamArg.empty()) utils::Thrower("No data provided for lhs team");
+  if (rhsTeamArg.empty()) utils::Thrower("No data provided for rhs team");
 
 
   // ===========================================================================
@@ -220,7 +208,9 @@ int main(int argc, char *argv[]) {
   // == Data load
 
   Ind lhsTeam = simu::Evaluator::fromJsonFile(lhsTeamArg);
-  auto params = simu::Evaluator::scenarioFromStrings(lhsTeamArg, rhsArg);
+  auto params = simu::Evaluator::Params::fromArgv(lhsTeamArg, {rhsTeamArg},
+                                                  scenarioArg);
+  outputFolder /= params.kombatNames[0];
 
 
   // ===========================================================================
@@ -244,7 +234,7 @@ int main(int argc, char *argv[]) {
   // ===========================================================================
   // == Simulation setup
 
-  scenario.init(lhsTeam.dna, params);
+  scenario.init(params.scenarioParams(0));
 //  if (!annNeuralTags.empty() /*&& snapshots == -1 && annRender.empty()*/) {
 //    phenotype::ANN &ann = scenario.subject()->brain();
 //    simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);
@@ -261,13 +251,7 @@ int main(int argc, char *argv[]) {
   // Final preparations (for all versions)
 
   v->fitInView(simulation.bounds(), Qt::KeepAspectRatio);
-//  v->select(simulation.critters().at(scenario.subject()));
-  if (tag) {
-//    simulation.visuCritter(scenario.subject())->tag = "S";
-//    if (auto c = scenario.clone())    simulation.visuCritter(c)->tag = "A";
-//    if (auto p = scenario.predator()) simulation.visuCritter(p)->tag = "E";
-//    if (auto f = scenario.foodlet())  simulation.visuFoodlet(f)->tag = "G";
-  }
+  v->select(simulation.critters().at(scenario.subject()));
 
 //#ifndef NDEBUG
 //  std::cerr << "Forcing debug view\n";
@@ -292,8 +276,7 @@ int main(int argc, char *argv[]) {
   if (!picture.empty()) {
     bool atomic = (lhsTeam.dna.size() == 1);
 
-    std::vector<std::string> paths { lhsTeamArg };
-    if (!params.neuralEvaluation) paths.push_back(rhsArg);
+    std::vector<std::string> paths { lhsTeamArg, rhsTeamArg };
     auto teams = scenario.teams();
     for (uint i=0; i<paths.size(); i++) {
       stdfs::path obase = stdfs::path(paths[i]).replace_extension();
@@ -318,7 +301,7 @@ int main(int argc, char *argv[]) {
   // Batch snapshot mode
 
     stdfs::path savefolder = lhsTeamArg;
-    savefolder = stdfs::path(outputFolder) / params.kombatName / "screenshots";
+    savefolder = stdfs::path(outputFolder) / "screenshots";
     stdfs::create_directories(savefolder);
 
     config::Visualisation::brainDeadSelection.overrideWith(BrainDead::UNSET);
@@ -416,35 +399,29 @@ int main(int argc, char *argv[]) {
     r = 0;
     std::cerr << "Batch snapshot mode incompatible with 3D ANN Viewer\n";
 
-  } else if (trace > 0) {
-//    config::Visualisation::trace.overrideWith(trace);
+  } else if (trace >= 0) {
+    config::Visualisation::trace.overrideWith(trace);
 
-//    config::Visualisation::brainDeadSelection.overrideWith(BrainDead::UNSET);
-//    config::Visualisation::drawVision.overrideWith(0);
-//    config::Visualisation::drawAudition.overrideWith(0);
+    config::Visualisation::brainDeadSelection.overrideWith(BrainDead::UNSET);
+    config::Visualisation::drawVision.overrideWith(0);
+    config::Visualisation::drawAudition.overrideWith(0);
 
-//    stdfs::path savefolder = cGenomeArg;
-//    stdfs::path savepath = savefolder.replace_extension();
-//    savepath /= scenarioArg;
-//    if (lesions > 0) {
-//      std::ostringstream oss;
-//      oss << "_l" << lesions;
-//      savepath += oss.str();
-//    }
-//    savepath /= "ptrajectory.png";
-//    stdfs::create_directories(savepath.parent_path());
+    stdfs::path savepath = outputFolder / "ptrajectory.png";
+    stdfs::create_directories(savepath.parent_path());
 
-//    while (!simulation.finished())  simulation.step();
+    while (!simulation.finished())  simulation.step();
 
-//    simulation.render(QString::fromStdString(savepath));
-//    std::cout << "Saved to: " << savepath << "\n";
-    std::cerr << "Trace mode incompatible with NxN kombats\n";
+    simulation.render(QString::fromStdString(savepath));
+    std::cout << "Saved to: " << savepath << "\n";
 
   } else if (!annRender.empty()) {
-//    ANNViewer *av = cs->brainPanel()->annViewer;
-//    av->stopAnimation();
+    utils::Thrower<std::logic_error>("3D ANN cannot be rendered...");
 
-//    const auto doRender = [av] (QPaintDevice *d, QRectF trect) {
+//    ANNViewer *av =
+//    ANNViewer *av = cs->brainPanel()->annViewer;
+////    av->stopAnimation();
+
+//    const auto doRender = [av] (QPaintDevice *d, QRect trect) {
 //      QPainter painter (d);
 //      painter.setRenderHint(QPainter::Antialiasing, true);
 
@@ -471,20 +448,22 @@ int main(int argc, char *argv[]) {
 //                    << "\n";
 
 //      } else if (ext == "pdf") {
-//        QPrinter printer (QPrinter::HighResolution);
-//        printer.setPageSize(QPageSize(av->sceneRect().size(), QPageSize::Point));
-//        printer.setPageMargins(QMarginsF(0, 0, 0, 0));
-//        printer.setOutputFileName(qPath);
+////        QPrinter printer (QPrinter::HighResolution);
+////        printer.setPageSize(QPageSize(av->sceneRect().size(), QPageSize::Point));
+////        printer.setPageMargins(QMarginsF(0, 0, 0, 0));
+////        printer.setOutputFileName(qPath);
 
-//        doRender(&printer,
-//                 printer.pageLayout().paintRectPixels(printer.resolution()));
+////        doRender(&printer,
+////                 printer.pageLayout().paintRectPixels(printer.resolution()));
+//        std::cerr << "No pdf output for 3D ANN\n";
 //      }
 //    };
 
-//    if (annNeuralTags.empty())
-//      render(stdfs::path(cGenomeArg).replace_extension() / "ann", annRender);
+////    if (annNeuralTags.empty())
+////      render(stdfs::path(lhsTeamArg).replace_extension() / "ann", annRender);
 
-//    else {
+////    else {
+//      std::cerr << "Not ready with tagged ann rendering\n";
 //      phenotype::ANN &ann = scenario.subject()->brain();
 //      simu::IndEvaluator::applyNeuralFlags(ann, annNeuralTags);
 
@@ -507,8 +486,8 @@ int main(int argc, char *argv[]) {
 //        render(stdfs::path(annNeuralTags).parent_path() / "ann_clustered",
 //               annRender);
 //      }
-//    }
-    std::cerr << "ANN Render mode incompatible with 3D ANN Viewer\n";
+////    }
+//    std::cerr << "ANN Render mode incompatible with 3D ANN Viewer\n";
 
   } else {
   // ===========================================================================
@@ -529,8 +508,7 @@ int main(int argc, char *argv[]) {
 
     using Eval = simu::Evaluator;
     auto log = Eval::logging_getData();
-    Eval::logging_init(log, stdfs::path(outputFolder) /  params.kombatName,
-                       scenario);
+    Eval::logging_init(log, stdfs::path(outputFolder), scenario);
     QObject::connect(v, &gui::MainView::stepped,
                      [log,&scenario] {
       Eval::logging_step(log, scenario);
@@ -555,9 +533,10 @@ int main(int argc, char *argv[]) {
     SAVE(drawVision, int)
     SAVE(drawAudition, bool)
   #undef SAVE
-  }
 
-  std::cout << "Score: " << scenario.score() << "\n";
+    if (!params.flags.any())
+      std::cout << "Score: " << scenario.score() << "\n";
+  }
 
   return r;
 }

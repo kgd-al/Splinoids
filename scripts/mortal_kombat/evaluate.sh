@@ -3,9 +3,20 @@
 guiArg="--gui"
 usage(){
   echo "Usage: $0 [$guiArg] <dna> [dna|=] [...]"
-  echo "       If rhs dna is not provided it defaults to previous generation "
-  echo "        champion of the opposite population. To provide options to the "
-  echo "        underlying evaluator use filename = for rhs"
+  echo "       If rhs dna is not provided it defaults to previous generation"
+  echo "        champion(s) of the opposite population(s). To provide options"
+  echo "        to the underlying evaluator use filename = for rhs"
+}
+
+parts(){
+  readlink -m "$1" \
+  | sed 's|\(.*\)/ID\(.*\)/\([A-Z]\)/gen\(.*\)/.*.dna|\1 \2 \3 \4|'
+}
+
+fetchopponents(){
+  read base id p g <<< $(parts "$1")
+  gen="gen"$(($g - 1))
+  ls $base/ID$id/[A-Z]/$gen/mk__*_0.dna | grep -v "/$p/"
 }
 
 if [ "$1" == "$guiArg" ]
@@ -33,18 +44,17 @@ then
 fi
 if [ -z "$rhs" ]
 then
-  parts=($(readlink -m "$lhs" | sed 's|\(.*\)/\([AB]\)/gen\(.*\)/.*.dna|\1 \2 \3|'))
-#   echo "parts: ${parts[@]}"
-  base="${parts[0]}"
-  pop=$(echo "${parts[1]}" | tr "AB" "BA")
-  gen="gen"$((${parts[2]}-1))
-  rhs=$(ls $base/$pop/$gen/mk_*_0.dna)
-  if [ ! -f "$rhs" ]
+  rhs=$(fetchopponents $lhs)
+  if [ -z "$rhs" ]
   then
-    echo "Failed to find expected rhs '$rhs'"
+    echo "Failed to find opponents for '$lhs'"
     exit 2
   else
-    echo "defaulting to '$rhs' for rhs"
+    echo "defaulting to following champions:"
+    for c in $rhs
+    do
+      echo "> '$c'"
+    done
   fi
 elif [ -f "$rhs" ]
 then
@@ -69,11 +79,16 @@ output=$(dirname $lhs)/$(basename $lhs .dna)
 build=release
 [ ! -z ${BUILD+x} ] && build=$BUILD
 [ ! -z ${CMD+x} ] && set -x
+[ ! -z ${TOOL+x} ] && tool=$TOOL
 if [ -z "$gui" ]
 then
-  ./build/$build/mk-evaluator --config $config --data-folder $output \
-    --overwrite 'p' --lhs $lhs --rhs $rhs $@
+  rhsArg=$(tr " " "\n" <<< "$rhs" | sed 's/^/--opp /')
+  $tool ./build/$build/mk-evaluator --config $config --data-folder $output \
+    --overwrite 'p' --ind $lhs $rhsArg $@
 else
-  ./build/$build/mk-visualizer --config $config --data-folder $output \
-    --overwrite 'p' --lhs $lhs --rhs $rhs $@
+  for c in $rhs
+  do
+    ./build/$build/mk-visualizer --config $config --data-folder $output \
+      --overwrite 'p' --lhs $lhs --rhs $c $@
+  done
 fi

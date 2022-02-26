@@ -299,13 +299,13 @@ int main(int argc, char *argv[]) {
 
 //  if (missingArgument) {
 //    if (result.count("environment"))
-//      utils::doThrow<std::invalid_argument>("No value provided for the plant's genome");
+//      utils::Thrower("No value provided for the plant's genome");
 
 //    else if (result.count("plant"))
-//      utils::doThrow<std::invalid_argument>("No value provided for the environment's genome");
+//      utils::Thrower("No value provided for the environment's genome");
 
 //    else
-//      utils::doThrow<std::invalid_argument>(
+//      utils::Thrower(
 //        "No starting state provided. Either provide both an environment and plant genomes"
 //        " or load a previous simulation");
 //  }
@@ -388,9 +388,9 @@ int main(int argc, char *argv[]) {
   struct sigaction act = {};
   act.sa_handler = &sigint_manager;
   if (0 != sigaction(SIGINT, &act, nullptr))
-    utils::doThrow<std::logic_error>("Failed to trap SIGINT");
+    utils::Thrower<std::logic_error>("Failed to trap SIGINT");
   if (0 != sigaction(SIGTERM, &act, nullptr))
-    utils::doThrow<std::logic_error>("Failed to trap SIGTERM");
+    utils::Thrower<std::logic_error>("Failed to trap SIGTERM");
 
   // ===========================================================================
   // == EDEnS helpers
@@ -469,7 +469,7 @@ int main(int argc, char *argv[]) {
     iss >> w[0] >> w[1] >> w[2];
     for (float f: w)
       if (f < 0 || 10 < f)
-        utils::doThrow<std::invalid_argument>(
+        utils::Thrower<std::invalid_argument>(
           "Fitness weights '", fitnessWeightsArg, "' are invalid: error on ",
           f);
   }

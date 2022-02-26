@@ -63,7 +63,9 @@ int main(int argc, char *argv[]) {
   uint threads = 1;
   long seed = -1;
 
-  static constexpr uint populations = 2;
+  int gagaSavePopulations = 0;
+
+  uint populations = 2;
 
   auto id = timestamp();
 
@@ -96,12 +98,16 @@ int main(int argc, char *argv[]) {
     ("team-count", "Number of teams", cxxopts::value(popSize))
     ("generations", "Number of generations to let the evolution run for",
      cxxopts::value(generations))
-//    ("populations", "Number of concurrent populations (>1)",
-//     cxxopts::value(populations))
+    ("populations", "Number of concurrent populations (>1)",
+     cxxopts::value(populations))
     ("threads", "Number of parallel threads", cxxopts::value(threads))
     ("id", "Run identificator (used to uniquely identify the output folder, "
            "defaults to the current timestamp)",
      cxxopts::value(id))
+
+    ("save-populations",
+     "Whether to save populations after evaluation (1+) and maybe before (2)",
+     cxxopts::value(gagaSavePopulations))
     ;
 
   auto result = options.parse(argc, argv);
@@ -129,11 +135,10 @@ int main(int argc, char *argv[]) {
 
   std::string configFileAbsolute = stdfs::canonical(configFile).string();
   if (!stdfs::exists(configFile))
-    utils::doThrow<std::invalid_argument>(
-      "Failed to find Simulation.config at ", configFileAbsolute);
+    utils::Thrower("Failed to find Simulation.config at ", configFileAbsolute);
   if (!config::Simulation::readConfig(configFile))
-    utils::doThrow<std::invalid_argument>(
-      "Error while parsing config file ", configFileAbsolute, " or dependency");
+    utils::Thrower("Error while parsing config file ", configFileAbsolute,
+                   " or dependency");
 
   { // alter mutation rates for this reproduction-less experiment
     config::Simulation::verbosity.overrideWith(0);
@@ -154,9 +159,9 @@ int main(int argc, char *argv[]) {
   struct sigaction act = {};
   act.sa_handler = &sigint_manager;
   if (0 != sigaction(SIGINT, &act, nullptr))
-    utils::doThrow<std::logic_error>("Failed to trap SIGINT");
+    utils::Thrower<std::logic_error>("Failed to trap SIGINT");
   if (0 != sigaction(SIGTERM, &act, nullptr))
-    utils::doThrow<std::logic_error>("Failed to trap SIGTERM");
+    utils::Thrower<std::logic_error>("Failed to trap SIGTERM");
 
   // ===========================================================================
   // == GA setup
@@ -181,18 +186,27 @@ int main(int argc, char *argv[]) {
 
   using GA = simu::Evaluator::GA;
   struct Evolution {
+    std::string name;
     GA ga;
     GAGA::NoveltyExtension<GA> nov;
-    Ind lastChampion = Ind(Team());
-  };
-  static const auto p_name = [] (uint p) {
-    return p == 0 ? "A" : "B";
+    Evolution (void) : name("NA") {}
   };
 
-  std::array<Evolution, populations> evos;
+  std::vector<Evolution> evolutions (populations);
+  simu::Evaluator::Inds lastChampions (populations, Ind(Team()));
+
+  struct GAParameters {
+    decltype(evolutions) &evos;
+    decltype(lastChampions) &champs;
+    const uint &np;
+    const int &savePops;
+  } gaParameters {evolutions, lastChampions, populations, gagaSavePopulations};
 
   for (uint p = 0; p<populations; p++) {
-    GA &ga = evos[p].ga;
+    Evolution &evo = evolutions[p];
+    evo.name = std::string(1, 'A'+p);
+
+    GA &ga = evo.ga;
     ga.setPopSize(popSize);
     ga.setNbThreads(threads);
     ga.setMutationRate(1);
@@ -209,24 +223,39 @@ int main(int argc, char *argv[]) {
     ga.setSaveParetoFront(false);
 
     ga.disableGenerationHistory();
-    ga.disablePopulationSave();
+    if (gagaSavePopulations == 0) ga.disablePopulationSave();
 
-    ga.setSaveFolderGenerator([p, id, dataFolder] (auto) {
-      return dataFolder / p_name(p);
+    ga.setSaveFolderGenerator([&evo, dataFolder] (auto) {
+      return dataFolder / evo.name;
     });
 
-    ga.setNewGenerationFunction([&evos, &ga, p] {
-      std::cout << "\n[POP " << p_name(p) << "] New generation at "
+    ga.setNewGenerationFunction([&gaParameters, &ga, p] {
+      std::cout << "\n[POP " << gaParameters.evos[p].name
+                << "] New generation at "
                 << utils::CurrentTime{} << "\n";
 
-#ifndef CLUSTER_BUILD
       auto gen = ga.getCurrentGenerationNumber();
+#ifndef CLUSTER_BUILD
       if (gen == 0 && p == 0) symlink_as_last(ga.getSaveFolder().parent_path());
 #endif
 
-      const Ind &c = evos[1-p].lastChampion;
-      std::cout << "\tOpponent is " << p_name(1-p) << simu::Evaluator::id(c)
+      std::cout << "\tOpponent";
+      if (gaParameters.np == 2)
+            std::cout << " is: ";
+      else  std::cout << "s are:\n";
+      for (uint p_=0; p_<gaParameters.np; p_++) {
+        if (p == p_) continue;
+        const Ind &c = gaParameters.champs[p_];
+        if (gaParameters.np > 2) std::cout << "\t\t";
+        std::cout << gaParameters.evos[p_].name << simu::Evaluator::id(c)
                   << " of fitness " << c.fitnesses.at("mk") << "\n";
+      }
+
+      if (gaParameters.savePops >= 2) {
+        std::cout << "Also saving population before evaluation"
+                     " (just in case)\n";
+        ga.savePop(ga.population);
+      }
     });
 
     ga.setMutateMethod([&dice, &gidManager](Team &t) {
@@ -238,12 +267,10 @@ int main(int argc, char *argv[]) {
 //    ga.setCrossoverMethod([](const CGenome&, const CGenome&)
 //                          -> CGenome {assert(false);});
 
-    ga.setEvaluator([&eval, &evos, p] (auto &i, auto) {
-        eval(i, evos[1-p].lastChampion);
-      }, "mortal-kombat");
+    // Evaluator is set below
 
   // -- -- -- -- -- -- SPECIFIC TO THE NOVELTY EXTENSION: -- -- -- -- -- -- --
-    auto &nov = evos[p].nov;
+    auto &nov = evolutions[p].nov;
     // Distance function (compares 2 signatures). Here a simple Euclidian distance.
     auto euclidianDist = [](const auto& fpA, const auto& fpB) {
         double sum = 0;
@@ -295,8 +322,8 @@ int main(int argc, char *argv[]) {
   int success = 0;
 
   for (uint i=0; i<generations && !simu::Evaluator::aborted; i++) {
-    for (uint p = 0; p < 2; p++) {
-      auto &ga = evos[p].ga;
+    for (uint p = 0; p < populations; p++) {
+      auto &ga = evolutions[p].ga;
       auto gen = ga.getCurrentGenerationNumber();
 
       bool first = (gen == 0);
@@ -304,19 +331,29 @@ int main(int argc, char *argv[]) {
                      : ga.getLastGenElites(1).at("mk").front();
       if (first)  c.fitnesses["mk"] = NAN;
 
-      evos[p].lastChampion = c;
+      lastChampions[p] = c;
     }
 
     if (i == generations-1)
-      for (uint p = 0; p < 2; p++)
-        evos[p].nov.saveArchiveEnabled = true;
+      for (uint p = 0; p < populations; p++)
+        evolutions[p].nov.saveArchiveEnabled = true;
 
-    for (uint p = 0; p < 2; p++)
-      evos[p].ga.step();
+    for (uint p = 0; p < populations; p++) {
+      std::vector<Ind> opponents;
+      for (uint p_ = 0; p_ < populations; p_++)
+        if (p_ != p) opponents.push_back(lastChampions[p_]);
+
+      auto &ga = evolutions[p].ga;
+      ga.setEvaluator([&eval, &opponents] (auto &i, auto) {
+          eval(i, opponents);
+      }, "mortal-kombat");
+
+      ga.step();
+    }
   }
 
-  for (uint p = 0; p < 2; p++) {
-    GA &ga = evos[p].ga;
+  for (uint p = 0; p < populations; p++) {
+    GA &ga = evolutions[p].ga;
     stdfs::create_directory_symlink(
       GAGA::concat("gen", ga.getCurrentGenerationNumber()-1),
       ga.getSaveFolder() / "gen_last");

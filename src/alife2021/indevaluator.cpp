@@ -82,8 +82,7 @@ void IndEvaluator::applyNeuralFlags(phenotype::ANN &ann,
 
   std::ifstream ifs (tagsfile);
   if (!ifs)
-    utils::doThrow<std::invalid_argument>(
-      "Failed to open neural tags file '", tagsfile, "'");
+    utils::Thrower("Failed to open neural tags file '", tagsfile, "'");
 
   for (std::string line; std::getline(ifs, line); ) {
     if (line.empty() || line[0] == '/') continue;
@@ -93,8 +92,7 @@ void IndEvaluator::applyNeuralFlags(phenotype::ANN &ann,
 
     auto it = n.find(pos);
     if (it == n.end())
-      utils::doThrow<std::invalid_argument>(
-        "No neuron at position {", pos.x(), ", ", pos.y(), "}");
+      utils::Thrower("No neuron at position {", pos.x(), ", ", pos.y(), "}");
 
     iss >> (*it)->flags;
   }

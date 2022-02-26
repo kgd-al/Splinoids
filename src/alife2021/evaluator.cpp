@@ -95,7 +95,7 @@ int main(int argc, char *argv[]) {
 
 
   if (cGenomeArgs.empty())
-    utils::doThrow<std::invalid_argument>("No splinoid genomes provided");
+    utils::Thrower("No splinoid genomes provided");
   for (const auto arg: cGenomeArgs) {
     long cGenomeSeed = -2;//maybeSeed(arg);
     if (cGenomeSeed < -1) {
@@ -123,9 +123,9 @@ int main(int argc, char *argv[]) {
   struct sigaction act = {};
   act.sa_handler = &sigint_manager;
   if (0 != sigaction(SIGINT, &act, nullptr))
-    utils::doThrow<std::logic_error>("Failed to trap SIGINT");
+    utils::Thrower<std::logic_error>("Failed to trap SIGINT");
   if (0 != sigaction(SIGTERM, &act, nullptr))
-    utils::doThrow<std::logic_error>("Failed to trap SIGTERM");
+    utils::Thrower<std::logic_error>("Failed to trap SIGTERM");
 
   // ===========================================================================
   // == Core setup

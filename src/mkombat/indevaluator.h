@@ -12,14 +12,34 @@ struct Evaluator {
   using Genome = Team;//genotype::Critter;
   struct LogData;
 
-  static constexpr int FOOTPRINT_DIM =
-      4*Critter::SPLINES_COUNT+1  // Start and final healths for splines & body
-    + 2                           // Mass and moment of inertia
-    + 2;                          // Final position
-  using Footprint = std::array<float, FOOTPRINT_DIM>;
+  using Footprint = std::vector<float>;
+  static uint footprintSize (uint evaluations);
+  static std::vector<std::string> footprintFields (uint evaluations);
 
   using Ind = GAGA::NoveltyIndividual<Genome, Footprint>;
   using GA = GAGA::GA<Genome, Ind>;
+
+  using Inds = std::vector<Ind>;
+  struct Params {
+    Ind ind;
+    Inds opps;
+
+    std::vector<std::string> kombatNames, oppsId;
+    std::string scenario;
+
+    Scenario::Params::Flags flags;
+
+    Params (Ind i) : ind(i) {}
+
+    static Params fromArgv (const std::string &lhsArg,
+                            const std::vector<std::string> &rhsArgs,
+                            const std::string &scenario);
+
+    static Params fromInds (Ind &ind, const Inds &opps);
+
+    Scenario::Params scenarioParams (uint i) const;
+    std::string opponentsIds (void) const;
+  };
 
   Evaluator (void);
 
@@ -29,10 +49,10 @@ struct Evaluator {
 //                                const std::string &tagsfile);
 
   // Regular combat between individuals
-  void operator() (Ind &lhs, const Ind &rhs);
+  void operator() (Ind &ind, const Inds &opp);
 
   // Actual evaluator
-  void operator() (Ind &lhs, const Scenario::Params &params);
+  void operator() (Params &params);
 
   static LogData* logging_getData (void);
   static void logging_init (LogData *d, const stdfs::path &folder, Scenario &s);
@@ -46,10 +66,10 @@ struct Evaluator {
 
   static Ind fromJsonFile (const std::string &path);
 
-  static Scenario::Params scenarioFromStrings (const std::string &lhsArg,
-                                      const std::string &rhsArg);
+  static bool neuralEvaluation (const std::string &scenario);
   static std::string kombatName (const std::string &lhsFile,
-                                 const std::string &rhsArg);
+                                 const std::string &rhsFile,
+                                 const std::string &scenario);
 
   stdfs::path logsSavePrefix, annTagsFile;
 

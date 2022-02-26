@@ -456,13 +456,13 @@ int main(int argc, char *argv[]) {
 
 //  if (missingArgument) {
 //    if (result.count("environment"))
-//      utils::doThrow<std::invalid_argument>("No value provided for the plant's genome");
+//      utils::Thrower("No value provided for the plant's genome");
 
 //    else if (result.count("plant"))
-//      utils::doThrow<std::invalid_argument>("No value provided for the environment's genome");
+//      utils::Thrower("No value provided for the environment's genome");
 
 //    else
-//      utils::doThrow<std::invalid_argument>(
+//      utils::Thrower(
 //        "No starting state provided. Either provide both an environment and plant genomes"
 //        " or load a previous simulation");
 //  }
@@ -471,8 +471,7 @@ int main(int argc, char *argv[]) {
     configFile = "auto";
 
   if (loadSaveFile.empty())
-    utils::doThrow<std::invalid_argument>(
-      "No save file provided for evaluation!");
+    utils::Thrower("No save file provided for evaluation!");
 
   // ===========================================================================
   // == Loading

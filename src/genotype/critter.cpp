@@ -26,8 +26,7 @@ struct SplineMaker {
   auto operator() (void) {
     if (std::any_of(d.begin(), d.end(),
                     static_cast<bool(*)(float)>(std::isnan)))
-      utils::doThrow<std::invalid_argument>(
-        "Uninitialized field in spline: ", d, "!");
+      utils::Thrower("Uninitialized field in spline: ", d, "!");
     return d;
   }
 };
@@ -377,8 +376,7 @@ template <>
 struct genotype::Extractor<Ss> {
   std::string operator() (const Ss &/*ls*/, const std::string &/*field*/) {
 //    if (field.size() != 1 || !LSystem<L>::Rule::isValidNonTerminal(field[0]))
-//      utils::doThrow<std::invalid_argument>(
-//        "'", field, "' is not a valid non terminal");
+//      utils::Thrower("'", field, "' is not a valid non terminal");
 
 //    auto it = ls.rules.find(field[0]);
 //    if (it == ls.rules.end())

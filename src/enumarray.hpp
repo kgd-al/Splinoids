@@ -113,16 +113,14 @@ struct enumarray {
 
   constexpr const V& at (E i) const {
     return isValid(i) ? this->operator [](i)
-        : (utils::doThrow<std::invalid_argument>(
-          "Provided enumeration value is not a registered index"),
-          _buffer[0]);
+      : (utils::Thrower("Provided enumeration value is not a registered index"),
+        _buffer[0]);
   }
 
   constexpr V& at (E i) {
     return isValid(i) ? this->operator [](i)
-        : (utils::doThrow<std::invalid_argument>(
-          "Provided enumeration value is not a registered index"),
-          _buffer[0]);
+      : (utils::Thrower("Provided enumeration value is not a registered index"),
+        _buffer[0]);
   }
 
   constexpr iterator begin (void) noexcept {

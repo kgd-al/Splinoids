@@ -8,6 +8,13 @@ std::ostream& operator<< (std::ostream &os, const P2D &p) {
 
 P2D fromPolar(real a, real l) {
   return l * P2D(std::cos(a), std::sin(a));
+// To help debug differences between local glibc2.30+ et olympe's glibc2.17
+//  auto p = l * P2D(std::cos(a), std::sin(a));
+//  std::cerr << std::setprecision(20) << p << "\n"
+//            << "=\n"
+//            << l << " * " << P2D(std::cos(a), std::sin(a)) << "\n"
+//            << l << " * P2D(cos(" << a << "), sin(" << a << "))\n";
+//  return p;
 }
 
 P2D operator* (const P2D &p, real v) {

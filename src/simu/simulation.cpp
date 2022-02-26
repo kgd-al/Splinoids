@@ -151,15 +151,13 @@ bool Simulation::setWorkPath (const stdfs::path &path, Overwrite o) {
     if (_statsLogger.is_open()) _statsLogger.close();
     _statsLogger.open(statsPath, std::ofstream::out | std::ofstream::trunc);
     if (!_statsLogger.is_open())
-      utils::doThrow<std::invalid_argument>(
-        "Unable to open stats file ", statsPath);
+      utils::Thrower("Unable to open stats file ", statsPath);
 
     stdfs::path competPath = localFilePath("competition.dat");
     if (_competitionLogger.is_open()) _competitionLogger.close();
     _competitionLogger.open(competPath, std::ofstream::out | std::ofstream::trunc);
     if (!_competitionLogger.is_open())
-      utils::doThrow<std::invalid_argument>(
-        "Unable to open compet file ", competPath);
+      utils::Thrower("Unable to open compet file ", competPath);
   }
 
 //  using O = genotype::cgp::Outputs;
@@ -175,8 +173,8 @@ bool Simulation::setWorkPath (const stdfs::path &path, Overwrite o) {
 //    ofs.open(envPath, openMode);
 
 //    if (!ofs.is_open())
-//      utils::doThrow<std::invalid_argument>(
-//        "Unable to open voxel file ", envPath, " for ", U::getName(o));
+//      utils::Thrower("Unable to open voxel file ", envPath, " for ",
+//                      U::getName(o));
 //  }
   _printedHeader = false;
 
@@ -882,8 +880,7 @@ void Simulation::detectBudgetFluctuations(float threshold) {
 bool save (const std::string &file, const std::vector<uint8_t> &bytes) {
   std::ofstream ofs (file, std::ios::out | std::ios::binary);
   if (!ofs)
-    utils::doThrow<std::invalid_argument>(
-          "Unable to open '", file, "' for writing");
+    utils::Thrower("Unable to open '", file, "' for writing");
 
   ofs.write((char*)bytes.data(), bytes.size());
   ofs.close();
@@ -895,8 +892,7 @@ bool save (const std::string &file, const std::vector<uint8_t> &bytes) {
 bool load (const std::string &file, std::vector<uint8_t> &bytes) {
   std::ifstream ifs(file, std::ios::binary | std::ios::ate);
   if (!ifs)
-    utils::doThrow<std::invalid_argument>(
-          "Unable to open '", file, "' for reading");
+    utils::Thrower("Unable to open '", file, "' for reading");
 
   std::ifstream::pos_type pos = ifs.tellg();
 
@@ -1051,13 +1047,13 @@ void Simulation::load (const stdfs::path &file, Simulation &s,
   else if (ext == ".msgpack") j = json::from_msgpack(v);
   else if (ext == ".ubjson")  j = json::from_ubjson(v);
   else
-    utils::doThrow<std::invalid_argument>(
-      "Unkown save file type '", file, "' of extension '", ext, "'");
+    utils::Thrower("Unkown save file type '", file, "' of extension '", ext,
+                   "'");
 
 //  auto dependencies = config::Dependencies::saveState();
 //  config::Simulation::deserialize(j["config"]);
 //  if (!config::Dependencies::compareStates(dependencies, constraints))
-//    utils::doThrow<std::invalid_argument>(
+//    utils::Thrower(
 //      "Provided save has different build parameters than this one.\n"
 //      "See above for more details... (aborting)");
 

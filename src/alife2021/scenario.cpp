@@ -23,8 +23,7 @@ Scenario::Specs::fromValues(Type t, int fx, int fy, int ox, int oy) {
   case V0_CLONE:  s.clone.x = ox; s.clone.y = oy; break;
   case V0_PREDATOR: s.predator.x = ox; s.predator.y = oy; break;
   default:
-    utils::doThrow<std::invalid_argument>(
-      "Only V0 scenario use 4 coordinates (t=", t, ")");
+    utils::Thrower("Only V0 scenario use 4 coordinates (t=", t, ")");
   }
   return s;
 }
@@ -42,8 +41,7 @@ Scenario::Specs::fromValue(Type t, int y) {
   case V1_PREDATOR: s.predator.y = y; break;
   case V1_BOTH: s.predator.y = -(s.clone.y = y);  break;
   default:
-    utils::doThrow<std::invalid_argument>(
-      "Only V1 scenarios use 1 coordinate (t=", t, ")");
+    utils::Thrower("Only V1 scenarios use 1 coordinate (t=", t, ")");
   }
   return s;
 }
@@ -51,8 +49,8 @@ Scenario::Specs::fromValue(Type t, int y) {
 Scenario::Specs Scenario::Specs::fromString(const std::string &s) {
   std::ostringstream oss;
   if (s.size() < 2)
-    utils::doThrow<std::invalid_argument>(
-      "Argument '", s, "' is too small to be a scenario specification");
+    utils::Thrower("Argument '", s, "' is too small to be a scenario "
+                   "specification");
 
   Type type = ERROR;
   if (s[0] == '0' || s[0] == '1')
@@ -129,8 +127,8 @@ Scenario::Specs Scenario::Specs::fromString(const std::string &s) {
   }
 
   if (!oss.str().empty())
-    utils::doThrow<std::invalid_argument>(
-      "Failed to parse '", s, "' as a scenario specification: ", oss.str());
+    utils::Thrower("Failed to parse '", s, "' as a scenario specification: ",
+                   oss.str());
 
   return spec;
 }

@@ -280,7 +280,7 @@ struct CollisionMonitor : public b2ContactListener {
   void registerTouchEnd (Critter *c, b2Fixture *f) {
     auto it = e._critterData.find(c);
     if (it == e._critterData.end())
-      utils::doThrow<std::logic_error>(
+      utils::Thrower<std::logic_error>(
         "Removal of data for critter ", CID(c),
         " requested but none were found");
 
@@ -383,7 +383,7 @@ struct CollisionMonitor : public b2ContactListener {
 
     auto it = e._fightingEvents.find({cA,cB});
     if (it == e._fightingEvents.end())
-      utils::doThrow<std::logic_error>(
+      utils::Thrower<std::logic_error>(
         "Removal of conflict ", CID(cA), "-", CID(cB),
         " requested but none were found");
 
@@ -523,7 +523,12 @@ void Environment::step (void) {
   fightingDrawData.clear();
 #endif
 
+//  std::cerr << "\n\n## Before physics step\n";
+//  _physics.Dump();
   _physics.Step(float(dt()), V_ITER, P_ITER);
+//  std::cerr << "\n\n## After physics step\n";
+//  _physics.Dump();
+//  std::cerr << "\n\n#####################\n";
 
   if (debugFighting && !_fightingEvents.empty())
     std::cerr << ">> Processing fight events\n";

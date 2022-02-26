@@ -6,6 +6,7 @@ print(ARGC);
 if (ARGC >= 1) {
   folder=ARG1
 }
+system('clear');
 print(folder);
 
 while (1) {

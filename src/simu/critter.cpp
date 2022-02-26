@@ -1301,8 +1301,7 @@ b2Fixture* Critter::addFixture (const b2FixtureDef &def,
 
   auto pair = _b2FixturesUserData.emplace(f, data);
   if (!pair.second)
-    utils::doThrow<std::logic_error>(
-      "Unable to insert fixture ", data, " in collection");
+    utils::Thrower("Unable to insert fixture ", data, " in collection");
 
   f->SetUserData(&pair.first->second);
   return f;
@@ -1366,6 +1365,19 @@ void Critter::updateObjects(void) {
 
     // Sample spline at requested resolution and split concave quads
     const auto &d = _splinesData[i];
+//    std::cerr << "SplineData[" << i << "]:\n" << std::setprecision(20)
+//              << "\t p0" << d.p0 << "\n"
+//              << "\t p1" << d.p1 << "\n"
+//              << "\tal0" << d.al0 << "\n"
+//              << "\tar0" << d.ar0 << "\n"
+//              << "\tpl0" << d.pl0 << "\n"
+//              << "\tcl0" << d.cl0 << "\n"
+//              << "\tcl1" << d.cl1 << "\n"
+//              << "\tpr0" << d.pr0 << "\n"
+//              << "\tcr0" << d.cr0 << "\n"
+//              << "\tcr1" << d.cr1 << "\n"
+//              << "##\n";
+
     std::array<P2D, N> p;
     for (uint t=0; t<P; t++)
       p[t] = pointAt(t, d.pl0, d.cl0, d.cl1, d.p1);
@@ -1420,6 +1432,8 @@ void Critter::updateObjects(void) {
       if (!f) continue; // nullptr is returned if box2dValidPolygon returns false
 
       _b2Artifacts[k].push_back(f);
+//      f->Dump(0);
+//      std::cerr << "--\n\n";
 
       f->GetMassData(&massData);
       _masses[1+k] += massData.mass;
