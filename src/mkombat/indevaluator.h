@@ -45,8 +45,8 @@ struct Evaluator {
 
 //  void setLesionTypes (const std::string &s);
 
-//  static void applyNeuralFlags (phenotype::ANN &ann,
-//                                const std::string &tagsfile);
+  static void applyNeuralFlags (phenotype::ANN &ann,
+                                const std::string &tagsfile);
 
   // Regular combat between individuals
   void operator() (Ind &ind, const Inds &opp);

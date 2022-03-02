@@ -72,6 +72,17 @@ do
   dfolder=$(datafolder $ind $opp)
   
   ##############################################################################
+  # Final position/health
+  aggregate="$dfolder/finish_health.png"
+  if [ ! -f "$aggregate" ]
+  then
+    $(dirname $0)/evaluate.sh --gui $ind $opp --trace 0 --overwrite i
+    mv $dfolder/ptrajectory.png $dfolder/finish.png
+    renderType=Health $(dirname $0)/evaluate.sh --gui $ind $opp --trace 0 --overwrite i
+    mv $dfolder/ptrajectory.png $dfolder/finish_health.png
+  fi
+  
+  ##############################################################################
   # Health dynamics (rough strategy overview)
   healthoverview=$dfolder/health.png
   if [ -f $healthoverview ]
@@ -422,11 +433,10 @@ else
   
   ng_dat_files=$(ls $indfolder/*/$idpass/*/neurons_groups.dat)
   half=$(ls $ng_dat_files | awk 'END{print NR/2}')
-  tail -n+0 $ng_dat_files
+#   tail -n+0 $ng_dat_files
   awk -vthr=$half '
   NR==1{ 
     header=$0;
-    print "header:", header;
     next;
   }
   FNR == 1 { next; }
@@ -468,14 +478,14 @@ else
   columnprint "Generated $aggregate"
 fi
 
-# # Rendering aggregated clustering 
-# aggregate="$indfolder/ann_clustered.$ext"
-# if  [ -f "$aggregate" ]
-# then
-#   columnprint "ANN clustering '$aggregate' already generated. Skipping\n"
-# else
-#   columnprint "Generating ANN clustering: $aggregate"
-#   
+# Rendering aggregated clustering 
+aggregate="$indfolder/mann.$ext"
+if : #[ -f "$aggregate" ]
+then
+  columnprint "ANN clustering '$aggregate' already generated. Skipping\n"
+else
+  columnprint "Generating ANN clustering: $aggregate"
+  
 #   # then perform rendering (while backing up previous pictures)
 #   for t in clustered colored
 #   do
@@ -492,10 +502,12 @@ fi
 #     cp -uvf $folder/ann_$t.$ext $folder/ann_${t}_E.$ext
 #     cp -uvf $folder/.ann_$t.$ext $folder/ann_$t.$ext
 #   done
-#   
-#   columnprint "Generated $aggregate\n"
-# fi
-# echo "$aggregate" >> .generated_files
+
+  $sfolder/evaluate.sh --gui $ind $opponents --ann-render=$ext --ann-aggregate --ann-tags=$indfolder/neural_groups.ntags
+  
+  columnprint "Generated $aggregate\n"
+fi
+echo "$aggregate" >> .generated_files
 
 # #########
 # # Tagging has been done on reproductible conditions

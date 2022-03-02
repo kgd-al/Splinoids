@@ -14,6 +14,8 @@
 #include "../visu/config.h"
 #include <QPrinter>
 
+#include "kgd/eshn/gui/ann/2d/viewer.h"
+
 Q_DECLARE_METATYPE(BrainDead)
 
 //#include "config/dependencies.h"
@@ -414,80 +416,65 @@ int main(int argc, char *argv[]) {
     simulation.render(QString::fromStdString(savepath));
     std::cout << "Saved to: " << savepath << "\n";
 
-  } else if (!annRender.empty()) {
-    utils::Thrower<std::logic_error>("3D ANN cannot be rendered...");
+  } else if (!annRender.empty() && !annNeuralTags.empty()
+             && annAggregateNeurons) {
+    // Can only do color tagging for modular ANN (in xy-projected 2d)
+    using MANNViewer = kgd::es_hyperneat::gui::ann2d::Viewer;
+    MANNViewer av;
 
-//    ANNViewer *av =
-//    ANNViewer *av = cs->brainPanel()->annViewer;
-////    av->stopAnimation();
+    phenotype::ANN &ann = scenario.subject()->brain();
+    simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);
 
-//    const auto doRender = [av] (QPaintDevice *d, QRect trect) {
-//      QPainter painter (d);
-//      painter.setRenderHint(QPainter::Antialiasing, true);
+//    // Also aggregate similar inputs
+//    for (auto &p: ann.neurons()) {
+//      phenotype::Point pos = p->pos;
+//      phenotype::ANN::Neuron &n = *p;
+//      if (n.type == phenotype::ANN::Neuron::I)
+//        n.flags = (pos.x() < 0)<<1 | (pos.y() < -.75)<<2 | 1<<3;
+//    }
 
-//      QRect srect = av->mapFromScene(av->sceneRect()).boundingRect();
-//      trect.adjust(.5*(srect.height() - srect.width()), 0, 0, 0);
-//      av->render(&painter, trect, srect);
-//    };
+    phenotype::ModularANN annAgg (ann);
+    av.setGraph(annAgg);
+    av.updateCustomColors();
 
-//    const auto render =
-//      [av, doRender] (const std::string &path, const std::string &ext) {
-//      std::string fullPath = path + "." + ext;
-//      QString qPath = QString::fromStdString(fullPath);
+    const auto doRender = [&av] (QPaintDevice *d, QRect trect) {
+      QPainter painter (d);
+      painter.setRenderHint(QPainter::Antialiasing, true);
 
-//      if (ext == "png") {
-//        QImage img (500, 500, QImage::Format_RGB32);
-//        img.fill(Qt::white);
+      QRect srect = av.mapFromScene(av.sceneRect()).boundingRect();
+      trect.adjust(.5*(srect.height() - srect.width()), 0, 0, 0);
+      av.render(&painter, trect, srect);
+    };
 
-//        doRender(&img, img.rect());
+    const auto render =
+      [&av, doRender] (const std::string &path, const std::string &ext) {
+      std::string fullPath = path + "." + ext;
+      QString qPath = QString::fromStdString(fullPath);
 
-//        if (img.save(qPath))
-//          std::cout << "Rendered subject brain into " << fullPath << "\n";
-//         else
-//          std::cerr << "Failed to render subject brain into " << fullPath
-//                    << "\n";
+      if (ext == "png") {
+        QImage img (500, 500, QImage::Format_RGB32);
+        img.fill(Qt::white);
 
-//      } else if (ext == "pdf") {
-////        QPrinter printer (QPrinter::HighResolution);
-////        printer.setPageSize(QPageSize(av->sceneRect().size(), QPageSize::Point));
-////        printer.setPageMargins(QMarginsF(0, 0, 0, 0));
-////        printer.setOutputFileName(qPath);
+        doRender(&img, img.rect());
 
-////        doRender(&printer,
-////                 printer.pageLayout().paintRectPixels(printer.resolution()));
-//        std::cerr << "No pdf output for 3D ANN\n";
-//      }
-//    };
+        if (img.save(qPath))
+          std::cout << "Rendered subject brain into " << fullPath << "\n";
+         else
+          std::cerr << "Failed to render subject brain into " << fullPath
+                    << "\n";
 
-////    if (annNeuralTags.empty())
-////      render(stdfs::path(lhsTeamArg).replace_extension() / "ann", annRender);
+      } else if (ext == "pdf") {
+        QPrinter printer (QPrinter::HighResolution);
+        printer.setPageSize(QPageSize(av.sceneRect().size(), QPageSize::Point));
+        printer.setPageMargins(QMarginsF(0, 0, 0, 0));
+        printer.setOutputFileName(qPath);
 
-////    else {
-//      std::cerr << "Not ready with tagged ann rendering\n";
-//      phenotype::ANN &ann = scenario.subject()->brain();
-//      simu::IndEvaluator::applyNeuralFlags(ann, annNeuralTags);
+        doRender(&printer,
+                 printer.pageLayout().paintRectPixels(printer.resolution()));
+      }
+    };
 
-//      av->updateCustomColors();
-//      render(stdfs::path(annNeuralTags).parent_path() / "ann_colored",
-//             annRender);
-
-//      if (annAggregateNeurons) {
-//        // Also aggregate similar inputs
-//        for (auto &p: ann.neurons()) {
-//          phenotype::Point pos = p->pos;
-//          phenotype::ANN::Neuron &n = *p;
-//          if (n.type == phenotype::ANN::Neuron::I)
-//            n.flags = (pos.x() < 0)<<1 | (pos.y() < -.75)<<2 | 1<<3;
-//        }
-
-//        phenotype::ModularANN annAgg (ann);
-//        av->setGraph(annAgg);
-//        av->updateCustomColors();
-//        render(stdfs::path(annNeuralTags).parent_path() / "ann_clustered",
-//               annRender);
-//      }
-////    }
-//    std::cerr << "ANN Render mode incompatible with 3D ANN Viewer\n";
+    render(stdfs::path(annNeuralTags).parent_path() / "mann", annRender);
 
   } else {
   // ===========================================================================

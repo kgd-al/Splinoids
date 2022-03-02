@@ -24,36 +24,36 @@ Evaluator::Evaluator (void) {
 //  }
 //}
 
-//void Evaluator::applyNeuralFlags(phenotype::ANN &ann,
-//                                    const std::string &tagsfile) {
-//  auto &n = ann.neurons();
+void Evaluator::applyNeuralFlags(phenotype::ANN &ann,
+                                 const std::string &tagsfile) {
+  auto &n = ann.neurons();
 
-//  std::ifstream ifs (tagsfile);
-//  if (!ifs)
-//    utils::Thrower("Failed to open neural tags file '", tagsfile, "'");
+  std::ifstream ifs (tagsfile);
+  if (!ifs)
+    utils::Thrower("Failed to open neural tags file '", tagsfile, "'");
 
-//  for (std::string line; std::getline(ifs, line); ) {
-//    if (line.empty() || line[0] == '/') continue;
-//    std::istringstream iss (line);
-//    phenotype::Point pos;
-//    iss >> pos;
+  for (std::string line; std::getline(ifs, line); ) {
+    if (line.empty() || line[0] == '/') continue;
+    std::istringstream iss (line);
+    phenotype::Point pos;
+    iss >> pos;
 
-//    auto it = n.find(pos);
-//    if (it == n.end())
-//      utils::Thrower("No neuron at position {", pos.x(), ", ", pos.y(), "}");
+    auto it = n.find(pos);
+    if (it == n.end())
+      utils::Thrower("No neuron at position {", pos.x(), ", ", pos.y(), "}");
 
-//    iss >> (*it)->flags;
-//  }
+    iss >> (*it)->flags;
+  }
 
-//  if (config::Simulation::verbosity() > 0) {
-//    std::cout << "Neural flags:\n";
-//    for (const auto &p: n)
-//      std::cout << "\t" << std::setfill(' ') << std::setw(10) << p->pos
-//                << ":\t"
-//                << std::bitset<8*sizeof(p->flags)>(p->flags)
-//                << "\n";
-//  }
-//}
+  if (config::Simulation::verbosity() > 0) {
+    std::cout << "Neural flags:\n";
+    for (const auto &p: n)
+      std::cout << "\t" << std::setfill(' ') << std::setw(10) << p->pos
+                << ":\t"
+                << std::bitset<8*sizeof(p->flags)>(p->flags)
+                << "\n";
+  }
+}
 
 auto duration (const simu::Simulation &s) {
   static const auto &DT = config::Simulation::ticksPerSecond();
@@ -350,12 +350,13 @@ void Evaluator::operator() (Params &params) {
       footprint[f++] = t0_avg(&Critter::momentOfInertia);
     }
 
-  /// TODO Modular ANN (not implemented for 3d)
-  //  std::unique_ptr<phenotype::ModularANN> mann;
-  //  if (!logsSavePrefix.empty() && !annTagsFile.empty()) {
-  //    applyNeuralFlags(scenario.subject()->brain(), annTagsFile);
-  //    mann = std::make_unique<phenotype::ModularANN>(brain);
-  //  }
+    /// Modular ANN
+    std::unique_ptr<phenotype::ModularANN> mann;
+    if (!logsSavePrefix.empty() && !annTagsFile.empty()) {
+      auto &brain = scenario.subject()->brain();
+      applyNeuralFlags(brain, annTagsFile);
+      mann = std::make_unique<phenotype::ModularANN>(brain);
+    }
   //  scenario.applyLesions(lesion);
 
     LogData log;
@@ -368,7 +369,7 @@ void Evaluator::operator() (Params &params) {
       simulation.step();
 
   //    // Update modules values (if modular ann is used)
-  //    if (mann) for (const auto &p: mann->modules()) p.second->update();
+      if (mann) for (const auto &p: mann->modules()) p.second->update();
 
       if (!logsSavePrefix.empty()) logging_step(&log, scenario);
     }

@@ -76,19 +76,19 @@ fi
 
 output=$(dirname $lhs)/$(basename $lhs .dna)
 
-build=release
+build=build/release
 [ ! -z ${BUILD+x} ] && build=$BUILD
 [ ! -z ${CMD+x} ] && set -x
 [ ! -z ${TOOL+x} ] && tool=$TOOL
 if [ -z "$gui" ]
 then
   rhsArg=$(tr " " "\n" <<< "$rhs" | sed 's/^/--opp /')
-  $tool ./build/$build/mk-evaluator --config $config --data-folder $output \
+  $tool $build/mk-evaluator --config $config --data-folder $output \
     --overwrite 'p' --ind $lhs $rhsArg $@
 else
   for c in $rhs
   do
-    ./build/$build/mk-visualizer --config $config --data-folder $output \
+    $build/mk-visualizer --config $config --data-folder $output \
       --overwrite 'p' --lhs $lhs --rhs $c $@
   done
 fi

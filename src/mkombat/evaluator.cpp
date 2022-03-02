@@ -106,6 +106,7 @@ int main(int argc, char *argv[]) {
   std::string lesions;
 
   std::string annNeuralTags;
+  std::string annDumpFile;
 
   cxxopts::Options options("Splinoids (mk-evaluator)",
                            "Evaluation of aggressive splinoids evolved according"
@@ -135,6 +136,8 @@ int main(int argc, char *argv[]) {
 
     ("ann-aggregate", "Specify a collections of position -> tag for the ANN"
      " nodes", cxxopts::value(annNeuralTags))
+    ("ann-dump", "Dump neurons/connections to specified file",
+     cxxopts::value(annDumpFile))
     ;
 
   auto result = options.parse(argc, argv);

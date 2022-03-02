@@ -639,17 +639,24 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
   static const auto getDV = [] (auto v) { return v[0] - v[1]; };
 
   static const auto skip = [] (auto p) {
+//    std::cerr << "\t" << p.second.impulse
+//              << ", " << getDV(p.second.A.velocity)
+//              << ", " << getDV(p.second.B.velocity) << "\n";
     return p.second.impulse < CMI
-        || getDV(p.second.A.velocity) < CMV
-        || getDV(p.second.B.velocity) < CMV;
+        || (
+             getDV(p.second.A.velocity) < CMV
+          && getDV(p.second.B.velocity) < CMV
+        );
   };
 
   const CritterData &dA = _critterData.at(cA),
                     &dB = _critterData.at(cB);
 
-  bool ignoreA = dA.totalImpulsions < CMV,
-       ignoreB = dB.totalImpulsions < CMV;
+  bool ignoreA = dA.totalImpulsions < CMI,
+       ignoreB = dB.totalImpulsions < CMI;
 
+//  std::cerr << dA.totalImpulsions << ", " << dB.totalImpulsions
+//            << ", " << CMI << "\n";
   if (ignoreA && ignoreB) return;
 
   if (debugFighting > 1)

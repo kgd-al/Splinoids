@@ -1599,8 +1599,10 @@ void Critter::destroySpline(uint k) {
   collisionObjects[k].clear();
 
   uint sindex = k % SPLINES_COUNT;
-  if (!isStaticSpline(sindex)) { // also need to destroy the b2body
-    uint aindex = sindex + ARMS * (k / SPLINES_COUNT);
+  uint aindex = sindex + ARMS * (k / SPLINES_COUNT);
+  if (!isStaticSpline(sindex) && _arms[aindex]) {
+    // also need to destroy the b2body
+    //  (but check that it hasn't already been destroyed)
 //    std::cerr << __PRETTY_FUNCTION__ << " spline index to arm: "
 //              << splineIndex << " >> " << aindex << "\n";
     assert(aindex < ARTICULATIONS);

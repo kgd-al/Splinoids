@@ -62,13 +62,11 @@ do for [t in pops] {
   base=folder.'/'.t;
   system('ls -v '.base.'/gen*/mk*.dna | xargs jq -r ".stats | \"\(.neurons),\(.cxts)\"" > '.base.'/champ_stats.csv');
   plot base.'/gen_stats.csv' using 1:nrn_i+1:nrn_i+2 w filledcurves lc 2 fs transparent solid .25 notitle, \
-                          '' using 1:nrn_i w l dt 3 t columnhead, \
-              for [i=1:2] '' using 1:nrn_i+i w l lc 2 dt 2 notitle, \
+                          '' using 1:nrn_i smooth acs w l dt 3 t columnhead, \
                           '' using 1:cnx_i+1:cnx_i+2 w filledcurves axes x1y2 lc 4 fs transparent solid .25 notitle, \
-                          '' using 1:cnx_i w l axes x1y2 lc 4 dt 3 t columnhead, \
-              for [i=1:2] '' using 1:cnx_i+i w l axes x1y2 lc 4 dt 2 notitle, \
-     base.'/champ_stats.csv' using 1 w l lc 2 title 'cn', \
-                          '' using 2 w l axes x1y2 lc 4 title 'cc';
+                          '' using 1:cnx_i w l smooth acs axes x1y2 lc 4 dt 3 t columnhead, \
+     base.'/champ_stats.csv' using 1 smooth acs w l lc 2 title 'cn', \
+                          '' using 2 smooth acs w l axes x1y2 lc 4 title 'cc';
 }
 unset arrow;
 
