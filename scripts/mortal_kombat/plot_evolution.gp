@@ -55,8 +55,8 @@ unset arrow;
 unset yrange;
 
 nrn_i=columnid('neurons_avg'); cnx_i=columnid('cxts_avg');
-set ytics nomirror;
-set y2tics;
+set ytics nomirror; set yrange [0:*];
+set y2tics; set y2range [0:*];
 set arrow from graph 0, first 8 to graph 1, first 8 lc "gray" nohead;
 do for [t in pops] {
   base=folder.'/'.t;

@@ -26,6 +26,7 @@ struct Evaluator {
 
     std::vector<std::string> kombatNames, oppsId;
     std::string scenario;
+    int teamSize;
 
     Scenario::Params::Flags flags;
 
@@ -33,7 +34,8 @@ struct Evaluator {
 
     static Params fromArgv (const std::string &lhsArg,
                             const std::vector<std::string> &rhsArgs,
-                            const std::string &scenario);
+                            const std::string &scenario,
+                            int teamSize);
 
     static Params fromInds (Ind &ind, const Inds &opps);
 
@@ -61,7 +63,7 @@ struct Evaluator {
 
   static std::string id (const Ind &i) {
     return GAGA::concat(i.id.first, ":", i.id.second,
-                        ":", i.dna.members[0].id());
+                        ":", i.dna.genome.id());
   }
 
   static Ind fromJsonFile (const std::string &path);

@@ -14,11 +14,12 @@ static const P2D nanPos {NAN,NAN};
 // =============================================================================
 
 void to_json (nlohmann::json &j, const Team &t) {
-  j = t.members;
+  j = {t.size, t.genome};
 }
 
 void from_json (const nlohmann::json &j, Team &t) {
-  t.members = j.get<decltype(t.members)>();
+  t.size = j[0];
+  t.genome = j[1].get<decltype(t.genome)>();
 }
 
 Team Team::fromFile (const stdfs::path &p) {
@@ -49,11 +50,7 @@ genotype::Environment Scenario::environmentGenome (uint tSize) {
   e.maxVegetalPortion = 1;
   e.taurus = 0;
 
-  if (tSize == 1) {
-    e.width = e.height = 5;
-
-  } else
-    utils::Thrower<std::logic_error>("Non atomic teams not implemented!");
+  e.width = e.height = 5 * std::sqrt(tSize);
 
   return e;
 }
@@ -75,6 +72,7 @@ Scenario::Scenario (Simulation &simulation, uint tSize)
 void Scenario::init(const Params &params) {
   static constexpr auto E = INFINITY;
   static constexpr auto R = Critter::MAX_SIZE;
+  static constexpr auto D = 1;
 
   using F = simu::Scenario::Params::Flag;
 
@@ -84,23 +82,21 @@ void Scenario::init(const Params &params) {
 
   _simulation.init(environmentGenome(_teamsSize), {}, commonInitData);
 
-  assert(params.lhs.size() == 1);  // cannot manage teams for now
+  if (params.lhs.size != _teamsSize)
+    std::cerr << "Provided lhs team has size " << params.lhs.size
+              << " instead of" << _teamsSize << "\n";
 
-  if (params.lhs.size() != _teamsSize)
-    utils::Thrower("Provided lhs team has size ", params.lhs.size(),
-                   " instead of", _teamsSize);
-
-  if (params.rhs.size() != _teamsSize)
-    utils::Thrower("Provided rhs team has size ", params.rhs.size(),
-                   " instead of", _teamsSize);
-
-  float W = _simulation.environment().xextent(),
-        H = _simulation.environment().yextent();
+  if (params.rhs.size != _teamsSize)
+    std::cerr << "Provided rhs team has size " << params.rhs.size
+              << " instead of" << _teamsSize << "\n";
 
 //  lhs.gdata.self.gid = phylogeny::GID(0);
 
-  static const auto x = [] (int team) { return 1*R*(2*team-1); };
-  static const auto y = [] (int /*i*/) { return 0; };
+  static const auto x = [] (int team) { return D*R*(2*team-1); };
+  static const auto y = [this] (int i) {
+    if (_teamsSize == 1)  return 0.f;
+    else                  return D*R*(2*i-1);
+  };
   static const auto pin = [] (auto c) {
     c->immobile = true;
     c->body().SetType(b2_staticBody);
@@ -108,14 +104,14 @@ void Scenario::init(const Params &params) {
   };
   if (neuralEvaluation()) {
     auto subject =
-      _simulation.addCritter(params.lhs.members[0],
+      _simulation.addCritter(params.lhs.genome,
                              x(0), y(0), 0, E, .5, true);
     _teams[0].insert(subject);
     pin(subject);
 
     if (_flags.test(F::PAIN_OTHER)) {
       auto opponent =
-        _simulation.addCritter(params.rhs.members[0],
+        _simulation.addCritter(params.rhs.genome,
                                x(1), y(0), M_PI, E, .5, true);
       _teams[1].insert(opponent);
       pin(opponent);
@@ -133,7 +129,7 @@ void Scenario::init(const Params &params) {
       const Team &team = (t==0 ? params.lhs : params.rhs);
       for (uint i=0; i<_teamsSize; i++)
         _teams[t].insert(
-          _simulation.addCritter(team.members[i],
+          _simulation.addCritter(team.genome,
                                  x(t), y(i), t*M_PI, E, .5, true));
     }
 
@@ -233,7 +229,9 @@ void Scenario::postStep(void) {
     return;
   }
 
-  bool empty = _teams[0].empty() || _teams[1].empty();
+  bool casualty = (_teams[0].size() < _teamsSize)
+               || (_teams[1].size() < _teamsSize);
+
   bool awake = false;
   for (const auto &team: _teams) {
     for (const Critter *c: team) {
@@ -243,7 +241,7 @@ void Scenario::postStep(void) {
     if (awake)  break;
   }
 
-  _simulation._finished = empty || !awake || (t >= timeout);
+  _simulation._finished = casualty || !awake || (t >= timeout);
 }
 
 void Scenario::preDelCritter(Critter *c) {
@@ -268,13 +266,12 @@ void Scenario::preDelCritter(Critter *c) {
 }
 
 float Scenario::score (void) const {
-  std::array<float,2> healths;
+  std::array<double,2> healths;
   float score;
   for (uint t: {0, 1}) {
-    healths[t] = 0;
+    healths[t] = _teams[t].empty() ? 0 : 1;
     for (simu::Critter *c: _teams[t])
-      healths[t] += c->bodyHealthness();
-    if (!_teams[t].empty())  healths[t] /= _teamsSize;
+      healths[t] = std::min(healths[t], c->bodyHealthness());
   }
 
   const auto A = healths[0], B = healths[1];

@@ -212,16 +212,6 @@ if (EXP_KOMBAT)
       $<TARGET_OBJECTS:MK_OBJS>
       "src/mkombat/evaluator.cpp")
     target_link_libraries(mk-evaluator ${CORE_LIBS})
-
-    ############################################################################
-    ## Target (Team management tool: creation & extraction)
-    ############################################################################
-    add_executable(
-      mk-team-tool
-      $<TARGET_OBJECTS:SIMU_OBJS>
-      $<TARGET_OBJECTS:MK_OBJS>
-      "src/mkombat/team_tool.cpp")
-    target_link_libraries(mk-team-tool ${CORE_LIBS})
 endif()
 
 ################################################################################

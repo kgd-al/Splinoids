@@ -182,10 +182,19 @@ const std::set<std::string> Evaluator::canonicalScenarios {
 
 Evaluator::Params Evaluator::Params::fromArgv (
     const std::string &lhsArg, const std::vector<std::string> &rhsArgs,
-    const std::string &scenario) {
+    const std::string &scenario, int teamSize) {
 
   Evaluator::Params params (fromJsonFile(lhsArg));
   params.scenario = scenario;
+
+  if (teamSize == -1) {
+    teamSize = params.ind.dna.size;
+    for (Ind &i: params.opps)
+      if (teamSize != int(i.dna.size))
+        utils::Thrower("Provided genomes have different preferred team sizes."
+                       " Force one through the --team-size=S option");
+  }
+  params.teamSize = teamSize;
 
   if (neuralEvaluation(scenario)) {
     params.flags.reset();
@@ -213,6 +222,7 @@ Evaluator::Params Evaluator::Params::fromInds(Ind &ind, const Inds &opps) {
   Evaluator::Params params (ind);
   for (uint i=0; i<opps.size(); i++) params.opps.push_back(opps[i]);
   params.scenario = "mk";
+  params.teamSize = ind.dna.size;
   params.flags.reset();
   return params;
 }
@@ -321,15 +331,15 @@ void Evaluator::operator() (Params &params) {
   std::vector<float> scores (n);
   Footprint footprint (footprintSize(n));
 
+  uint f = 0;
   for (uint i=0; i<n; i++) {
     Simulation simulation;
-    Scenario scenario (simulation, ind.dna.size());
+    Scenario scenario (simulation, params.teamSize);
 
     scenario.init(params.scenarioParams(i));
 
     brainless = scenario.brainless();
 
-    uint f = 0;
     const auto t0_avg = [&scenario] (auto f, auto... args) {
       return simu::avg(scenario.teams()[0], f, args...);
     };
@@ -391,9 +401,9 @@ void Evaluator::operator() (Params &params) {
         footprint[f++] = t0_avg(&Critter::splineHealth, i, s);
     footprint[f++] = t0_avg(&Critter::x);
     footprint[f++] = t0_avg(&Critter::y);
-    assert(f == footprintSize(n));
   }
 
+  assert(f == footprintSize(n));
   ind.signature = footprint;
 
   if (n == 1) {

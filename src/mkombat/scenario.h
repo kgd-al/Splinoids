@@ -7,19 +7,16 @@ namespace simu {
 
 struct Team {
   using Genome = Simulation::CGenome;
-  std::vector<Genome> members;
+  Genome genome;
+  uint size;
 
   Team (void) {}
 
   static Team random (uint n, rng::AbstractDice &d) {
     Team t;
-    for (uint i=0; i<n; i++)
-      t.members.push_back(Genome::random(d));
+    t.genome = Genome::random(d);
+    t.size = n;
     return t;
-  }
-
-  auto size (void) const {
-    return members.size();
   }
 
   // == Gaga methods
@@ -42,14 +39,7 @@ class Scenario {
 public:
   static constexpr uint DURATION = 20; //seconds
   struct Params {
-//    std::string scenario;
-//    std::string desc;
-//    std::string kombatName;
-
     Team lhs, rhs;
-//    std::string rhsId;
-
-//    bool neuralEvaluation;
 
     enum Flag { PAIN_SELF, PAIN_OTHER, PAIN_ALLY };
     using Flags = std::bitset<3>;

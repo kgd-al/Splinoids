@@ -100,6 +100,8 @@ int main(int argc, char *argv[]) {
   std::vector<std::string> rhsTeamArgs;
   std::string scenario;
 
+  int teamSize = -1;
+
   std::string outputFolder = "tmp/mk-eval/";
   char overwrite = simu::Simulation::PURGE;
 
@@ -131,6 +133,10 @@ int main(int argc, char *argv[]) {
      cxxopts::value(rhsTeamArgs))
     ("scenario", "Scenario name for canonical evaluations",
      cxxopts::value(scenario))
+
+    ("team-size", "Force a specific team size"
+                  " (independantly from genomes' preferences)",
+     cxxopts::value(teamSize))
 
     ("lesions", "Lesion type to apply (def: {})", cxxopts::value(lesions))
 
@@ -176,7 +182,7 @@ int main(int argc, char *argv[]) {
   // == Core setup
 
   auto params = simu::Evaluator::Params::fromArgv(lhsTeamArg, rhsTeamArgs,
-                                                  scenario);
+                                                  scenario, teamSize);
   Ind &ind = params.ind;
 
   auto start = simu::Simulation::now();

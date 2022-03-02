@@ -94,7 +94,7 @@ int main(int argc, char *argv[]) {
 
     ("seed", "RNG seed for the evolution (except the GAGA part)",
      cxxopts::value(seed))
-    ("team-size", "Size of the single team", cxxopts::value(teamSize))
+    ("team-size", "Size of each teams", cxxopts::value(teamSize))
     ("team-count", "Number of teams", cxxopts::value(popSize))
     ("generations", "Number of generations to let the evolution run for",
      cxxopts::value(generations))
@@ -193,7 +193,7 @@ int main(int argc, char *argv[]) {
   };
 
   std::vector<Evolution> evolutions (populations);
-  simu::Evaluator::Inds lastChampions (populations, Ind(Team()));
+  simu::Evaluator::Inds lastChampions (populations, Ind(Team::random(0, dice)));
 
   struct GAParameters {
     decltype(evolutions) &evos;
@@ -223,7 +223,7 @@ int main(int argc, char *argv[]) {
     ga.setSaveParetoFront(false);
 
     ga.disableGenerationHistory();
-    if (gagaSavePopulations == 0) ga.disablePopulationSave();
+    if (gagaSavePopulations <= 0) ga.disablePopulationSave();
 
     ga.setSaveFolderGenerator([&evo, dataFolder] (auto) {
       return dataFolder / evo.name;
@@ -251,7 +251,8 @@ int main(int argc, char *argv[]) {
                   << " of fitness " << c.fitnesses.at("mk") << "\n";
       }
 
-      if (gaParameters.savePops >= 2) {
+      if (gaParameters.savePops >= 2 // save alot
+          || gaParameters.savePops == -1 /*keep pop before evaluation*/) {
         std::cout << "Also saving population before evaluation"
                      " (just in case)\n";
         ga.savePop(ga.population);
@@ -259,9 +260,9 @@ int main(int argc, char *argv[]) {
     });
 
     ga.setMutateMethod([&dice, &gidManager](Team &t) {
-      auto &m = *dice(t.members);
-      m.mutate(dice);
-      m.gdata.updateAfterCloning(gidManager);
+      auto &g = t.genome;
+      g.mutate(dice);
+      g.gdata.updateAfterCloning(gidManager);
     });
 
 //    ga.setCrossoverMethod([](const CGenome&, const CGenome&)
@@ -290,7 +291,7 @@ int main(int argc, char *argv[]) {
 //    if (load.empty()) {
       ga.initPopulation([teamSize, &dice, &gidManager] {
         auto t = Team::random(teamSize, dice);
-        for (auto &m: t.members)  m.gdata.setAsPrimordial(gidManager);
+        t.genome.gdata.setAsPrimordial(gidManager);
         return t;
       });
       std::cout << "Generating random population\n";
@@ -322,6 +323,7 @@ int main(int argc, char *argv[]) {
   int success = 0;
 
   for (uint i=0; i<generations && !simu::Evaluator::aborted; i++) {
+    // Update previous champions archive
     for (uint p = 0; p < populations; p++) {
       auto &ga = evolutions[p].ga;
       auto gen = ga.getCurrentGenerationNumber();
@@ -339,16 +341,24 @@ int main(int argc, char *argv[]) {
         evolutions[p].nov.saveArchiveEnabled = true;
 
     for (uint p = 0; p < populations; p++) {
-      std::vector<Ind> opponents;
+      std::vector<Ind> opponents; // Prepare competitors for each population
       for (uint p_ = 0; p_ < populations; p_++)
         if (p_ != p) opponents.push_back(lastChampions[p_]);
 
-      auto &ga = evolutions[p].ga;
+      GA &ga = evolutions[p].ga;
       ga.setEvaluator([&eval, &opponents] (auto &i, auto) {
           eval(i, opponents);
       }, "mortal-kombat");
 
       ga.step();
+
+      if (gagaSavePopulations == -1 && i > 0) {
+        stdfs::path previousPop = ga.getSaveFolder();
+        previousPop /= utils::mergeToString("gen", i-1);
+        previousPop /= utils::mergeToString("pop", i-1, ".pop");
+        std::cerr << "Removing pre-evolution cached population\n";
+        stdfs::remove(previousPop);
+      }
     }
   }
 

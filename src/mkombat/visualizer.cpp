@@ -51,6 +51,7 @@ int main(int argc, char *argv[]) {
   Verbosity verbosity = Verbosity::QUIET;
 
   std::string lhsTeamArg, rhsTeamArg, scenarioArg;
+  int teamSize = -1;
 
   int startspeed = 1;
   bool autoquit = false;
@@ -91,6 +92,9 @@ int main(int argc, char *argv[]) {
     ("rhs", "Right-hand side team", cxxopts::value(rhsTeamArg))
     ("scenario", "Scenario name for canonical evaluations",
      cxxopts::value(scenarioArg))
+    ("team-size", "Force a specific team size"
+                  " (independantly from genomes' preferences)",
+     cxxopts::value(teamSize))
 
     ("start", "Whether to start running immendiatly after initialisation"
               " (and optionally at which speed > 1)",
@@ -211,7 +215,7 @@ int main(int argc, char *argv[]) {
 
   Ind lhsTeam = simu::Evaluator::fromJsonFile(lhsTeamArg);
   auto params = simu::Evaluator::Params::fromArgv(lhsTeamArg, {rhsTeamArg},
-                                                  scenarioArg);
+                                                  scenarioArg, teamSize);
   outputFolder /= params.kombatNames[0];
 
 
@@ -221,7 +225,7 @@ int main(int argc, char *argv[]) {
   QMainWindow w;
   gui::StatsView *stats = new gui::StatsView;
   visu::GraphicSimulation simulation (w.statusBar(), stats);
-  simu::Scenario scenario (simulation, lhsTeam.dna.size());
+  simu::Scenario scenario (simulation, params.teamSize);
 
   gui::MainView *v = new gui::MainView (simulation, stats, w.menuBar());
   gui::GeneticManipulator *cs = v->characterSheet();
@@ -276,13 +280,12 @@ int main(int argc, char *argv[]) {
   int r = 242;  // return value
 
   if (!picture.empty()) {
-    bool atomic = (lhsTeam.dna.size() == 1);
-
     std::vector<std::string> paths { lhsTeamArg, rhsTeamArg };
     auto teams = scenario.teams();
     for (uint i=0; i<paths.size(); i++) {
       stdfs::path obase = stdfs::path(paths[i]).replace_extension();
       auto &t = teams[i];
+      bool atomic = (t.size() == 1);
 
       uint j=0;
       for (auto it = t.begin(); it != t.end(); ++it, j++) {
