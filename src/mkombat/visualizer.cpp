@@ -76,6 +76,7 @@ int main(int argc, char *argv[]) {
   int lesions = 0;
 
   int trace = -1;
+  bool tag = false;
 
   cxxopts::Options options("Splinoids (mk-gui-evaluation)",
                            "2D graphical simulation of simplified splinoids "
@@ -133,6 +134,10 @@ int main(int argc, char *argv[]) {
      cxxopts::value(annAggregateNeurons)->implicit_value("true"))
 
     ("lesions", "Lesion type to apply (def: 0/none)", cxxopts::value(lesions))
+
+
+    ("tags", "Tag items to facilitate reading",
+     cxxopts::value(tag)->implicit_value("true"))
     ;
 
   auto result = options.parse(argc, argv);
@@ -213,7 +218,6 @@ int main(int argc, char *argv[]) {
   // ===========================================================================
   // == Data load
 
-  Ind lhsTeam = simu::Evaluator::fromJsonFile(lhsTeamArg);
   auto params = simu::Evaluator::Params::fromArgv(lhsTeamArg, {rhsTeamArg},
                                                   scenarioArg, teamSize);
   outputFolder /= params.kombatNames[0];
@@ -258,6 +262,10 @@ int main(int argc, char *argv[]) {
 
   v->fitInView(simulation.bounds(), Qt::KeepAspectRatio);
   v->select(simulation.critters().at(scenario.subject()));
+
+  if (tag)
+    for (auto p: simulation.critters())
+      p.second->tag = QString::number(uint(p.first->id()));
 
 //#ifndef NDEBUG
 //  std::cerr << "Forcing debug view\n";

@@ -76,7 +76,7 @@ auto avg (const std::set<Critter*> &pop,
 /// TODO Log (what to log?)
 
 struct Evaluator::LogData {
-  std::ofstream lhs, rhs, adata, ndata;
+  std::ofstream lhs, rhs, adata, ndata, traj;
 };
 
 Evaluator::LogData* Evaluator::logging_getData(void) {
@@ -114,6 +114,17 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
   for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
     alog << " O" << i;
   alog << "\n";
+
+  d->traj.open(f / "trajectories.dat");
+  d->traj << "Env size: " << s.simulation().environment().xextent()
+          << " " << s.simulation().environment().yextent() << "\n\n";
+
+  static const std::string tt [] {"I", "O"};
+  for (uint t : {0,1})
+    for (uint c=0; c<s.teams()[t].size(); c++)
+      for (const auto s: {"X", "Y", "A", "H"})
+        d->traj << tt[t] << c << s << " ";
+  d->traj << "\n";
 
   if (s.neuralEvaluation()) {
     auto &nlog = d->ndata;
@@ -161,6 +172,15 @@ void Evaluator::logging_step(LogData *d, Scenario &s) {
     for (auto v: sbj->ears()) alog << v << " ";
     for (auto v: sbj->producedSound()) alog << v << " ";
     alog << "\n";
+  }
+
+  if (d->traj.is_open()) {
+    auto &traj = d->traj;
+    for (auto t: s.teams())
+      for (const simu::Critter *c: t)
+        traj << c->x() << " " << c->y() << " "
+             << c->rotation() << " " << c->bodyHealthness() << " ";
+    traj << "\n";
   }
 
   if (s.neuralEvaluation()) {
@@ -330,6 +350,8 @@ void Evaluator::operator() (Params &params) {
   const uint n = params.opps.size();
   std::vector<float> scores (n);
   Footprint footprint (footprintSize(n));
+
+  ind.stats["stime"] = 0;
 
   uint f = 0;
   for (uint i=0; i<n; i++) {

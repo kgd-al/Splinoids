@@ -460,14 +460,19 @@ void Critter::doPaint (QPainter *painter) const {
       painter->restore();
     }
 
-    float e = _critter.sizeRatio();
-    pen.setColor(Qt::black);//sexColors.value(_critter.sex()));
-    pen.setStyle(Qt::SolidLine);
-    pen.setJoinStyle(Qt::RoundJoin);
-    pen.setWidthF(.05 * e);
-    painter->setPen(pen);
-    painter->drawPolyline(
-      QPolygonF({ QPointF(0., -.1*e), QPointF(.1*e, 0.), QPointF(0.,  .1*e) }));
+    {
+      float e = _critter.sizeRatio();
+      float dx = tag.isEmpty() ? 0 : .35*e;
+      pen.setColor(Qt::black);//sexColors.value(_critter.sex()));
+      pen.setStyle(Qt::SolidLine);
+      pen.setJoinStyle(Qt::RoundJoin);
+      pen.setWidthF(.05 * e);
+      painter->setPen(pen);
+      painter->drawPolyline(
+        QPolygonF({ QPointF(dx, -.1*e),
+                    QPointF(dx+.1*e, 0.),
+                    QPointF(dx,  .1*e) }));
+    }
   painter->restore();
 
 

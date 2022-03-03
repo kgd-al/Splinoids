@@ -269,10 +269,19 @@ float Scenario::score (void) const {
   std::array<double,2> healths;
   float score;
   for (uint t: {0, 1}) {
-    healths[t] = _teams[t].empty() ? 0 : 1;
-    for (simu::Critter *c: _teams[t])
-      healths[t] = std::min(healths[t], c->bodyHealthness());
+    healths[t] = 1;
+    std::vector<double> tmp (_teamsSize, 0);
+    uint i=0;
+    for (const simu::Critter *c: _teams[t]) tmp[i++] = c->bodyHealthness();
+    for (double h: tmp) healths[t] = std::min(healths[t], h);
   }
+
+//  std::cerr << "\n###\nhealths:";
+//  for (uint t: {0,1}) {
+//    std::cerr << "\n\t";
+//    for (auto *c: _teams[t])  std::cerr << c->bodyHealthness() << "\t";
+//  }
+//  std::cerr << "\n###\n";
 
   const auto A = healths[0], B = healths[1];
   if (A == 0 && B == 0)

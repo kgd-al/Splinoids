@@ -72,6 +72,48 @@ do
   dfolder=$(datafolder $ind $opp)
   
   ##############################################################################
+  # Trajectories
+  f=$(datafolder $ind $opp)/trajectories.dat
+  o=$(datafolder $ind $opp)/trajectories.png
+  if false #[ -f "$o" ]
+  then
+    columnprint "Trajectory file '$o' already generated. Skipping"
+  else
+
+  vstyle(){
+    x=$((1+$1))
+    y=$((2+$1))
+    a=$((3+$1))
+    echo "((\$0>$2) && \
+      (int(\$0)%$2==0) ?\$$x:1/0):$y:(.01*cos(\$$a)):(.01*sin(\$$a)) with vectors lc $4 size $3,20,60 filled back fixed"
+  }
+
+  #   scenario=$(basename $(dirname $f))
+  #   score=$(getscore $scenario)
+    read ew eh < <(head -n 1 $f | cut -d ' ' -f 3-4)
+    cols=$(head -n3 $f | tail -n1 | wc -w)
+    cmd="
+      set terminal pngcairo size 840,525;
+      set output '$o';
+      set size ratio $eh/$ew;
+      set xrange [-$ew:$ew];
+      set yrange [-$eh:$eh];
+      set cblabel 'step';
+      unset key;
+      set title '$score';
+      set arrow from graph 0,.5 to graph 1,.5 lc rgb 'gray' dt 2 nohead;
+      set arrow from graph .5,0 to graph .5,1 lc rgb 'gray' dt 2 nohead;
+      set palette define (0 'red', 1 'black');
+      set cbrange [0:1];
+      color(i, v) = sprintf('0x%02x%06x', 0xFF * v, i < ($cols/2) ? 0x00FF00 : 0x0000FF);
+      plot for [i=1:$cols:4] '$f' every :::1 using i:i+1:i+3 with lines lc palette z title 'trajectory';"
+            
+  #   echo "$cmd"
+    columnprint "Plotting $f"
+    gnuplot -e "$cmd" || exit 3
+  fi
+  
+  ##############################################################################
   # Final position/health
   aggregate="$dfolder/finish_health.png"
   if [ ! -f "$aggregate" ]

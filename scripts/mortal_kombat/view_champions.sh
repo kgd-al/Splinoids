@@ -20,7 +20,7 @@ then
 fi
 
 sep(){ printf "%s\n" "----"; }
-for p in A B
+for p in A B C
 do 
   ls $folder/$p/gen[0-9]*/mk*.dna \
   | sed 's/.*gen\([0-9]*\).*mk__\(.*\)_0.dna/& \1 \2/' \
