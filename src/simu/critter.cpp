@@ -291,6 +291,7 @@ void Critter::buildBrain(void) {
       x -= Point::EPSILON;
       auto res2 = tmpXCoords.insert(x);
       assert(res2.second);
+      (void)res2;
     }
   }
 
@@ -304,7 +305,7 @@ void Critter::buildBrain(void) {
   }
 
   // Audition
-  for (int i: {-1,1}) {
+  for (float i: {-1.f,1.f}) {
     for (uint j=0; j<VOCAL_CHANNELS+1; j++) {
 #if ESHN_SUBSTRATE_DIMENSION == 2
       add(inputs, i*.5f, -.75f + .25f * j / (VOCAL_CHANNELS+1));
@@ -359,6 +360,15 @@ void Critter::buildBrain(void) {
   _brain = phenotype::ANN::build(inputs, outputs, cppn);
   _neuralOutputs = _brain.outputs();
   selectiveBrainDead.resize(_neuralOutputs.size());
+
+  if (false) {
+    auto nn = _brain.neurons().size();
+    std::cerr << CID(this) << ": " << nn << " neurons ("
+              << nn - _brain.inputsCount() - _brain.outputsCount()
+              << " hidden) & "
+              << _brain.stats().edges << " connections & depth of "
+              << _brain.stats().depth << "\n";
+  }
 }
 
 void Critter::step(Environment &env) {
@@ -576,12 +586,13 @@ void Critter::neuralStep(void) {
         v.push_back("h");
         v.push_back("p");
         for (const auto &_: _retina) {
+          (void)_;
           static const std::string c = "rgb";
           for (uint i=0; i<c.size(); i++)
             v.push_back("r" + c.substr(i, 1));
         }
-        for (const auto &_: _ears) v.push_back("e");
-        for (const auto &_: _touch) v.push_back("t");
+        for (const auto &_: _ears) (void)_, v.push_back("e");
+        for (const auto &_: _touch) (void)_, v.push_back("t");
         return v;
       }();
       std::cerr << "\tinputs:\n";
@@ -1801,17 +1812,17 @@ void Critter::saveBrain (const std::string &/*prefix*/) const {
 Critter* Critter::clone(const Critter *c, b2Body *b) {
   Critter *this_c = new Critter (c->genotype(), b);
 
-  const auto cloneFixtureData =
-      [] (Critter *newC, const Critter *oldC, b2Fixture *oldFixture) {
-    const FixtureData &d = oldC->_b2FixturesUserData.at(oldFixture);
-    const Color &c =
-      (d.type == FixtureType::BODY ? newC->currentBodyColor()
-                                   : newC->currentSplineColor(d.sindex,
-                                                              d.sside));
-    assert(false);
-    return nullptr; //FixtureData (d.type, c, d.sindex, d.sside, d.aindex);
-    /// TODO Link to correct body after clone
-  };
+//  const auto cloneFixtureData =
+//      [] (Critter *newC, const Critter *oldC, b2Fixture *oldFixture) {
+//    const FixtureData &d = oldC->_b2FixturesUserData.at(oldFixture);
+//    const Color &c =
+//      (d.type == FixtureType::BODY ? newC->currentBodyColor()
+//                                   : newC->currentSplineColor(d.sindex,
+//                                                              d.sside));
+//    assert(false);
+//    return nullptr; //FixtureData (d.type, c, d.sindex, d.sside, d.aindex);
+//    /// TODO Link to correct body after clone
+//  };
 
   assert(get(b) == &this_c->_bodyUserData);
   assert(get(&this_c->_body) == &this_c->_bodyUserData);
@@ -1834,15 +1845,15 @@ Critter* Critter::clone(const Critter *c, b2Body *b) {
 //    this_c->_b2Body->SetUserData(&pair.first->second);
   }
 
-  for (uint i=0; i<c->_b2Artifacts.size(); i++) {
-    for (b2Fixture *f: c->_b2Artifacts[i]) {
+//  for (uint i=0; i<c->_b2Artifacts.size(); i++) {
+//    for (b2Fixture *f: c->_b2Artifacts[i]) {
 //      b2Fixture *f_ = Box2DUtils::clone(f, b);
 //      this_c->_b2Artifacts[i].push_back(f_);
 //      FixtureData d_ = cloneFixtureData(this_c, c, f);
 //      auto pair = this_c->_b2FixturesUserData.emplace(f_, d_);
 //      f_->SetUserData(&pair.first->second);
-    }
-  }
+//    }
+//  }
   COPY(_masses);
 
   COPY(_retina);

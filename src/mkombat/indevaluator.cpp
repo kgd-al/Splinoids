@@ -138,13 +138,15 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
 
   {
     std::ofstream blog (f / "brain.dat");
-    const auto &b = s.subject()->brain();
+    const phenotype::ANN &b = s.subject()->brain();
     blog << "Type X Y Z Depth Flags\n";
     for (const phenotype::ANN::Neuron::ptr &p: b.neurons()) {
       blog << p->type
            << " " << p->pos.x() << " " << p->pos.y() << " " << p->pos.z()
            << " " << p->depth << " " << p->flags << "\n";
     }
+
+    b.render_gvc_graph(f / "brain.dot");
   }
 }
 

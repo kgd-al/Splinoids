@@ -35,8 +35,8 @@ long maybeSeed(const std::string& s) {
 
 int main(int argc, char *argv[]) {
   // To prevent missing linkages
-  std::cerr << config::PTree::rsetSize() << std::endl;
-//  std::cerr << phylogeny::SID::INVALID << std::endl;
+  std::cout << config::PTree::rsetSize() << std::endl;
+//  std::cout << phylogeny::SID::INVALID << std::endl;
 
   using ANNViewer = kgd::es_hyperneat::gui::ann::Viewer;
   using Ind = simu::Evaluator::Ind;
