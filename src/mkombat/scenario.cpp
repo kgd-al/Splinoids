@@ -78,17 +78,20 @@ void Scenario::init(const Params &params) {
 
   _flags = params.flags;
   _currentFlags.reset();
-  if (_flags.any()) std::cerr << "Using flags: " << _flags << "\n";
+  if (_flags.any()) {
+    std::cerr << "Using flags: " << _flags << "\n";
+    _teamsSize = 1;
+  }
 
   _simulation.init(environmentGenome(_teamsSize), {}, commonInitData);
 
   if (params.lhs.size != _teamsSize)
     std::cerr << "Provided lhs team has size " << params.lhs.size
-              << " instead of" << _teamsSize << "\n";
+              << " instead of " << _teamsSize << "\n";
 
   if (params.rhs.size != _teamsSize)
     std::cerr << "Provided rhs team has size " << params.rhs.size
-              << " instead of" << _teamsSize << "\n";
+              << " instead of " << _teamsSize << "\n";
 
 //  lhs.gdata.self.gid = phylogeny::GID(0);
 
@@ -99,10 +102,12 @@ void Scenario::init(const Params &params) {
   };
   static const auto pin = [] (auto c) {
     c->immobile = true;
+    c->paralyzed = true;
     c->body().SetType(b2_staticBody);
-    for (auto a: c->arms()) if (a) a->SetType(b2_staticBody);
+//    for (auto a: c->arms()) if (a) a->SetType(b2_kinematicBody);
   };
   if (neuralEvaluation()) {
+    config::Simulation::combatBaselineIntensity.overrideWith(0);
     auto subject =
       _simulation.addCritter(params.lhs.genome,
                              x(0), y(0), 0, E, .5, true);
@@ -117,10 +122,14 @@ void Scenario::init(const Params &params) {
       pin(opponent);
 
     } else if (_flags.test(F::PAIN_ALLY)) {
-      if (_teamsSize != 2)
-        utils::Thrower("Cannot test empathy on anything but pairs (provided "
-                       "team size is", _teamsSize, ")");
-      utils::Thrower("Empathy test not implemented");
+//      if (_teamsSize != 2)
+//        utils::Thrower("Cannot test empathy on anything but pairs (provided "
+//                       "team size is", _teamsSize, ")");
+      auto ally =
+        _simulation.addCritter(params.lhs.genome,
+                               x(1), y(0), M_PI, E, .5, true);
+      _teams[0].insert(ally);
+      pin(ally);
     }
 
 
@@ -195,7 +204,18 @@ void Scenario::init(const Params &params) {
 //  std::cout << " (" << count << " links deleted)\n";
 //}
 
-void Scenario::postEnvStep(void) {}
+void Scenario::postEnvStep(void) {
+  for (auto &t: _teams) {
+    for (const Critter *c: t) {
+      auto v = c->body().GetLinearVelocity().Length();
+      if (v > 10) {
+        _simulation._aborted = true;
+        std::cerr << CID(c) << " has improbable linear velocity of "
+                  << v << "m/s. Aborting!" << std::endl;
+      }
+    }
+  }
+}
 
 void Scenario::postStep(void) {
   static constexpr auto INJURY = .9;
@@ -205,25 +225,41 @@ void Scenario::postStep(void) {
   static const auto PERIOD = 4 * config::Simulation::ticksPerSecond();
   const auto t = _simulation.currTime().timestamp();
 
+  static const auto damage = [] (simu::Critter *c, uint step, bool allSplines) {
+    decimal h = 1 - (step % 2 == NEUTRAL_FIRST) * INJURY;
+    c->overrideBodyHealthness(h);
+    if (allSplines)
+      for (Critter::Side s: {Critter::Side::LEFT, Critter::Side::RIGHT})
+        for (uint i=0; i<Critter::SPLINES_COUNT; i++)
+          c->overrideSplineHealthness(h, i, s);
+  };
+
   if (_flags.any()) {
     const auto step = t / PERIOD;
     if (step >= 6)  _simulation._finished = true;
+
+    Critter *sbj = subject();
+
+    sbj->body().SetTransform(sbj->body().GetPosition(),
+                             std::sin(2*M_PI*t / PERIOD) * M_PI / 4);
 
     if (!((t-1) % PERIOD == 0)) return;
 
 //    std::cerr << "## Period " << step << "\n";
 
-    Critter *sbj = subject();
-
     if (_flags[Params::PAIN_SELF]) {  // Pain
-      sbj->overrideBodyHealthness(1 - (step % 2 == NEUTRAL_FIRST) * INJURY);
+      damage(sbj, step, false);
       _currentFlags.flip(Params::PAIN_SELF);
     }
 
     if (_flags[Params::PAIN_OTHER]) {  // Injured opponent
-      Critter *adv = opponent();
-      adv->overrideBodyHealthness(1 - (step % 2 == NEUTRAL_FIRST) * INJURY);
+      damage(opponent(), step, true);
       _currentFlags.flip(Params::PAIN_OTHER);
+    }
+
+    if (_flags[Params::PAIN_ALLY]) {  // Injured conspecific
+      damage(ally(), step, true);
+      _currentFlags.flip(Params::PAIN_ALLY);
     }
 
     return;
@@ -266,6 +302,8 @@ void Scenario::preDelCritter(Critter *c) {
 }
 
 float Scenario::score (void) const {
+  if (_simulation._aborted) return -4;
+
   std::array<double,2> healths;
   float score;
   for (uint t: {0, 1}) {

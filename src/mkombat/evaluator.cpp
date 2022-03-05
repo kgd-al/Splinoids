@@ -86,7 +86,7 @@ int main(int argc, char *argv[]) {
   using Ind = simu::Evaluator::Ind;
 
   // To prevent missing linkages
-  (void)config::PTree::rsetSize();
+  std::cout << config::PTree::rsetSize() << std::endl;
 
   // ===========================================================================
   // == Command line arguments parsing

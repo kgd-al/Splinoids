@@ -539,6 +539,11 @@ public:
     _currHealth[0] = h * bodyMaxHealth();
   }
 
+  void overrideSplineHealthness(decimal h, uint i, Side s) {
+    assert(0 <= h && h <= 1);
+    _currHealth[1 + splineIndex(i, s)] = h * splineMaxHealth(i, s);
+  }
+
   auto activeSpline (uint i, Side s) const {
     return splineMaxHealth(i, s) > 0;
   }

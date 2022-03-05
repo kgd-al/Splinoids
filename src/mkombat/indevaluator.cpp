@@ -146,7 +146,9 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
            << " " << p->depth << " " << p->flags << "\n";
     }
 
+#ifdef WITH_GVC
     b.render_gvc_graph(f / "brain.dot");
+#endif
   }
 }
 

@@ -83,6 +83,10 @@ public:
     return *_teams[0].begin();
   }
 
+  Critter* ally (void) {
+    return *std::next(_teams[0].begin());
+  }
+
   Critter* opponent (void) {
     return *_teams[1].begin();
   }
@@ -91,7 +95,7 @@ public:
 
 private:
   Simulation &_simulation;
-  const uint _teamsSize;
+  uint _teamsSize;
 
   std::array<std::set<simu::Critter*>, 2> _teams;
   Params::Flags _flags, _currentFlags;
