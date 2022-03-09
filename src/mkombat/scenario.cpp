@@ -249,6 +249,7 @@ void Scenario::postStep(void) {
 
     if (_flags[Params::PAIN_SELF]) {  // Pain
       damage(sbj, step, false);
+      sbj->inPain = (step % 2 != NEUTRAL_FIRST) ? -1 : INJURY;
       _currentFlags.flip(Params::PAIN_SELF);
     }
 

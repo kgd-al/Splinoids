@@ -134,6 +134,7 @@ Critter::Critter (const Genome &g, b2Body *b) : _genotype(g), _body(*b) {
   _joints.fill(nullptr);
 
   brainDead = false;
+  inPain = -1;
   immobile = mute = paralyzed = false;
 }
 
@@ -547,7 +548,7 @@ void Critter::neuralStep(void) {
 //    inputs[i++] = reproductionReadiness(reproductionType());
 //    inputs[i++] = usableEnergy() / maxUsableEnergy();
     inputs[i++] = bodyHealthness();
-    inputs[i++] = instantaneousPain();
+    inputs[i++] = inPain > -1 ? inPain : instantaneousPain();
 
     for (const auto &c: _retina) for (float v: c) inputs[i++] = v;
     for (const auto &e: _ears)  inputs[i++] = e;

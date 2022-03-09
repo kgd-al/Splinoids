@@ -105,20 +105,23 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
 
   d->adata.open(f / "acoustics.dat");
   auto &alog = d->adata;
-  for (auto s: {'L', 'R'}) {
-    alog << "I" << s << "N ";
+  for (uint i=0; i<s.teams()[0].size(); i++) {
+    std::string prefix;
+    if (s.teams()[0].size() > 1) prefix = utils::mergeToString("I", i);
+    for (auto s: {'L', 'R'}) {
+      alog << prefix << "I" << s << "N ";
+      for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
+        alog << prefix << "I" << s << i << " ";
+    }
+    alog << prefix << "ON ";
     for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
-      alog << "I" << s << i << " ";
+      alog << prefix << "O" << i << " ";
   }
-  alog << "ON";
-  for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
-    alog << " O" << i;
   alog << "\n";
 
   d->traj.open(f / "trajectories.dat");
   d->traj << "Env size: " << s.simulation().environment().xextent()
           << " " << s.simulation().environment().yextent() << "\n\n";
-
   static const std::string tt [] {"I", "O"};
   for (uint t : {0,1})
     for (uint c=0; c<s.teams()[t].size(); c++)
@@ -147,7 +150,7 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
     }
 
 #ifdef WITH_GVC
-    b.render_gvc_graph(f / "brain.dot");
+//    b.render_gvc_graph(f / "brain.dot");
 #endif
   }
 }
@@ -172,9 +175,10 @@ void Evaluator::logging_step(LogData *d, Scenario &s) {
 
   if (d->adata.is_open()) {
     auto &alog = d->adata;
-    const auto &sbj = s.subject();
-    for (auto v: sbj->ears()) alog << v << " ";
-    for (auto v: sbj->producedSound()) alog << v << " ";
+    for (const simu::Critter *c: s.teams()[0]) {
+      for (auto v: c->ears()) alog << v << " ";
+      for (auto v: c->producedSound()) alog << v << " ";
+    }
     alog << "\n";
   }
 
@@ -445,6 +449,47 @@ void Evaluator::operator() (Params &params) {
   if (n > 1) {
     ind.stats["stime"] = float(ind.stats["stime"]) / n;
   }
+}
+
+void Evaluator::dumpStats(const stdfs::path &dna,
+                          const stdfs::path &folder) {
+  Simulation simulation;
+  Scenario scenario (simulation, 1);
+  Team dna_ = fromJsonFile(dna).dna;
+  scenario.init({dna_, dna_, Scenario::Params::PAIN_SELF});
+
+  const simu::Critter *c = scenario.subject();
+  std::ofstream ofs (folder / "stats");
+  ofs << "bdy-mass: " << c->mass() << "\n";
+
+  float am = 0;
+  for (const b2Body *a: c->arms()) am += a->GetMass();
+  ofs << "arm-mass: " << am << "\n";
+
+  const genotype::Critter &g = c->genotype();
+  static const auto deg = [] (auto rad) { return 180 * rad / M_PI; };
+  ofs << "ang-arm0: " << deg(g.splines[0].data[genotype::Spline::SA]) << "\n";
+  ofs << "ang-arm1: " << deg(g.splines[1].data[genotype::Spline::SA]) << "\n";
+  ofs << "ang-spl2: " << deg(g.splines[2].data[genotype::Spline::SA]) << "\n";
+  ofs << "ang-spl3: " << deg(g.splines[3].data[genotype::Spline::SA]) << "\n";
+
+  ofs << "viw-angl: " << deg(g.vision.angleBody) << "\n";
+  ofs << "viw-prec: " << g.vision.precision << "\n";
+  ofs << "viw-widt: " << deg(g.vision.width) << "\n";
+
+  ofs << "clk-uppr: " << g.maxClockSpeed << "\n";
+  ofs << "clk-lowr: " << g.minClockSpeed << "\n";
+
+  const phenotype::ANN &b = c->brain();
+  auto nn = b.neurons().size();
+  ofs << "ann-size: " << nn << "\n";
+  ofs << "ann-hidn: " << nn - b.inputsCount() - b.outputsCount() << "\n";
+
+  const auto &st = b.stats();
+  ofs << "ann-dpth: " << st.depth << "\n";
+  ofs << "ann-cnxt: " << st.edges << "\n";
+  ofs << "ann-lngt: " << st.axons << "\n";
+
 }
 
 Evaluator::Ind Evaluator::fromJsonFile(const std::string &path) {

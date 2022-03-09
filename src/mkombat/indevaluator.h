@@ -73,6 +73,8 @@ struct Evaluator {
                                  const std::string &rhsFile,
                                  const std::string &scenario);
 
+  static void dumpStats (const stdfs::path &dna, const stdfs::path &folder);
+
   stdfs::path logsSavePrefix, annTagsFile;
 
 //  std::vector<int> lesions;

@@ -108,7 +108,8 @@ int main(int argc, char *argv[]) {
   std::string lesions;
 
   std::string annNeuralTags;
-  std::string annDumpFile;
+
+  bool stats = false;
 
   cxxopts::Options options("Splinoids (mk-evaluator)",
                            "Evaluation of aggressive splinoids evolved according"
@@ -142,8 +143,9 @@ int main(int argc, char *argv[]) {
 
     ("ann-aggregate", "Specify a collections of position -> tag for the ANN"
      " nodes", cxxopts::value(annNeuralTags))
-    ("ann-dump", "Dump neurons/connections to specified file",
-     cxxopts::value(annDumpFile))
+
+    ("stats", "Dump a bunch of statistics to file",
+     cxxopts::value(stats)->implicit_value("true"))
     ;
 
   auto result = options.parse(argc, argv);
@@ -166,7 +168,8 @@ int main(int argc, char *argv[]) {
   if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
 
   if (lhsTeamArg.empty()) utils::Thrower("No data provided for lhs team");
-  if (rhsTeamArgs.empty()) utils::Thrower("No data provided for rhs team(s)");
+  if (rhsTeamArgs.empty() && !stats)
+    utils::Thrower("No data provided for rhs team(s)");
 
   // ===========================================================================
   // == SIGINT management
@@ -180,6 +183,11 @@ int main(int argc, char *argv[]) {
 
   // ===========================================================================
   // == Core setup
+
+  if (stats) {
+    simu::Evaluator::dumpStats(lhsTeamArg, outputFolder);
+    return 0;
+  }
 
   auto params = simu::Evaluator::Params::fromArgv(lhsTeamArg, rhsTeamArgs,
                                                   scenario, teamSize);
