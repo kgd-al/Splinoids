@@ -82,11 +82,12 @@ bool diffStatsArray (const T &prev, const T &curr, const U &fields) {
   return allOk;
 }
 
+auto &apoget_force_link = config::PTree::rsetSize;
 int main(int argc, char *argv[]) {
   using Ind = simu::Evaluator::Ind;
 
   // To prevent missing linkages
-  std::cout << config::PTree::rsetSize() << std::endl;
+//  std::cout << config::PTree::rsetSize() << std::endl;
 
   // ===========================================================================
   // == Command line arguments parsing

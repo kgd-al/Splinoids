@@ -13,7 +13,7 @@ fi
 
 name=fight.matrix
 [ ! -z "$2" ] && name=$2
-base=results/mortal_kombat/$name
+base=../alife2022_results/$name
 
 nevals=$(($nfiles * $nfiles))
 
@@ -51,7 +51,7 @@ then
 fi
 
 matrix=$base.dat
-if : #[ ! -f $matrix ]
+if [ ! -f $matrix ]
 then
   awk '
   {d[$1][$2]=($3 < -2 ? 0 : $3);}
@@ -71,9 +71,11 @@ fi
 ext=png
 img=$base.png
 tmpSumRows=$base.tmpSumRows
-awk 'NR>1{s=0;for(i=2;i<=NF;i++)s+=$i; print NR, s/(NF-1);}' $matrix > $tmpSumRows
+awk 'NR>1{s=0;for(i=2;i<=NF;i++)s+=$i; print $1, s/(NF-1);}' $matrix > $tmpSumRows
 tmpSumCols=$base.tmpSumCols
-awk 'NR>1{for(i=2;i<=NF;i++)d[i]+=$i;}END{for (i in d) print i, d[i]/(NR-1);}' $matrix > $tmpSumCols
+awk 'NR==1{for(i=2;i<=NF;i++)h[i]=$i}
+     NR>1{for(i=2;i<=NF;i++)d[i]+=$i;}
+     END{for (i in d) print i, d[i]/(NR-1);}' $matrix > $tmpSumCols
 gnuplot -e "
     set output '$img';
     set term pngcairo size 1500,1500;
@@ -92,26 +94,33 @@ gnuplot -e "
     
     set style fill solid .25 border -1;
     
+    set arrow 1 from graph .5, 0 to graph .5, 1 nohead dt 2 lc 'gray' front;
+    set arrow 2 from graph 0, .5 to graph 1, .5 nohead dt 2 lc 'gray' front; 
+    
     set margins 0, 0, M, M;
     unset xtics; unset ytics;
     unset colorbox;
-    set size MAIN, MAIN; set origin 1-S, M;
+    set yrange [*:*] reverse;
+    set size MAIN, MAIN; set origin M, M;
     plot '$matrix' matrix columnheader rowheader with image,
                 '' using (\$0-.5):(\$0-.5) with line lc -1 dt 3;
     
     set palette defined (-1 'red', 0 'red', 0 'green', 1 'green');
     
-    set x2tics; set y2tics;
-    set size MAIN, SCND; set origin 1-S, S;
+    set x2tics; set ytics;
+    set size MAIN, SCND; set origin M, S;
     set x2range [-.5:$nfiles-.5];
+    unset yrange;
+    set cbrange [-1:1];
     plot '$tmpSumCols' using 0:2:(1):2 with boxes axes x2y1 lc palette;
     unset xrange;
     
     unset x2tics; set xtics;
-    unset y2tics; set ytics;
-    set yrange [0:$nfiles-.5];
+    unset ytics; set y2tics;
+    set y2range [$nfiles-.5:0];
+    set yrange [*:*] reverse;
     w=1; hw = .5*w;
-    set size SCND, MAIN; set origin M, M;
+    set size SCND, MAIN; set origin S, M;
     plot '$tmpSumRows' using 2:0:(0):2:(\$0-hw):(\$0+hw):2 with boxxyerror lc palette;
   "
 echo "Generated '$img'"

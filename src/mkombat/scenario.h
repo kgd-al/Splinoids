@@ -41,9 +41,13 @@ public:
   struct Params {
     Team lhs, rhs;
 
-    enum Flag { PAIN_SELF, PAIN_OTHER, PAIN_ALLY };
-    using Flags = std::bitset<3>;
+    enum Flag {
+      PAIN_INST, PAIN_ABSL, PAIN_VIEW,
+      WITH_ALLY, WITH_OTHR
+    };
+    using Flags = std::bitset<5>;
     Flags flags;
+    bool neutralFirst;
   };
   using DeathCause = Simulation::Autopsies::Death;
   static constexpr DeathCause UNKNOWN_DEATH_CAUSE = DeathCause(-1);
@@ -72,7 +76,11 @@ public:
   }
 
   bool neuralEvaluation (void) const {
-    return _flags.any();
+    return _params.flags.any();
+  }
+
+  bool hasFlag (Params::Flag f) {
+    return _params.flags.test(f);
   }
 
   const auto& currentFlags (void) const {
@@ -83,12 +91,12 @@ public:
     return *_teams[0].begin();
   }
 
-  Critter* ally (void) {
-    return *std::next(_teams[0].begin());
-  }
-
   Critter* opponent (void) {
     return *_teams[1].begin();
+  }
+
+  Critter* ally (void) {
+    return opponent();
   }
 
   static const Simulation::InitData commonInitData;
@@ -98,9 +106,13 @@ private:
   uint _teamsSize;
 
   std::array<std::set<simu::Critter*>, 2> _teams;
-  Params::Flags _flags, _currentFlags;
+  Params _params;
+  Params::Flags _currentFlags;
 
   std::array<std::array<uint, 2>, 2> _autopsies;
+
+  simu::Critter* makeCritter (uint team, uint id,
+                              const genotype::Critter &genome);
 
   static genotype::Environment environmentGenome (uint tSize);
 };

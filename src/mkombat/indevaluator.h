@@ -29,6 +29,7 @@ struct Evaluator {
     int teamSize;
 
     Scenario::Params::Flags flags;
+    bool neutralFirst;
 
     Params (Ind i) : ind(i) {}
 

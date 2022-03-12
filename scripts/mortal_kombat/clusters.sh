@@ -7,7 +7,9 @@ then
   exit 1
 fi
 
+name=clusters
 o=$folder/clusters.dat
+o2=$(dirname $o)/.$(basename $o)
 awk '
   NR == 1 {
     for (i=2; i<=NF; i++)
@@ -16,7 +18,7 @@ awk '
   FNR == 1{
     f=FILENAME;
     split(FILENAME, tokens, "/");
-    f=substr(tokens[4], 3)"/"tokens[5];
+    f=substr(tokens[5], 3)"/"tokens[6];
     t[f] = 0;
     for (i in headers) d[f][i] = 0;
     next;
@@ -32,23 +34,71 @@ awk '
     PROCINFO["sorted_in"]="@ind_str_asc";
     for (f in t) {
       printf "%s %d", f, t[f];
-      for (i in headers)
-        printf " %d", d[f][i];
+      total = t[f];
+      if (total == 0) total = 1;
+      for (i in headers)  printf " %d", d[f][i];
       printf "\n"
     }
   }
   ' $1/ID*/[A-Z]/gen1999/mk*/neural_groups.dat > $o
   
-o2=$(dirname $o)/.$(basename $o)
-head -n 1 $o > $o2
-tail -n +2 $o | sort -k2,2gr >> $o2
+if [ ! -z ${NO_PINKY} ]
+then
+  name="${name}_nopinky"
+  echo "Removing pinkies"
+  awk '
+  NR==1;
+  NR>1{
+    split($1, ids, "/");
+    d[ids[1]][ids[2]] = $0
+    t[ids[1]][ids[2]] = $2
+  } END {
+    for (r in t) {
+      max = 0
+      idmax = -1
+      for (p in t[r]) {
+        if (t[r][p] > max) {
+          max = t[r][p]
+          idmax = p
+        }
+      }
+      print d[r][idmax]
+    }
+  }' $o > $o2
+  mv -v $o2 $o
+fi
+  
+if [ -f "$2" ]
+then
+  join $2 $o
+  gnuplot -e "
+    cols=system('head -n 1 $o');
+    do for [i=2:words(cols)] {
+      set output '$folder/$name.'.word(cols, i).'.scatter.png';
+      set term pngcairo size 1680, 1050;
+      
+      set title word(cols, i);
+      plot '<join --nocheck-order $2 $o' using 2:i+1 notitle;
+    };
+  "
+
+  name="${name}_fsort"
+  echo "Sorting by '$2'"
+  awk 'FNR==NR{row[$1]=NR;next}{print row[$1], $0}' <(sort -k2,2gr $2) $o \
+  | sort -k1,1g | cut -d ' ' -f2- > $o2
+else
+  echo "Sorting by network size"
+  head -n 1 $o > $o2
+  tail -n +2 $o | sort -k2,2gr >> $o2
+fi
 mv -v $o2 $o
 column -t $o
- 
+
+img="$folder/$name.png"
 cols=$(head -n 1 $o)
 echo "columns:" $cols
 gnuplot -e "
-  set output '$folder/clusters.png';
+  set output '$img';
   set term pngcairo size 1680,1050;
   set style fill solid .5;
   
@@ -73,4 +123,4 @@ gnuplot -e "
   };
   
   unset multiplot;"
-  
+echo "Generated '$img'"

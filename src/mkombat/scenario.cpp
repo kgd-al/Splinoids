@@ -2,15 +2,6 @@
 
 namespace simu {
 
-static constexpr auto R = Critter::MAX_SIZE * Critter::RADIUS;
-static constexpr float fPI = M_PI;
-static constexpr float TARGET_ENERGY = .90;
-
-static constexpr bool debugAI = false;
-
-static const P2D nanPos {NAN,NAN};
-
-
 // =============================================================================
 
 void to_json (nlohmann::json &j, const Team &t) {
@@ -69,21 +60,51 @@ Scenario::Scenario (Simulation &simulation, uint tSize)
   });
 }
 
-void Scenario::init(const Params &params) {
+simu::Critter* Scenario::makeCritter (uint team, uint id,
+                                      const genotype::Critter &genome) {
+
   static constexpr auto E = INFINITY;
   static constexpr auto R = Critter::MAX_SIZE;
   static constexpr auto D = 1;
 
-  using F = simu::Scenario::Params::Flag;
+  static const auto x = [] (int team) { return D*R*(2*team-1); };
+  static const auto y = [] (int i, int teamSize) {
+    if (teamSize == 1)  return 0.f;
+    else                return D*R*(2*i-1);
+  };
+  static const auto pin = [] (auto c, bool arms = true) {
+    c->immobile = true;
+    c->paralyzed = true;
+    c->body().SetType(b2_staticBody);
+    if (arms) for (auto a: c->arms()) if (a) a->SetType(b2_kinematicBody);
+  };
 
-  _flags = params.flags;
-  _currentFlags.reset();
-  if (_flags.any()) {
-    std::cerr << "Using flags: " << _flags << "\n";
+  auto c = _simulation.addCritter(genome,
+                                  x(team), y(id, _teamsSize),
+                                  team*M_PI, E, .5, true);
+  _teams[team].insert(c);
+
+  if (neuralEvaluation()) pin(c, team != 0);
+
+  return c;
+}
+
+void Scenario::init(const Params &params) {
+  _params = params;
+
+  // Will be flipped at the end of the first step
+  if (!params.neutralFirst) _currentFlags.reset();
+  else                      _currentFlags = params.flags;
+
+  if (neuralEvaluation()) {
+    std::cout << "Using flags: " << params.flags << "\n";
     _teamsSize = 1;
   }
 
   _simulation.init(environmentGenome(_teamsSize), {}, commonInitData);
+
+  // Deactivate energy monitoring
+  if (neuralEvaluation()) _simulation._systemExpectedEnergy = -1;
 
   if (params.lhs.size != _teamsSize)
     std::cerr << "Provided lhs team has size " << params.lhs.size
@@ -93,57 +114,21 @@ void Scenario::init(const Params &params) {
     std::cerr << "Provided rhs team has size " << params.rhs.size
               << " instead of " << _teamsSize << "\n";
 
-//  lhs.gdata.self.gid = phylogeny::GID(0);
-
-  static const auto x = [] (int team) { return D*R*(2*team-1); };
-  static const auto y = [this] (int i) {
-    if (_teamsSize == 1)  return 0.f;
-    else                  return D*R*(2*i-1);
-  };
-  static const auto pin = [] (auto c) {
-    c->immobile = true;
-    c->paralyzed = true;
-    c->body().SetType(b2_staticBody);
-//    for (auto a: c->arms()) if (a) a->SetType(b2_kinematicBody);
-  };
   if (neuralEvaluation()) {
     config::Simulation::combatBaselineIntensity.overrideWith(0);
-    auto subject =
-      _simulation.addCritter(params.lhs.genome,
-                             x(0), y(0), 0, E, .5, true);
-    _teams[0].insert(subject);
-    pin(subject);
-
-    if (_flags.test(F::PAIN_OTHER)) {
-      auto opponent =
-        _simulation.addCritter(params.rhs.genome,
-                               x(1), y(0), M_PI, E, .5, true);
-      _teams[1].insert(opponent);
-      pin(opponent);
-
-    } else if (_flags.test(F::PAIN_ALLY)) {
-//      if (_teamsSize != 2)
-//        utils::Thrower("Cannot test empathy on anything but pairs (provided "
-//                       "team size is", _teamsSize, ")");
-      auto ally =
-        _simulation.addCritter(params.lhs.genome,
-                               x(1), y(0), M_PI, E, .5, true);
-      _teams[0].insert(ally);
-      pin(ally);
+    makeCritter(0, 0, params.lhs.genome);
+    if (!params.neutralFirst) {
+      if (hasFlag(Params::WITH_ALLY)) makeCritter(1, 0, _params.lhs.genome);
+      if (hasFlag(Params::WITH_OTHR)) makeCritter(1, 0, _params.rhs.genome);
     }
 
-
-  } else
+  } else {
     for (int t = 0; t < 2; t++) {
       const Team &team = (t==0 ? params.lhs : params.rhs);
-      for (uint i=0; i<_teamsSize; i++)
-        _teams[t].insert(
-          _simulation.addCritter(team.genome,
-                                 x(t), y(i), t*M_PI, E, .5, true));
+      for (uint i=0; i<_teamsSize; i++) makeCritter(t, i, team.genome);
     }
+  }
 
-  assert(_simulation.critters().size()
-         == (1+(!params.flags.test(F::PAIN_SELF)))*_teamsSize);
   std::set<phylogeny::GID> gids;
   for (auto &t: _teams) {
     for (auto c: t) {
@@ -219,14 +204,13 @@ void Scenario::postEnvStep(void) {
 
 void Scenario::postStep(void) {
   static constexpr auto INJURY = .9;
-  static constexpr auto NEUTRAL_FIRST = false;
 
   static const auto timeout = DURATION*config::Simulation::ticksPerSecond();
   static const auto PERIOD = 4 * config::Simulation::ticksPerSecond();
   const auto t = _simulation.currTime().timestamp();
 
-  static const auto damage = [] (simu::Critter *c, uint step, bool allSplines) {
-    decimal h = 1 - (step % 2 == NEUTRAL_FIRST) * INJURY;
+  static const auto damage = [] (simu::Critter *c, bool damage, bool allSplines) {
+    decimal h = 1 - damage * INJURY;
     c->overrideBodyHealthness(h);
     if (allSplines)
       for (Critter::Side s: {Critter::Side::LEFT, Critter::Side::RIGHT})
@@ -234,7 +218,7 @@ void Scenario::postStep(void) {
           c->overrideSplineHealthness(h, i, s);
   };
 
-  if (_flags.any()) {
+  if (neuralEvaluation()) {
     const auto step = t / PERIOD;
     if (step >= 6)  _simulation._finished = true;
 
@@ -246,22 +230,39 @@ void Scenario::postStep(void) {
     if (!((t-1) % PERIOD == 0)) return;
 
 //    std::cerr << "## Period " << step << "\n";
+    // Maybe create stuff
+    bool neutral = (step%2 != _params.neutralFirst);
+    if (neutral) {  // Clean previous
+      if (!_teams[1].empty()) {
+        for (auto &c: _teams[1])  _simulation.delCritter(c);
+        _teams[1].clear();
+      }
 
-    if (_flags[Params::PAIN_SELF]) {  // Pain
-      damage(sbj, step, false);
-      sbj->inPain = (step % 2 != NEUTRAL_FIRST) ? -1 : INJURY;
-      _currentFlags.flip(Params::PAIN_SELF);
+    } else if (step > 0) {
+      if (hasFlag(Params::WITH_ALLY)) makeCritter(1, 0, _params.lhs.genome);
+      if (hasFlag(Params::WITH_OTHR)) makeCritter(1, 0, _params.rhs.genome);
     }
 
-    if (_flags[Params::PAIN_OTHER]) {  // Injured opponent
-      damage(opponent(), step, true);
-      _currentFlags.flip(Params::PAIN_OTHER);
+    // Apply damages
+    if (hasFlag(Params::PAIN_ABSL)) {
+      damage(sbj, !neutral, false);
+      _currentFlags.flip(Params::PAIN_ABSL);
     }
 
-    if (_flags[Params::PAIN_ALLY]) {  // Injured conspecific
-      damage(ally(), step, true);
-      _currentFlags.flip(Params::PAIN_ALLY);
+    if (hasFlag(Params::PAIN_INST)) {
+      sbj->inPain = neutral ? -1 : INJURY;
+      _currentFlags.flip(Params::PAIN_INST);
     }
+
+    if (!neutral && hasFlag(Params::PAIN_VIEW)) {
+      if (hasFlag(Params::WITH_OTHR)) damage(opponent(), !neutral, true);
+      if (hasFlag(Params::WITH_ALLY)) damage(ally(), !neutral, true);
+    }
+
+    // manage remaining flags
+    if (hasFlag(Params::PAIN_VIEW)) _currentFlags.flip(Params::PAIN_VIEW);
+    if (hasFlag(Params::WITH_ALLY)) _currentFlags.flip(Params::WITH_ALLY);
+    if (hasFlag(Params::WITH_OTHR)) _currentFlags.flip(Params::WITH_OTHR);
 
     return;
   }

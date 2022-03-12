@@ -239,7 +239,7 @@ public:
 
   bool brainDead; // TODO for external control
   std::vector<bool> selectiveBrainDead; // deactivate specific neural outputs
-  int inPain;  // force inputs
+  float inPain;  // force inputs
   bool immobile, mute, paralyzed; // prevent actions
 
   uint userIndex;  // To monitor source population

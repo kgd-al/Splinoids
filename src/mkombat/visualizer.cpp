@@ -33,11 +33,10 @@ long maybeSeed(const std::string& s) {
   return p? l : -2;
 }
 
-int main(int argc, char *argv[]) {
-  // To prevent missing linkages
-  std::cout << config::PTree::rsetSize() << std::endl;
-//  std::cout << phylogeny::SID::INVALID << std::endl;
+// To prevent missing linkages
+auto &apoget_force_link = config::PTree::rsetSize;
 
+int main(int argc, char *argv[]) {
   using ANNViewer = kgd::es_hyperneat::gui::ann::Viewer;
   using Ind = simu::Evaluator::Ind;
   using utils::operator<<;
@@ -354,14 +353,6 @@ int main(int argc, char *argv[]) {
         ANNViewer *av = cs->brainPanel()->annViewer;
         av->updateCustomColors();
 
-        // Also aggregate similar inputs
-        for (auto &p: ann.neurons()) {
-          phenotype::Point pos = p->pos;
-          phenotype::ANN::Neuron &n = *p;
-          if (n.type == phenotype::ANN::Neuron::I)
-            n.flags = (pos.x() < 0)<<1 | (pos.y() < -.75)<<2 | 1<<3;
-        }
-
         mann.reset(new phenotype::ModularANN(ann));
         auto mav = new ANNViewer;
         mav->setGraph(*mann);
@@ -436,14 +427,6 @@ int main(int argc, char *argv[]) {
     phenotype::ANN &ann = scenario.subject()->brain();
     simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);
 
-//    // Also aggregate similar inputs
-//    for (auto &p: ann.neurons()) {
-//      phenotype::Point pos = p->pos;
-//      phenotype::ANN::Neuron &n = *p;
-//      if (n.type == phenotype::ANN::Neuron::I)
-//        n.flags = (pos.x() < 0)<<1 | (pos.y() < -.75)<<2 | 1<<3;
-//    }
-
     phenotype::ModularANN annAgg (ann);
     av.setGraph(annAgg);
     av.updateCustomColors();
@@ -486,6 +469,7 @@ int main(int argc, char *argv[]) {
     };
 
     render(stdfs::path(annNeuralTags).parent_path() / "mann", annRender);
+    r = 0;
 
   } else {
   // ===========================================================================

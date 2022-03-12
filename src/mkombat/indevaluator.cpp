@@ -45,6 +45,39 @@ void Evaluator::applyNeuralFlags(phenotype::ANN &ann,
     iss >> (*it)->flags;
   }
 
+  // Also aggregate similar inputs/outputs
+  for (auto &p: ann.neurons()) {
+    using P = phenotype::Point;
+    phenotype::ANN::Neuron &n = *p;
+    P pos = n.pos;
+    auto &f = n.flags;
+
+    if (n.type == phenotype::ANN::Neuron::I) {
+      if (pos == P{0.f, -1.f, -.5f} || pos == P{0.f, -1.f, -1.f})
+        f = 1<<10;  // health
+      else if (pos.z() <= -1/3.) {
+        f = 1<<11;  // audition
+        if (pos.x() > 0)  f |= 1<<9;  // right
+      } else if (pos.z() >= 1/3.) {
+        f = 1<<12;  // vision
+        if (pos.x() > 0)  f |= 1<<9;  // right
+      } else {
+        f = 1<<13;  // touch
+        if (pos.x() > 0)  f |= 1<<9;  // right
+      }
+      if (f) f |= 1<<8; // input
+
+    } else if (n.type == phenotype::ANN::Neuron::O) {
+      if (pos.z() >= .5)
+        f = 1 << 18;  // Voice
+      else if (pos.z() == -.5f) {
+        f = 1<<19;    // arms
+        if (pos.x() > 0) f |= 1<<17;  // right
+      }
+      if (f) f |= 1<<16; // output
+    }
+  }
+
   if (config::Simulation::verbosity() > 0) {
     std::cout << "Neural flags:\n";
     for (const auto &p: n)
@@ -76,7 +109,7 @@ auto avg (const std::set<Critter*> &pop,
 /// TODO Log (what to log?)
 
 struct Evaluator::LogData {
-  std::ofstream lhs, rhs, adata, ndata, traj;
+  std::ofstream lhs, rhs, adata, ndata, odata, traj;
 };
 
 Evaluator::LogData* Evaluator::logging_getData(void) {
@@ -119,6 +152,11 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
   }
   alog << "\n";
 
+  d->odata.open(savePath / "outputs.dat");
+  d->odata << "ML MR CS VV VC";
+  for (uint i=0; i<s.subject()->arms().size(); i++) d->odata << " A" << i;
+  d->odata << "\n";
+
   d->traj.open(f / "trajectories.dat");
   d->traj << "Env size: " << s.simulation().environment().xextent()
           << " " << s.simulation().environment().yextent() << "\n\n";
@@ -132,7 +170,7 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
   if (s.neuralEvaluation()) {
     auto &nlog = d->ndata;
     nlog.open(f / "neurons.dat");
-    nlog << "AOS";
+    nlog << "OAPHI";
     for (const auto &p: s.subject()->brain().neurons())
       if (p->isHidden())
         nlog << " (" << p->pos << ")";
@@ -182,6 +220,12 @@ void Evaluator::logging_step(LogData *d, Scenario &s) {
     alog << "\n";
   }
 
+  if (d->odata.is_open()) {
+    for (const auto &v: s.neuralOutputs())
+      d->odata << v << " ";
+    d->odata << "\n";
+  }
+
   if (d->traj.is_open()) {
     auto &traj = d->traj;
     for (auto t: s.teams())
@@ -229,12 +273,33 @@ Evaluator::Params Evaluator::Params::fromArgv (
 
     using F = simu::Scenario::Params::Flag;
     std::string s = scenario;
-    if (s == "self") params.flags.set(F::PAIN_SELF);
-    if (s == "othr") params.flags.set(F::PAIN_OTHER);
-    if (s == "ally") params.flags.set(F::PAIN_ALLY);
-    assert(params.flags.any());
-    if (!params.flags.any())
+    if (s.size() != 4) utils::Thrower("Scenario '", s, "' has unexpected size");
+
+    bool ok = true;
+    switch (s[0]) {
+    case 'i': params.flags.set(F::PAIN_INST); break;
+    case 'a': params.flags.set(F::PAIN_ABSL); break;
+    case 'p': params.flags.set(F::PAIN_VIEW); break;
+    case 'v': break;
+    default: ok = false;
+    }
+
+    switch (s[2]) {
+    case 'o': params.flags.set(F::WITH_OTHR); break;
+    case 'a': params.flags.set(F::WITH_ALLY); break;
+    case 'p': break;
+    default: ok = false;
+    }
+
+    switch (s[3]) {
+    case '+': params.neutralFirst = false; break;
+    case '-': params.neutralFirst = true; break;
+    default: ok = false;
+    }
+
+    if (!params.flags.any() && ok)
       utils::Thrower("Invalid scenario '", scenario, "'");
+    assert(params.flags.any() && ok);
   }
 
   for (uint i=0; i<rhsArgs.size(); i++) {
@@ -256,7 +321,7 @@ Evaluator::Params Evaluator::Params::fromInds(Ind &ind, const Inds &opps) {
 }
 
 Scenario::Params Evaluator::Params::scenarioParams(uint i) const {
-  return Scenario::Params { ind.dna, opps[i].dna, flags };
+  return Scenario::Params { ind.dna, opps[i].dna, flags, neutralFirst };
 }
 
 std::string Evaluator::Params::opponentsIds(void) const {
@@ -456,7 +521,7 @@ void Evaluator::dumpStats(const stdfs::path &dna,
   Simulation simulation;
   Scenario scenario (simulation, 1);
   Team dna_ = fromJsonFile(dna).dna;
-  scenario.init({dna_, dna_, Scenario::Params::PAIN_SELF});
+  scenario.init({dna_, dna_, Scenario::Params::Flags(), true});
 
   const simu::Critter *c = scenario.subject();
   std::ofstream ofs (folder / "stats");

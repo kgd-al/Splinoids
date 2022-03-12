@@ -124,7 +124,7 @@ done
 # Communication overview
 
 soundoverview=$indfolder/sounds.png
-if false #[ -f "$soundoverview" ]
+if [ -f "$soundoverview" ]
 then
   echo "Sound overview '$soundoverview' already generated. Skipping"
 else
@@ -138,7 +138,7 @@ else
 
     set multiplot layout words(files), n;
     set key above;
-    set style fill solid .25;
+    set style fill solid .75;
     
     set xrange [0:500]; set yrange [0:1];
     do for [i=1:n] {
@@ -183,16 +183,16 @@ pass(){
 }
 idpass=$(pass "first")
 
-# Rendering aggregated clustering 
-# aggregate="$indfolder/mann.$ext"
-# if [ -f "$aggregate" ]
-# then
-#   echo "ANN clustering '$aggregate' already generated. Skipping\n"
-# else
-#   echo "Generating ANN clustering: $aggregate"
-#   
-#   CMD=yes $sfolder/evaluate.sh --gui $ind $opponents --ann-render=$ext --ann-aggregate --ann-tags=$indfolder/neural_groups.ntags --overwrite i
-#   
-#   echo "Generated $aggregate\n"
-# fi
-# echo "$aggregate" >> .generated_files
+# Rendering aggregated clustering
+aggregate="$indfolder/mann.$ext"
+if [ -f "$aggregate" ]
+then
+  echo "ANN clustering '$aggregate' already generated. Skipping\n"
+else
+  echo "Generating ANN clustering: $aggregate"
+  
+  CMD=yes $sfolder/evaluate.sh --gui $ind $opponents --ann-render=$ext --ann-aggregate --ann-tags=$indfolder/neural_groups.ntags --overwrite i
+  
+  echo "Generated $aggregate"
+fi
+echo "$aggregate" >> .generated_files
