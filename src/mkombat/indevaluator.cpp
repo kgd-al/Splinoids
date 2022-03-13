@@ -109,7 +109,7 @@ auto avg (const std::set<Critter*> &pop,
 /// TODO Log (what to log?)
 
 struct Evaluator::LogData {
-  std::ofstream lhs, rhs, adata, ndata, odata, traj;
+  std::ofstream lhs, rhs, fdata, adata, ndata, idata, odata, traj;
 };
 
 Evaluator::LogData* Evaluator::logging_getData(void) {
@@ -136,6 +136,9 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
   d->rhs.open(f / "rhs.dat");
   header(d->rhs);
 
+  d->fdata.open(f / "impacts.dat");
+  d->fdata << "Time A B dVA dVB D aA aB\n";
+
   d->adata.open(f / "acoustics.dat");
   auto &alog = d->adata;
   for (uint i=0; i<s.teams()[0].size(); i++) {
@@ -152,11 +155,6 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
   }
   alog << "\n";
 
-  d->odata.open(savePath / "outputs.dat");
-  d->odata << "ML MR CS VV VC";
-  for (uint i=0; i<s.subject()->arms().size(); i++) d->odata << " A" << i;
-  d->odata << "\n";
-
   d->traj.open(f / "trajectories.dat");
   d->traj << "Env size: " << s.simulation().environment().xextent()
           << " " << s.simulation().environment().yextent() << "\n\n";
@@ -167,10 +165,18 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
         d->traj << tt[t] << c << s << " ";
   d->traj << "\n";
 
+  d->idata.open(f / "inputs.dat");
+  for (auto s: s.subject()->neuralInputsHeader()) d->idata << s << " ";
+  d->idata << "\n";
+
+  d->odata.open(f / "outputs.dat");
+  for (auto s: s.subject()->neuralOutputsHeader()) d->odata << s << " ";
+  d->odata << "\n";
+
   if (s.neuralEvaluation()) {
     auto &nlog = d->ndata;
     nlog.open(f / "neurons.dat");
-    nlog << "OAPHI";
+    nlog << "VCBATHI";
     for (const auto &p: s.subject()->brain().neurons())
       if (p->isHidden())
         nlog << " (" << p->pos << ")";
@@ -211,6 +217,14 @@ void Evaluator::logging_step(LogData *d, Scenario &s) {
 
   if (teams[0].empty()) return;
 
+  if (d->fdata.is_open()) {
+    auto timestamp = s.simulation().currTime().timestamp();
+    std::string event;
+    std::istringstream l (s.simulation().environment().fightDataLogger.str());
+    while (std::getline(l, event))
+      d->fdata << timestamp << " " << event << "\n";
+  }
+
   if (d->adata.is_open()) {
     auto &alog = d->adata;
     for (const simu::Critter *c: s.teams()[0]) {
@@ -220,9 +234,13 @@ void Evaluator::logging_step(LogData *d, Scenario &s) {
     alog << "\n";
   }
 
+  if (d->idata.is_open()) {
+    for (const auto &v: s.subject()->neuralInputs()) d->idata << v << " ";
+    d->idata << "\n";
+  }
+
   if (d->odata.is_open()) {
-    for (const auto &v: s.neuralOutputs())
-      d->odata << v << " ";
+    for (const auto &v: s.subject()->neuralOutputs()) d->odata << v << " ";
     d->odata << "\n";
   }
 
@@ -247,11 +265,6 @@ void Evaluator::logging_step(LogData *d, Scenario &s) {
 
 // ===
 
-const std::set<std::string> Evaluator::canonicalScenarios {
-  "pain", // Damage simulation
-  "vind"  // Inflicted damage
-};
-
 Evaluator::Params Evaluator::Params::fromArgv (
     const std::string &lhsArg, const std::vector<std::string> &rhsArgs,
     const std::string &scenario, int teamSize) {
@@ -270,34 +283,40 @@ Evaluator::Params Evaluator::Params::fromArgv (
 
   if (neuralEvaluation(scenario)) {
     params.flags.reset();
+    params.neutralFirst = false;
 
     using F = simu::Scenario::Params::Flag;
     std::string s = scenario;
     if (s.size() != 4) utils::Thrower("Scenario '", s, "' has unexpected size");
 
     bool ok = true;
-    switch (s[0]) {
-    case 'i': params.flags.set(F::PAIN_INST); break;
-    case 'a': params.flags.set(F::PAIN_ABSL); break;
-    case 'p': params.flags.set(F::PAIN_VIEW); break;
-    case 'v': break;
+    switch (s[1]) {
+    case '1':
+      switch (s[3]) {
+      case 'a': params.flags.set(F::PAIN_ABSL); break;
+      case 'i': params.flags.set(F::PAIN_INST); break;
+      case 't': params.flags.set(F::TOUCH); break;
+      default: ok = false;
+      }
+      break;
+
+    case '2':
+      switch (s[3]) {
+      case 'a': params.flags.set(F::WITH_ALLY); break;
+      case 'b': params.flags.set(F::WITH_OPP1); break;
+      case 'c': params.flags.set(F::WITH_OPP2); break;
+      default: ok = false;
+      }
+      break;
+
+    case '3':
+      utils::Thrower("Type 3 scenarios not implemented");
+      break;
+
     default: ok = false;
     }
 
-    switch (s[2]) {
-    case 'o': params.flags.set(F::WITH_OTHR); break;
-    case 'a': params.flags.set(F::WITH_ALLY); break;
-    case 'p': break;
-    default: ok = false;
-    }
-
-    switch (s[3]) {
-    case '+': params.neutralFirst = false; break;
-    case '-': params.neutralFirst = true; break;
-    default: ok = false;
-    }
-
-    if (!params.flags.any() && ok)
+    if (!params.flags.any() || !ok)
       utils::Thrower("Invalid scenario '", scenario, "'");
     assert(params.flags.any() && ok);
   }
@@ -457,10 +476,11 @@ void Evaluator::operator() (Params &params) {
 
     /// Modular ANN
     std::unique_ptr<phenotype::ModularANN> mann;
-    if (!logsSavePrefix.empty() && !annTagsFile.empty()) {
+    if (!logsSavePrefix.empty() && !annTagsFile.empty()
+        && annAggregation != 0) {
       auto &brain = scenario.subject()->brain();
       applyNeuralFlags(brain, annTagsFile);
-      mann = std::make_unique<phenotype::ModularANN>(brain);
+      mann = std::make_unique<phenotype::ModularANN>(brain, false);
     }
   //  scenario.applyLesions(lesion);
 

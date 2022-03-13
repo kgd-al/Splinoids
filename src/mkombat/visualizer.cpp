@@ -144,7 +144,6 @@ int main(int argc, char *argv[]) {
   if (result.count("help")) {
     using utils::operator<<;
     std::cout << options.help()
-              << "\nCanonical scenarios:" << simu::Evaluator::canonicalScenarios
               << std::endl;
     return 0;
   }
@@ -427,7 +426,7 @@ int main(int argc, char *argv[]) {
     phenotype::ANN &ann = scenario.subject()->brain();
     simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);
 
-    phenotype::ModularANN annAgg (ann);
+    phenotype::ModularANN annAgg (ann, false);
     av.setGraph(annAgg);
     av.updateCustomColors();
 

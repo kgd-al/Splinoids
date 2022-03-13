@@ -119,7 +119,8 @@ void Scenario::init(const Params &params) {
     makeCritter(0, 0, params.lhs.genome);
     if (!params.neutralFirst) {
       if (hasFlag(Params::WITH_ALLY)) makeCritter(1, 0, _params.lhs.genome);
-      if (hasFlag(Params::WITH_OTHR)) makeCritter(1, 0, _params.rhs.genome);
+      if (hasFlag(Params::WITH_OPP1) || hasFlag(Params::WITH_OPP2))
+        makeCritter(1, 0, _params.rhs.genome);
     }
 
   } else {
@@ -240,7 +241,8 @@ void Scenario::postStep(void) {
 
     } else if (step > 0) {
       if (hasFlag(Params::WITH_ALLY)) makeCritter(1, 0, _params.lhs.genome);
-      if (hasFlag(Params::WITH_OTHR)) makeCritter(1, 0, _params.rhs.genome);
+      if (hasFlag(Params::WITH_OPP1) || hasFlag(Params::WITH_OPP2))
+        makeCritter(1, 0, _params.rhs.genome);
     }
 
     // Apply damages
@@ -254,15 +256,15 @@ void Scenario::postStep(void) {
       _currentFlags.flip(Params::PAIN_INST);
     }
 
-    if (!neutral && hasFlag(Params::PAIN_VIEW)) {
-      if (hasFlag(Params::WITH_OTHR)) damage(opponent(), !neutral, true);
-      if (hasFlag(Params::WITH_ALLY)) damage(ally(), !neutral, true);
+    if (hasFlag(Params::TOUCH)) {
+      sbj->overrideTouchSensor(0, !neutral);
+      _currentFlags.flip(Params::TOUCH);
     }
 
     // manage remaining flags
-    if (hasFlag(Params::PAIN_VIEW)) _currentFlags.flip(Params::PAIN_VIEW);
     if (hasFlag(Params::WITH_ALLY)) _currentFlags.flip(Params::WITH_ALLY);
-    if (hasFlag(Params::WITH_OTHR)) _currentFlags.flip(Params::WITH_OTHR);
+    if (hasFlag(Params::WITH_OPP1)) _currentFlags.flip(Params::WITH_OPP1);
+    if (hasFlag(Params::WITH_OPP2)) _currentFlags.flip(Params::WITH_OPP2);
 
     return;
   }

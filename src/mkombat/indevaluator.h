@@ -77,11 +77,10 @@ struct Evaluator {
   static void dumpStats (const stdfs::path &dna, const stdfs::path &folder);
 
   stdfs::path logsSavePrefix, annTagsFile;
+  int annAggregation = 0;
 
 //  std::vector<int> lesions;
   static constexpr std::array<int,1> lesions {0};
-
-  static const std::set<std::string> canonicalScenarios;
 
   static std::atomic<bool> aborted;
 };

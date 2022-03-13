@@ -42,10 +42,13 @@ public:
     Team lhs, rhs;
 
     enum Flag {
-      PAIN_INST, PAIN_ABSL, PAIN_VIEW,
-      WITH_ALLY, WITH_OTHR
+      PAIN_INST, PAIN_ABSL, TOUCH,
+
+      WITH_ALLY, WITH_OPP1, WITH_OPP2,
+
+      COMMUNICATION
     };
-    using Flags = std::bitset<5>;
+    using Flags = std::bitset<7>;
     Flags flags;
     bool neutralFirst;
   };

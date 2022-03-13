@@ -54,15 +54,7 @@ public:
 
   using EdgeCritters = std::set<Critter*>;
 
-  struct FightingDrawData {
-    P2D pA, pB; // Position of bodies
-    P2D vA, vB; // Velocity of bodies
-    P2D C, C_;  // Combat axis (raw and normalized)
-    float VA, VB; // Combat intensity
-  };
-#ifndef NDEBUG
-  std::vector<FightingDrawData> fightingDrawData;
-#endif
+  std::ostringstream fightDataLogger;
 
   static const bool boxEdges;
 

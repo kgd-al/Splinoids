@@ -519,9 +519,7 @@ void Environment::step (void) {
   static const int V_ITER = config::Simulation::b2VelocityIter();
   static const int P_ITER = config::Simulation::b2PositionIter();
 
-#ifndef NDEBUG
-  fightingDrawData.clear();
-#endif
+  fightDataLogger.str("");
 
 //  std::cerr << "\n\n## Before physics step\n";
 //  _physics.Dump();
@@ -730,6 +728,12 @@ void Environment::processFight(Critter *cA, Critter *cB, const FightingData &d,
 
     float sum_ = deA+deB, diff_ = D_ - sum_;
     assert(std::fabs(deA + deB - D_) < 1e-3);
+    (void)diff_;
+
+    fightDataLogger << CID(cA) << "F" << fdA << " "
+                    << CID(cB) << "F" << fdB << " "
+                    << dVA << " " << dVB << " " << D_ << " "
+                    << alpha_a << " " << alpha_b << "\n";
 
 //  #ifndef NDEBUG
 //    fightingDrawData.push_back(fdd);

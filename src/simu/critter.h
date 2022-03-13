@@ -227,6 +227,7 @@ private:
   FeedingSources _feedingSources;
 
   // To monitor behavior
+  decltype(std::declval<phenotype::ANN>().inputs()) _neuralInputs;
   decltype(std::declval<phenotype::ANN>().outputs()) _neuralOutputs;
 
   // Potential extension
@@ -467,14 +468,6 @@ public:
     return maxUsableEnergy() - usableEnergy();
   }
 
-  void overrideUsableEnergyStorage (decimal newValue) {
-    _energy = newValue;
-  }
-
-  void overrideReproductionReserve (decimal newValue) {
-    _reproductionReserve = newValue;
-  }
-
   static auto splineIndex (uint i, Side side) {
     return uint(side) * SPLINES_COUNT + i;
   }
@@ -535,16 +528,6 @@ public:
     return _currHealth;
   }
 
-  void overrideBodyHealthness(decimal h) {
-    assert(0 <= h && h <= 1);
-    _currHealth[0] = h * bodyMaxHealth();
-  }
-
-  void overrideSplineHealthness(decimal h, uint i, Side s) {
-    assert(0 <= h && h <= 1);
-    _currHealth[1 + splineIndex(i, s)] = h * splineMaxHealth(i, s);
-  }
-
   auto activeSpline (uint i, Side s) const {
     return splineMaxHealth(i, s) > 0;
   }
@@ -601,15 +584,14 @@ public:
     return _amotors[i];
   }
 
-  const auto& neuralOutputs (void) const {
-    return _neuralOutputs;
+  std::vector<std::string> neuralInputsHeader (void) const;
+  const auto& neuralInputs (void) const {
+    return _neuralInputs;
   }
 
-  const auto& neuralOutputsHeader (void) const {
-    static const std::vector<std::string> v {
-      "LMotor", "RMotor", "Clock", "Repro"
-    };
-    return v;
+  std::vector<std::string> neuralOutputsHeader (void) const;
+  const auto& neuralOutputs (void) const {
+    return _neuralOutputs;
   }
 
   void feed (Foodlet *f, float dt);
@@ -717,6 +699,31 @@ public:
 
   const auto auditionSensor (void) const {
     return _auditionSensor;
+  }
+
+  // ===========================================================================
+  // == Override methods
+
+  void overrideUsableEnergyStorage (decimal newValue) {
+    _energy = newValue;
+  }
+
+  void overrideReproductionReserve (decimal newValue) {
+    _reproductionReserve = newValue;
+  }
+
+  void overrideBodyHealthness(decimal h) {
+    assert(0 <= h && h <= 1);
+    _currHealth[0] = h * bodyMaxHealth();
+  }
+
+  void overrideSplineHealthness(decimal h, uint i, Side s) {
+    assert(0 <= h && h <= 1);
+    _currHealth[1 + splineIndex(i, s)] = h * splineMaxHealth(i, s);
+  }
+
+  void overrideTouchSensor(uint i, bool touch) {
+    _touch[i] = touch;
   }
 
   // ===========================================================================

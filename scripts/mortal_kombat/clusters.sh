@@ -3,12 +3,19 @@
 folder=$1
 if [ ! -d "$folder" ]
 then
-  echo "data folder '$folder' does not exist"
+  echo "Data folder '$folder' does not exist"
   exit 1
 fi
 
-name=clusters
-o=$folder/clusters.dat
+eval=$2
+if [ -z $eval ]
+then
+  echo "No evaluation folder specified"
+  exit 2
+fi
+
+name=clusters.$eval
+o=$folder/$name.dat
 o2=$(dirname $o)/.$(basename $o)
 awk '
   NR == 1 {
@@ -17,8 +24,8 @@ awk '
   }
   FNR == 1{
     f=FILENAME;
-    split(FILENAME, tokens, "/");
-    f=substr(tokens[5], 3)"/"tokens[6];
+    match(FILENAME, "ID([0-9]*/[A-Z])", arr);
+    f=arr[1];
     t[f] = 0;
     for (i in headers) d[f][i] = 0;
     next;
@@ -40,7 +47,7 @@ awk '
       printf "\n"
     }
   }
-  ' $1/ID*/[A-Z]/gen1999/mk*/neural_groups.dat > $o
+  ' $1/ID*/[A-Z]/gen1999/mk*/eval_first_pass/$eval/neural_groups.dat > $o
   
 if [ ! -z ${NO_PINKY} ]
 then
@@ -96,7 +103,7 @@ column -t $o
 
 img="$folder/$name.png"
 cols=$(head -n 1 $o)
-echo "columns:" $cols
+# echo "columns:" $cols
 gnuplot -e "
   set output '$img';
   set term pngcairo size 1680,1050;
@@ -104,6 +111,14 @@ gnuplot -e "
   
   cols='$cols';
   ncols=words(cols);
+  
+  validcols=0;
+  do for [i=3:ncols] {
+    s=system('awk \"NR>1{sum+=\\$'.i.';}END{print sum}\" $o')+0;
+    if (s > 0) { validcols = validcols + 1; };
+    print s;
+  };
+  
   set multiplot layout ncols-1, 1 margins .05, .98, .1, .99 spacing 0, 0;
   
   set xrange [.5:$(wc -l $o | cut -d ' ' -f1)-.5];
@@ -119,7 +134,7 @@ gnuplot -e "
   do for [i=2:ncols] {
     set y2label word(cols, i);
     if (i == ncols) { set xtics out rotate by 45 right noenhanced nomirror; };
-    plot '$o' using 0:i:(1):xtic(1) with boxes ls i-1 notitle;
+    plot '$o' using 0:(column(i)>0):(1):xtic(1) with boxes ls i-1 notitle;
   };
   
   unset multiplot;"

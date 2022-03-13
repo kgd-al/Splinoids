@@ -204,7 +204,12 @@ int main(int argc, char *argv[]) {
 //  eval.setLesionTypes(lesions);
 
   eval.logsSavePrefix = stdfs::path(outputFolder);
-  eval.annTagsFile = annNeuralTags;
+
+  if (!annNeuralTags.empty()) {
+    eval.annTagsFile = annNeuralTags;
+    eval.annAggregation = 1;
+  }
+
   eval(params);
 
   auto duration = simu::Simulation::durationFrom(start);

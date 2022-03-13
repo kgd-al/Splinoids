@@ -248,6 +248,42 @@ Critter::~Critter (void) {
   world->DestroyBody(&_body);
 }
 
+std::vector<std::string> Critter::neuralInputsHeader(void) const {
+  std::vector<std::string> v;
+  v.push_back("HA");
+  v.push_back("HI");
+
+  for (uint i=0; i<_raysEnd.size(); i++)
+    for (auto c: {'R','G','B'})
+      v.push_back(utils::mergeToString("R", i, c));
+
+  for (auto c: {'L','R'}) {
+    v.push_back(utils::mergeToString("A", c, "N"));
+
+    for (uint i=0; i<VOCAL_CHANNELS; i++)
+      v.push_back(utils::mergeToString("A", c, "C", i));
+  }
+
+  v.push_back("TB");
+  for (auto c: {'L','R'})
+    for (uint i=0; i<SPLINES_COUNT; i++)
+      v.push_back(utils::mergeToString("T", c, "S", i));
+
+  return v;
+}
+
+std::vector<std::string> Critter::neuralOutputsHeader (void) const {
+  std::vector<std::string> v;
+  v.push_back("ML");
+  v.push_back("MR");
+  v.push_back("CS");
+  v.push_back("VV");
+  v.push_back("VC");
+  for (uint i=0; i<_arms.size(); i++) v.push_back(utils::mergeToString("A", i));
+  return v;
+}
+
+
 void Critter::buildBrain(void) {
 //  auto substrate = substrateFor(_raysEnd, _genotype.connectivity);
 //  _genotype.connectivity.BuildHyperNEATPhenotype(_brain, substrate);
@@ -359,6 +395,7 @@ void Critter::buildBrain(void) {
 
   phenotype::CPPN cppn = phenotype::CPPN::fromGenotype(_genotype.brain);
   _brain = phenotype::ANN::build(inputs, outputs, cppn);
+  _neuralInputs = _brain.inputs();
   _neuralOutputs = _brain.outputs();
   selectiveBrainDead.resize(_neuralOutputs.size());
 
@@ -542,20 +579,19 @@ void Critter::neuralStep(void) {
   if (!brainDead) {
     // Set inputs
     uint i = 0;
-    auto inputs = _brain.inputs();
 //    inputs[i++] = (sex() == Sex::FEMALE ? -1 : 1);
 //    inputs[i++] = _age;
 //    inputs[i++] = reproductionReadiness(reproductionType());
 //    inputs[i++] = usableEnergy() / maxUsableEnergy();
-    inputs[i++] = bodyHealthness();
-    inputs[i++] = inPain > -1 ? inPain : instantaneousPain();
+    _neuralInputs[i++] = bodyHealthness();
+    _neuralInputs[i++] = inPain > -1 ? inPain : instantaneousPain();
 
-    for (const auto &c: _retina) for (float v: c) inputs[i++] = v;
-    for (const auto &e: _ears)  inputs[i++] = e;
-    for (const auto &t: _touch) inputs[i++] = (t > 0);
+    for (const auto &c: _retina) for (float v: c) _neuralInputs[i++] = v;
+    for (const auto &e: _ears)  _neuralInputs[i++] = e;
+    for (const auto &t: _touch) _neuralInputs[i++] = (t > 0);
 
     // Process n propagation steps
-    _brain(inputs, _neuralOutputs, _genotype.brain.substeps);
+    _brain(_neuralInputs, _neuralOutputs, _genotype.brain.substeps);
 
     // Collect outputs
 #ifndef NDEBUG
@@ -579,29 +615,29 @@ void Critter::neuralStep(void) {
 //    _reproduction = _neuralOutputs[?];
 
     if (debugShowNeurons) {
-      std::cerr << std::setprecision(20);
-      std::cerr << CID(this) << "@" << _age << " " << pos() << "\n";
+//      std::cerr << std::setprecision(20);
+//      std::cerr << CID(this) << "@" << _age << " " << pos() << "\n";
 
-      const auto inames = [this] {
-        std::vector<std::string> v;
-        v.push_back("h");
-        v.push_back("p");
-        for (const auto &_: _retina) {
-          (void)_;
-          static const std::string c = "rgb";
-          for (uint i=0; i<c.size(); i++)
-            v.push_back("r" + c.substr(i, 1));
-        }
-        for (const auto &_: _ears) (void)_, v.push_back("e");
-        for (const auto &_: _touch) (void)_, v.push_back("t");
-        return v;
-      }();
-      std::cerr << "\tinputs:\n";
-      for (uint i=0; i<inputs.size(); i++)
-        std::cerr << "\t\t" << inames[i] << "\t" << inputs[i] << "\n";
-      std::cerr << "\toutputs:\n";
-      for (auto v: _neuralOutputs) std::cerr << "\t\t" << v << "\n";
-      std::cerr << "\n\n";
+//      const auto inames = [this] {
+//        std::vector<std::string> v;
+//        v.push_back("h");
+//        v.push_back("p");
+//        for (const auto &_: _retina) {
+//          (void)_;
+//          static const std::string c = "rgb";
+//          for (uint i=0; i<c.size(); i++)
+//            v.push_back("r" + c.substr(i, 1));
+//        }
+//        for (const auto &_: _ears) (void)_, v.push_back("e");
+//        for (const auto &_: _touch) (void)_, v.push_back("t");
+//        return v;
+//      }();
+//      std::cerr << "\tinputs:\n";
+//      for (uint i=0; i<_neuralInputs.size(); i++)
+//        std::cerr << "\t\t" << inames[i] << "\t" << inputs[i] << "\n";
+//      std::cerr << "\toutputs:\n";
+//      for (auto v: _neuralOutputs) std::cerr << "\t\t" << v << "\n";
+//      std::cerr << "\n\n";
     }
   }
 
