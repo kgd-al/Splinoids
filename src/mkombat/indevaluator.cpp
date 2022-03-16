@@ -54,27 +54,27 @@ void Evaluator::applyNeuralFlags(phenotype::ANN &ann,
 
     if (n.type == phenotype::ANN::Neuron::I) {
       if (pos == P{0.f, -1.f, -.5f} || pos == P{0.f, -1.f, -1.f})
-        f = 1<<10;  // health
+        f = 1<<18;  // health
       else if (pos.z() <= -1/3.) {
-        f = 1<<11;  // audition
-        if (pos.x() > 0)  f |= 1<<9;  // right
+        f = 1<<19;  // audition
+        if (pos.x() > 0)  f |= 1<<17;  // right
       } else if (pos.z() >= 1/3.) {
-        f = 1<<12;  // vision
-        if (pos.x() > 0)  f |= 1<<9;  // right
+        f = 1<<20;  // vision
+        if (pos.x() > 0)  f |= 1<<17;  // right
       } else {
-        f = 1<<13;  // touch
-        if (pos.x() > 0)  f |= 1<<9;  // right
+        f = 1<<21;  // touch
+        if (pos.x() > 0)  f |= 1<<17;  // right
       }
-      if (f) f |= 1<<8; // input
+      if (f) f |= 1<<16; // input
 
     } else if (n.type == phenotype::ANN::Neuron::O) {
       if (pos.z() >= .5)
-        f = 1 << 18;  // Voice
+        f = 1 << 26;  // Voice
       else if (pos.z() == -.5f) {
-        f = 1<<19;    // arms
-        if (pos.x() > 0) f |= 1<<17;  // right
+        f = 1<<27;    // arms
+        if (pos.x() > 0) f |= 1<<25;  // right
       }
-      if (f) f |= 1<<16; // output
+      if (f) f |= 1<<24; // output
     }
   }
 
@@ -109,7 +109,13 @@ auto avg (const std::set<Critter*> &pop,
 /// TODO Log (what to log?)
 
 struct Evaluator::LogData {
-  std::ofstream lhs, rhs, fdata, adata, ndata, idata, odata, traj;
+  std::ofstream lhs, rhs, // generic individual data
+                fdata, adata, // fight / accoustics
+                ndata, // hidden neurons / modules
+                idata, odata, // neural i/o
+                traj; // trajectory data (obsolete?)
+
+  std::vector<std::ofstream> mdata; // modules
 };
 
 Evaluator::LogData* Evaluator::logging_getData(void) {
@@ -125,6 +131,8 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
                              Scenario &s) {
   stdfs::create_directories(f);
   std::cerr << f << " should exist!\n";
+
+  static const auto NEURAL_FLAGS = "OFNCBATHI";
 
   static const auto header = [] (auto &os) {
     os << "Time Count LSpeed ASpeed Health TotalHealth Energy\n";
@@ -173,14 +181,33 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
   for (auto s: s.subject()->neuralOutputsHeader()) d->odata << s << " ";
   d->odata << "\n";
 
-  if (s.neuralEvaluation()) {
+  if (s.neuralEvaluation() && annTagsFile.empty()) {
     auto &nlog = d->ndata;
     nlog.open(f / "neurons.dat");
-    nlog << "VCBATHI";
+    nlog << NEURAL_FLAGS;
     for (const auto &p: s.subject()->brain().neurons())
       if (p->isHidden())
         nlog << " (" << p->pos << ")";
     nlog << "\n";
+  }
+
+  if (!annTagsFile.empty()) {
+    auto &mlogs = d->mdata;
+    mlogs.resize(s.teams()[0].size());
+    for (uint i=0; i<mlogs.size(); i++) {
+      auto &mlog = mlogs[i];
+      std::string id;
+      if (mlogs.size() > 1) id = utils::mergeToString("_", i);
+      mlog.open(f / utils::mergeToString("modules" + id + ".dat"));
+      mlog << NEURAL_FLAGS;
+      for (const auto &p: manns[i]->modules()) {
+        if (p.second->type() == phenotype::ANN::Neuron::H) {
+          auto f = p.second->flags;
+          mlog << " " << f << "M " << f << "S";
+        }
+      }
+      mlog << "\n";
+    }
   }
 
   {
@@ -261,13 +288,26 @@ void Evaluator::logging_step(LogData *d, Scenario &s) {
         os << " " << p->value;
     os << "\n";
   }
+
+  for (uint i=0; i<d->mdata.size(); i++) {
+    auto &os = d->mdata[i];
+    os << s.currentFlags();
+    for (const auto &p: manns[i]->modules()) {
+      if (p.second->type() == phenotype::ANN::Neuron::H) {
+        const auto &v = p.second->value();
+        os << " " << v.mean << " " << v.stddev;
+      }
+    }
+    os << "\n";
+  }
 }
 
 // ===
 
 Evaluator::Params Evaluator::Params::fromArgv (
     const std::string &lhsArg, const std::vector<std::string> &rhsArgs,
-    const std::string &scenario, int teamSize) {
+    const std::string &scenario, const std::string &scenarioArg,
+    int teamSize) {
 
   Evaluator::Params params (fromJsonFile(lhsArg));
   params.scenario = scenario;
@@ -283,7 +323,6 @@ Evaluator::Params Evaluator::Params::fromArgv (
 
   if (neuralEvaluation(scenario)) {
     params.flags.reset();
-    params.neutralFirst = false;
 
     using F = simu::Scenario::Params::Flag;
     std::string s = scenario;
@@ -310,7 +349,16 @@ Evaluator::Params Evaluator::Params::fromArgv (
       break;
 
     case '3':
-      utils::Thrower("Type 3 scenarios not implemented");
+      switch (s[3]) {
+      case 'n': params.flags.set(F::SOUND_NOIS); break;
+      case 'f': params.flags.set(F::SOUND_FRND); break;
+      case 'o': params.flags.set(F::SOUND_OPPN); break;
+      default: ok = false;
+      }
+      if (scenarioArg.empty() && s[3] != 'n')
+        utils::Thrower("Type 3 scenario requires an additional argument");
+      else
+        params.scenarioArg = scenarioArg;
       break;
 
     default: ok = false;
@@ -340,7 +388,13 @@ Evaluator::Params Evaluator::Params::fromInds(Ind &ind, const Inds &opps) {
 }
 
 Scenario::Params Evaluator::Params::scenarioParams(uint i) const {
-  return Scenario::Params { ind.dna, opps[i].dna, flags, neutralFirst };
+  Scenario::Params params;
+  params.lhs = ind.dna;
+  params.rhs = opps[i].dna;
+  params.flags = flags;
+  params.neutralFirst = false;
+  params.arg = scenarioArg;
+  return params;
 }
 
 std::string Evaluator::Params::opponentsIds(void) const {
@@ -475,12 +529,12 @@ void Evaluator::operator() (Params &params) {
     }
 
     /// Modular ANN
-    std::unique_ptr<phenotype::ModularANN> mann;
-    if (!logsSavePrefix.empty() && !annTagsFile.empty()
-        && annAggregation != 0) {
-      auto &brain = scenario.subject()->brain();
-      applyNeuralFlags(brain, annTagsFile);
-      mann = std::make_unique<phenotype::ModularANN>(brain, false);
+    if (!logsSavePrefix.empty() && !annTagsFile.empty()) {
+      for (simu::Critter *c: scenario.teams()[0]) {
+        auto &brain = c->brain();
+        applyNeuralFlags(brain, annTagsFile);
+        manns.push_back(std::make_unique<phenotype::ModularANN>(brain));
+      }
     }
   //  scenario.applyLesions(lesion);
 
@@ -494,7 +548,9 @@ void Evaluator::operator() (Params &params) {
       simulation.step();
 
   //    // Update modules values (if modular ann is used)
-      if (mann) for (const auto &p: mann->modules()) p.second->update();
+      for (auto &mann: manns)
+        for (const auto &p: mann->modules())
+          p.second->update();
 
       if (!logsSavePrefix.empty()) logging_step(&log, scenario);
     }
@@ -541,7 +597,7 @@ void Evaluator::dumpStats(const stdfs::path &dna,
   Simulation simulation;
   Scenario scenario (simulation, 1);
   Team dna_ = fromJsonFile(dna).dna;
-  scenario.init({dna_, dna_, Scenario::Params::Flags(), true});
+  scenario.init({dna_, dna_, Scenario::Params::Flags(), false, ""});
 
   const simu::Critter *c = scenario.subject();
   std::ofstream ofs (folder / "stats");

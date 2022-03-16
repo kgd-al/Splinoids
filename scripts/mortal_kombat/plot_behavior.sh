@@ -79,6 +79,42 @@ plotoutputs(){
     unset multiplot;" #|| rm -fv $outputsoverview
 }
 
+plotmodules(){
+  if [ -z $3 ]
+  then
+    echo "No neural flags provided"
+    exit 3
+  fi
+  cols=$(awk -vflags="$3" 'NR==1 {
+      for(i=2; i<=NF; i++) {
+        if (substr($i, length($i), 1) == "M") {
+          f=substr($i, 1, length($i)-1);
+          if (f == 0)
+            name = "Neutral";
+          else {
+            name = "";
+            for (j=0; j<length(flags); j++)
+              if (and(f, 2^j))
+                name = name substr(flags, length(flags)-j, 1);
+          }
+          print i, f, name;
+        }
+      }
+    }' $1 | sort -k2,2g | cut -d ' ' -f1,3)
+  gnuplot -e "
+    set output '$2';
+    set term pngcairo size 1680,1050;
+    
+    f='$1';
+    set key above;
+    set yrange [-.05:1.05];
+    set grid;
+    
+    cols='$cols';
+    print cols;
+    plot for [i=1:words(cols):2] f using 0:(column(word(cols, i)+0)) with lines title word(cols, i+1);"
+}
+
 ################################################################################
 # Generic output
 for opp in $opponents
@@ -156,55 +192,55 @@ done
 
 ################################################################################
 # Communication overview
-# 
-# soundoverview=$indfolder/sounds.png
-# if [ -f "$soundoverview" ]
-# then
-#   echo "Sound overview '$soundoverview' already generated. Skipping"
-# else
-#   soundupper=$indfolder/sounds_mk.png
-#   gnuplot -e "
-#     n=$teamsize;
-#     files=system('ls $indfolder/*/acoustics.dat');
-#         
-#     set output '$soundupper';
-#     set term pngcairo size 1280, 800;
-# 
-#     set multiplot layout words(files), n;
-#     set key above;
-#     set style fill solid .75;
-#     
-#     set xrange [0:500]; set yrange [0:1];
-#     do for [i=1:n] {
-#       do for [f in files] {
-#         plot for [j=10:12] f using 0:12*(i-1)+j:(0) with filledcurves title columnhead;
-#       };
-#     };
-#     
-#     unset multiplot;
-#   " #|| rm -v "$soundoverview"
-#   
-#   soundlower=$indfolder/sounds_eval.png
-#   gnuplot -e "
-#     set output '$soundlower';
-#     set term pngcairo size 1280, 800;
-#     
-#     files=system('ls $indfolder/eval_first_pass/e1/*/acoustics.dat');
-#     set multiplot layout words(files), 1;
-#     set xrange [0:600]; set yrange [0:1];
-#     set style fill solid .25;
-#     set key above;
-#     
-#     do for [f in files] {
-#       plot for [i=10:12] f using 0:i:(0) with filledcurves title columnhead;
-#     };
-#     
-#     unset multiplot;
-#   "
-#   
-#   montage -tile x2 -geometry +0+0 $indfolder/sounds_{mk,eval}.png $soundoverview
-#   echo "Generated $soundoverview"
-# fi
+
+soundoverview=$indfolder/sounds.png
+if [ -f "$soundoverview" ]
+then
+  echo "Sound overview '$soundoverview' already generated. Skipping"
+else
+  soundupper=$indfolder/sounds_mk.png
+  gnuplot -e "
+    n=$teamsize;
+    files=system('ls $indfolder/*/acoustics.dat');
+        
+    set output '$soundupper';
+    set term pngcairo size 1280, 800;
+
+    set multiplot layout words(files), n;
+    set key above;
+    set style fill solid .75;
+    
+    set xrange [0:500]; set yrange [0:1];
+    do for [i=1:n] {
+      do for [f in files] {
+        plot for [j=10:12] f using 0:12*(i-1)+j:(0) with filledcurves title columnhead;
+      };
+    };
+    
+    unset multiplot;
+  " #|| rm -v "$soundoverview"
+  
+  soundlower=$indfolder/sounds_eval.png
+  gnuplot -e "
+    set output '$soundlower';
+    set term pngcairo size 1280, 800;
+    
+    files=system('ls $indfolder/eval_first_pass/e1/*/acoustics.dat');
+    set multiplot layout words(files), 1;
+    set xrange [0:600]; set yrange [0:1];
+    set style fill solid .25;
+    set key above;
+    
+    do for [f in files] {
+      plot for [i=10:12] f using 0:i:(0) with filledcurves title columnhead;
+    };
+    
+    unset multiplot;
+  "
+  
+  montage -tile x2 -geometry +0+0 $indfolder/sounds_{mk,eval}.png $soundoverview
+  echo "Generated $soundoverview"
+fi
 
 
 ################################################################################
@@ -231,14 +267,14 @@ firstopp=$(head -n 1 <<< "$opponents")
 #   fi
 # done
 
-for e in e1 e2
+for e in e1 e2 e3
 do
   pfolder=$(ffpass "first" $e)
   
   for f in $pfolder/*/outputs.dat
   do
     o=$(dirname $f)/$(basename $f .dat).png
-    if false #[ -f "$o" ]
+    if [ -f "$o" ]
     then
       echo "Output overview '$o' already generated. Skipping"
     else
@@ -260,5 +296,62 @@ do
     
     echo "Generated $aggregate"
   fi
-  echo "$aggregate" >> .generated_files
+done
+
+# Render meta-modules
+pfolder=$(ffpass "first" "")
+for depth in true false
+do
+  for symmetry in true false
+  do
+    suffix=""
+    [ $depth == "true" ] && suffix="${suffix}_depth"
+    [ $symmetry == "true" ] && suffix="${suffix}_symmetry"
+    aggregate="$pfolder/mann$suffix.$ext"
+    if false #[ -f "$aggregate" ]
+    then
+      echo "ANN clustering '$aggregate' already generated. Skipping"
+    else
+      echo "Generating ANN clustering: $aggregate"
+      
+      mannWithDepth=$depth mannWithSymmetry=$symmetry CMD=yes $sfolder/evaluate.sh --gui $ind $firstopp --overwrite i \
+        --ann-render=$ext --ann-aggregate --ann-tags=$pfolder/neural_groups.ntags
+        
+      [ ! -z "$suffix" ] && mv -v $pfolder/mann.$ext $aggregate
+      
+      echo "Generated $aggregate"
+    fi
+  done
+done
+
+declare -A flags=([e1]="THI" [e2]="CBA" [e3]="OFN")
+declare -p flags
+for e in e1 e2 e3
+do
+  pfolder=$(ffpass "second" $e)
+  flag="${flags[$e]}"
+    
+  for f in $pfolder/*/outputs.dat
+  do
+    o=$(dirname $f)/$(basename $f .dat).png
+    if [ -f "$o" ]
+    then
+      echo "Output overview '$o' already generated. Skipping"
+    else
+      plotoutputs $f $o
+      echo "Generated outputs overview '$o'"
+    fi
+  done
+
+  for f in $pfolder/*/modules*.dat
+  do
+    o=$(dirname $f)/$(basename $f .dat).png
+    if [ -f "$o" ]
+    then
+      echo "Modules overview '$o' already generated. Skipping"
+    else
+      plotmodules $f $o $flag
+      echo "Generated modules overview '$o'"
+    fi
+  done
 done

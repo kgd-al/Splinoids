@@ -25,17 +25,18 @@ struct Evaluator {
     Inds opps;
 
     std::vector<std::string> kombatNames, oppsId;
-    std::string scenario;
+    std::string scenario, scenarioArg;
     int teamSize;
 
     Scenario::Params::Flags flags;
-    bool neutralFirst;
+//    bool neutralFirst;
 
     Params (Ind i) : ind(i) {}
 
     static Params fromArgv (const std::string &lhsArg,
                             const std::vector<std::string> &rhsArgs,
                             const std::string &scenario,
+                            const std::string &scenarioArg,
                             int teamSize);
 
     static Params fromInds (Ind &ind, const Inds &opps);
@@ -57,10 +58,10 @@ struct Evaluator {
   // Actual evaluator
   void operator() (Params &params);
 
-  static LogData* logging_getData (void);
-  static void logging_init (LogData *d, const stdfs::path &folder, Scenario &s);
-  static void logging_step (LogData *d, Scenario &s);
-  static void logging_freeData (LogData **d);
+  LogData* logging_getData (void);
+  void logging_init (LogData *d, const stdfs::path &folder, Scenario &s);
+  void logging_step (LogData *d, Scenario &s);
+  void logging_freeData (LogData **d);
 
   static std::string id (const Ind &i) {
     return GAGA::concat(i.id.first, ":", i.id.second,
@@ -77,7 +78,8 @@ struct Evaluator {
   static void dumpStats (const stdfs::path &dna, const stdfs::path &folder);
 
   stdfs::path logsSavePrefix, annTagsFile;
-  int annAggregation = 0;
+
+  std::vector<std::unique_ptr<phenotype::ModularANN>> manns;
 
 //  std::vector<int> lesions;
   static constexpr std::array<int,1> lesions {0};

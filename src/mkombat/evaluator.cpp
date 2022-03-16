@@ -99,7 +99,7 @@ int main(int argc, char *argv[]) {
 
   std::string lhsTeamArg;
   std::vector<std::string> rhsTeamArgs;
-  std::string scenario;
+  std::string scenario, scenarioArg;
 
   int teamSize = -1;
 
@@ -135,6 +135,8 @@ int main(int argc, char *argv[]) {
      cxxopts::value(rhsTeamArgs))
     ("scenario", "Scenario name for canonical evaluations",
      cxxopts::value(scenario))
+    ("scenario-arg", "Eventual argument for the requested scenario",
+     cxxopts::value(scenarioArg))
 
     ("team-size", "Force a specific team size"
                   " (independantly from genomes' preferences)",
@@ -191,7 +193,8 @@ int main(int argc, char *argv[]) {
   }
 
   auto params = simu::Evaluator::Params::fromArgv(lhsTeamArg, rhsTeamArgs,
-                                                  scenario, teamSize);
+                                                  scenario, scenarioArg,
+                                                  teamSize);
   Ind &ind = params.ind;
 
   auto start = simu::Simulation::now();
@@ -204,11 +207,7 @@ int main(int argc, char *argv[]) {
 //  eval.setLesionTypes(lesions);
 
   eval.logsSavePrefix = stdfs::path(outputFolder);
-
-  if (!annNeuralTags.empty()) {
-    eval.annTagsFile = annNeuralTags;
-    eval.annAggregation = 1;
-  }
+  eval.annTagsFile = annNeuralTags;
 
   eval(params);
 

@@ -36,12 +36,13 @@ const Simulation::InitData Scenario::commonInitData = [] {
   return d;
 }();
 
-genotype::Environment Scenario::environmentGenome (uint tSize) {
+genotype::Environment Scenario::environmentGenome (uint tSize, bool eval) {
   genotype::Environment e;
   e.maxVegetalPortion = 1;
   e.taurus = 0;
 
-  e.width = e.height = 5 * std::sqrt(tSize);
+  if (eval) e.width = e.height = 50;
+  else      e.width = e.height = 5 * std::sqrt(tSize);
 
   return e;
 }
@@ -101,7 +102,8 @@ void Scenario::init(const Params &params) {
     _teamsSize = 1;
   }
 
-  _simulation.init(environmentGenome(_teamsSize), {}, commonInitData);
+  _simulation.init(environmentGenome(_teamsSize, neuralEvaluation()),
+                   {}, commonInitData);
 
   // Deactivate energy monitoring
   if (neuralEvaluation()) _simulation._systemExpectedEnergy = -1;
@@ -121,6 +123,16 @@ void Scenario::init(const Params &params) {
       if (hasFlag(Params::WITH_ALLY)) makeCritter(1, 0, _params.lhs.genome);
       if (hasFlag(Params::WITH_OPP1) || hasFlag(Params::WITH_OPP2))
         makeCritter(1, 0, _params.rhs.genome);
+    }
+
+    if (hasFlag(Params::SOUND_FRND) || hasFlag(Params::SOUND_OPPN)) {
+      std::istringstream iss (params.arg);
+      iss >> _testChannel;
+      if (!iss)
+        utils::Thrower("Failed to parse ", params.arg, " as a channel number");
+      if (Critter::VOCAL_CHANNELS < _testChannel)
+        utils::Thrower("Channel id is out of range [0, ",
+                       Critter::VOCAL_CHANNELS, "]");
     }
 
   } else {
@@ -218,6 +230,11 @@ void Scenario::postStep(void) {
         for (uint i=0; i<Critter::SPLINES_COUNT; i++)
           c->overrideSplineHealthness(h, i, s);
   };
+  static const auto injectSound = [] (simu::Critter *c, uint channel) {
+    auto &ears = c->ears();
+    ears.fill(0);
+    ears[channel] = ears[channel+Critter::VOCAL_CHANNELS+1] = 1;
+  };
 
   if (neuralEvaluation()) {
     const auto step = t / PERIOD;
@@ -228,11 +245,18 @@ void Scenario::postStep(void) {
     sbj->body().SetTransform(sbj->body().GetPosition(),
                              std::sin(2*M_PI*t / PERIOD) * M_PI / 4);
 
+    bool neutral = (step%2 != _params.neutralFirst);
+
+    if (!neutral) {
+      if (hasFlag(Params::SOUND_NOIS)) injectSound(sbj, 0);
+      if (hasFlag(Params::SOUND_FRND) || hasFlag(Params::SOUND_OPPN))
+        injectSound(sbj, _testChannel);
+    }
+
     if (!((t-1) % PERIOD == 0)) return;
 
 //    std::cerr << "## Period " << step << "\n";
     // Maybe create stuff
-    bool neutral = (step%2 != _params.neutralFirst);
     if (neutral) {  // Clean previous
       if (!_teams[1].empty()) {
         for (auto &c: _teams[1])  _simulation.delCritter(c);
@@ -265,6 +289,11 @@ void Scenario::postStep(void) {
     if (hasFlag(Params::WITH_ALLY)) _currentFlags.flip(Params::WITH_ALLY);
     if (hasFlag(Params::WITH_OPP1)) _currentFlags.flip(Params::WITH_OPP1);
     if (hasFlag(Params::WITH_OPP2)) _currentFlags.flip(Params::WITH_OPP2);
+
+    // Manage sound
+    if (hasFlag(Params::SOUND_NOIS)) _currentFlags.flip(Params::SOUND_NOIS);
+    if (hasFlag(Params::SOUND_FRND)) _currentFlags.flip(Params::SOUND_FRND);
+    if (hasFlag(Params::SOUND_OPPN)) _currentFlags.flip(Params::SOUND_OPPN);
 
     return;
   }

@@ -46,11 +46,12 @@ public:
 
       WITH_ALLY, WITH_OPP1, WITH_OPP2,
 
-      COMMUNICATION
+      SOUND_NOIS, SOUND_FRND, SOUND_OPPN
     };
-    using Flags = std::bitset<7>;
+    using Flags = std::bitset<9>;
     Flags flags;
-    bool neutralFirst;
+    bool neutralFirst = false;
+    std::string arg;
   };
   using DeathCause = Simulation::Autopsies::Death;
   static constexpr DeathCause UNKNOWN_DEATH_CAUSE = DeathCause(-1);
@@ -114,10 +115,12 @@ private:
 
   std::array<std::array<uint, 2>, 2> _autopsies;
 
+  uint _testChannel;
+
   simu::Critter* makeCritter (uint team, uint id,
                               const genotype::Critter &genome);
 
-  static genotype::Environment environmentGenome (uint tSize);
+  static genotype::Environment environmentGenome (uint tSize, bool eval);
 };
 
 } // end of namespace simu

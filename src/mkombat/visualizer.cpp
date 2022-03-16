@@ -49,7 +49,7 @@ int main(int argc, char *argv[]) {
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::QUIET;
 
-  std::string lhsTeamArg, rhsTeamArg, scenarioArg;
+  std::string lhsTeamArg, rhsTeamArg, scenarioArg, scenarioAddArg;
   int teamSize = -1;
 
   int startspeed = 1;
@@ -92,6 +92,8 @@ int main(int argc, char *argv[]) {
     ("rhs", "Right-hand side team", cxxopts::value(rhsTeamArg))
     ("scenario", "Scenario name for canonical evaluations",
      cxxopts::value(scenarioArg))
+    ("scenario-arg", "Eventual argument for the requested scenario",
+     cxxopts::value(scenarioAddArg))
     ("team-size", "Force a specific team size"
                   " (independantly from genomes' preferences)",
      cxxopts::value(teamSize))
@@ -217,7 +219,8 @@ int main(int argc, char *argv[]) {
   // == Data load
 
   auto params = simu::Evaluator::Params::fromArgv(lhsTeamArg, {rhsTeamArg},
-                                                  scenarioArg, teamSize);
+                                                  scenarioArg, scenarioAddArg,
+                                                  teamSize);
   outputFolder /= params.kombatNames[0];
 
 
@@ -426,7 +429,7 @@ int main(int argc, char *argv[]) {
     phenotype::ANN &ann = scenario.subject()->brain();
     simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);
 
-    phenotype::ModularANN annAgg (ann, false);
+    phenotype::ModularANN annAgg (ann);
     av.setGraph(annAgg);
     av.updateCustomColors();
 
@@ -487,17 +490,17 @@ int main(int argc, char *argv[]) {
       else            v->stop();
     });
 
-    using Eval = simu::Evaluator;
-    auto log = Eval::logging_getData();
-    Eval::logging_init(log, stdfs::path(outputFolder), scenario);
-    QObject::connect(v, &gui::MainView::stepped,
-                     [log,&scenario] {
-      Eval::logging_step(log, scenario);
-    });
+//    using Eval = simu::Evaluator;
+//    auto log = Eval::logging_getData();
+//    Eval::logging_init(log, stdfs::path(outputFolder), scenario);
+//    QObject::connect(v, &gui::MainView::stepped,
+//                     [log,&scenario] {
+//      Eval::logging_step(log, scenario);
+//    });
 
     r = a.exec();
 
-    Eval::logging_freeData(&log);
+//    Eval::logging_freeData(&log);
 
     settings.setValue("cs::visible", cs->isVisible());
     settings.setValue("cs::geom", cs->saveGeometry());
