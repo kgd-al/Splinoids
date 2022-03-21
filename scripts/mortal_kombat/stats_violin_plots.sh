@@ -31,7 +31,7 @@ then
       (
         printf "Type ID "
         transpose 1 $o | tr -d ':\n'
-        printf " Hits Damage Volume Talkativeness Channels Preferred C0 C1 C2\n"
+        printf " Hits Damage Volume Talkativeness Channels Preferred C0 C1 C2 RawClusters Modules\n"
         ) > $output
     fi
     
@@ -39,7 +39,14 @@ then
       printf "$parts "
       transpose 2 $o | tr '\n' ' '
       grep "True-hits\|Good-damage" $indfolder/hitrate.dat | transpose 2 - | tr '\n' ' '
-      grep "Volume\|Talkativeness\|Channels\|Preferred\|Occupation" $indfolder/communication.dat | transpose 2- -
+      grep "Volume\|Talkativeness\|Channels\|Preferred\|Occupation" $indfolder/communication.dat | transpose 2- - | tr '\n' ' '
+      c=$(grep "^$parts" $odir/../clusters/meta-clusters.dat | cut -d ' ' -f 13,13)
+      echo $c $parts | awk '{
+        s=9;
+        if (substr($2, 2, 1) == "1") s--; 
+        if (substr($2, 4, 1) == "2") s--;
+        print $1, 100*$1/s;
+      }'
     ) >> $output
     
     i=$(($i+1))
@@ -54,7 +61,8 @@ fi
 
 cols=$(head -n1 $output | wc -w)
 
-ext=pdf
+ext=png
+[ ! -z ${EXT} ] && ext=$EXT
 
 for t in t1p2 t1p3 t2p2 t2p3;
 do
@@ -112,7 +120,7 @@ prettyHeaders = {
 }
 
 def too_small(lhs, rhs):
-  return len(set(lhs+rhs)) < 8
+  return len(set(lhs+rhs)) < 2
 
 data=pd.read_csv('$output', delimiter=' ');
 gp=data.groupby(by='Type')
@@ -125,7 +133,7 @@ for i in range(2, data.shape[1]):
   name = data.columns[i]
   output='$odir/violin.'+name+'.$ext'
   
-  if False:#os.path.exists(output):
+  if os.path.exists(output):
     print('Violin plot', output, 'already exists. Skipping', end='\n')
     continue
   else:
@@ -157,7 +165,7 @@ for i in range(2, data.shape[1]):
   fig, ax = plt.subplots()
   
   if (ext != 'pdf'):
-    l = ax.axline((0,med), slope=0)
+    l = ax.axline((.5,med), slope=0)
     l.set_dashes([1,1])
     l.set_linewidth(.25)
     l.set_color('gray')

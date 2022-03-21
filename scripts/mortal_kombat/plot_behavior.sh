@@ -24,6 +24,13 @@ datafolder(){
   echo $indfolder/$lid-$lp-$lg-0__$rid-$rp-$rg-0$scnr/
 }
 
+line(){ 
+  c=$1; [ -z $c ] && c='#'
+  n=$2; [ -z $n ] && n=80
+  printf "$c%.0s" $(seq 1 $n)
+  echo
+}
+
 ind=$(dirname $1)/$(basename $1).dna
 if [ ! -f "$ind" ]
 then
@@ -85,6 +92,11 @@ plotmodules(){
     echo "No neural flags provided"
     exit 3
   fi
+  
+  line =
+  echo $1
+  head -n 1 $1
+  line =
   cols=$(awk -vflags="$3" 'NR==1 {
       for(i=2; i<=NF; i++) {
         if (substr($i, length($i), 1) == "M") {
@@ -111,8 +123,12 @@ plotmodules(){
     set grid;
     
     cols='$cols';
-    print cols;
-    plot for [i=1:words(cols):2] f using 0:(column(word(cols, i)+0)) with lines title word(cols, i+1);"
+    plot for [i=1:words(cols):2] '< tail -n +2 '.f using 0:(column(word(cols, i)+0)) with lines title word(cols, i+1);
+    
+    set output '$(dirname $2)/$(basename $2 .png).pdf';
+    set term pdfcairo size 6,2;
+    replot;
+    ";
 }
 
 ################################################################################
@@ -181,13 +197,18 @@ do
     echo "Generated Sound overview '$soundoverview'"
   fi
   
-  outputsoverview=$dfolder/outputs.png
-  if [ -f $outputsoverview ]
-  then
-    echo "Outputs overview '$outputsoverview' already generated. Skipping"
-  else
-    plotoutputs $dfolder/outputs.dat $outputsoverview
-  fi
+   
+  for f in $dfolder/outputs*.dat
+  do
+    o=$(dirname $f)/$(basename $f .dat).png
+    if [ -f "$o" ]
+    then
+      echo "Output overview '$o' already generated. Skipping"
+    else
+      plotoutputs $f $o
+      echo "Generated outputs overview '$o'"
+    fi
+  done
 done
 
 ################################################################################
@@ -271,7 +292,7 @@ for e in e1 e2 e3
 do
   pfolder=$(ffpass "first" $e)
   
-  for f in $pfolder/*/outputs.dat
+  for f in $pfolder/*/outputs*.dat
   do
     o=$(dirname $f)/$(basename $f .dat).png
     if [ -f "$o" ]
@@ -300,15 +321,15 @@ done
 
 # Render meta-modules
 pfolder=$(ffpass "first" "")
-for depth in true false
+for depth in false
 do
-  for symmetry in true false
+  for symmetry in false
   do
     suffix=""
     [ $depth == "true" ] && suffix="${suffix}_depth"
     [ $symmetry == "true" ] && suffix="${suffix}_symmetry"
     aggregate="$pfolder/mann$suffix.$ext"
-    if false #[ -f "$aggregate" ]
+    if [ -f "$aggregate" ]
     then
       echo "ANN clustering '$aggregate' already generated. Skipping"
     else
@@ -331,7 +352,7 @@ do
   pfolder=$(ffpass "second" $e)
   flag="${flags[$e]}"
     
-  for f in $pfolder/*/outputs.dat
+  for f in $pfolder/*/outputs*.dat
   do
     o=$(dirname $f)/$(basename $f .dat).png
     if [ -f "$o" ]
@@ -354,4 +375,31 @@ do
       echo "Generated modules overview '$o'"
     fi
   done
+done
+
+pfolder=$(ffpass "third" "")
+flag="AVT"
+    
+for f in $pfolder/*/outputs*.dat
+do
+  o=$(dirname $f)/$(basename $f .dat).png
+  if [ -f "$o" ]
+  then
+    echo "Output overview '$o' already generated. Skipping"
+  else
+    plotoutputs $f $o
+    echo "Generated outputs overview '$o'"
+  fi
+done
+
+for f in $pfolder/*/modules*.dat
+do
+  o=$(dirname $f)/$(basename $f .dat).png
+  if [ -f "$o" ]
+  then
+    echo "Modules overview '$o' already generated. Skipping"
+  else
+    plotmodules $f $o $flag
+    echo "Generated modules overview '$o'"
+  fi
 done

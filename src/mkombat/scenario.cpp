@@ -87,6 +87,8 @@ simu::Critter* Scenario::makeCritter (uint team, uint id,
 
   if (neuralEvaluation()) pin(c, team != 0);
 
+//  if (team == 0 && id == 0)  c->mute = true;
+
   return c;
 }
 
