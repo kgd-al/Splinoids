@@ -51,7 +51,7 @@ line
 echo "Extracting generic behavior"
 line
 
-if ls $indfolder/* >/dev/null 2>&1
+if ls $indfolder/*1998* >/dev/null 2>&1
 then
   echo "Data folder '$indfolder' already exists. Skipping"
 else
@@ -460,7 +460,7 @@ fi
 
 ################################################################################
 # Generate meta-modules
-aggregate=$indfolder/eval_first_pass/neural_groups.dat
+mmann_aggregate=$indfolder/eval_first_pass/neural_groups.dat
 awk '
   NR==1{print;next}
   FNR==1{next;}
@@ -472,7 +472,7 @@ awk '
       for (i in d[n]) printf " %s", d[n][i];
       printf "\n";
     }
-  }' $indfolder/eval_first_pass/e*/neural_groups.dat > $aggregate
+  }' $indfolder/eval_first_pass/e*/neural_groups.dat > $mmann_aggregate
   
 #               Sound
 #               |
@@ -480,7 +480,7 @@ awk '
 #             +-|-+ +-|-+ +-+-+- Touch
 #             v v v v v v v v v
 currentflags="4;4;4;2;2;2;1;1;1"
-neuralclusteringcolors $aggregate $currentflags
+neuralclusteringcolors $mmann_aggregate $currentflags
 
 # cat $(dirname $aggregate)/$(basename $aggregate .dat).ntags
 
@@ -524,3 +524,24 @@ do
     done
   fi    
 done
+
+################################################################################
+# Third pass: rerun just combat while monitoring meta-modules
+echo
+line
+echo "Third-pass evaluations"
+line
+
+mmann_ntags=$(dirname $mmann_aggregate)/$(basename $mmann_aggregate .dat).ntags
+pfolder=$(ffpass "third" "")
+if ls $pfolder/* >/dev/null 2>&1
+then
+  echo 'Data folder '$pfolder' already exists. Skipping'
+else
+  for o in $opponents
+  do
+    line
+    echo "# $e/$opp"
+    $sfolder/evaluate.sh $ind $o -f $pfolder --ann-aggregate=$mmann_ntags
+  done
+fi

@@ -111,11 +111,10 @@ auto avg (const std::set<Critter*> &pop,
 struct Evaluator::LogData {
   std::ofstream lhs, rhs, // generic individual data
                 fdata, adata, // fight / accoustics
-                ndata, // hidden neurons / modules
-                idata, odata, // neural i/o
-                traj; // trajectory data (obsolete?)
+                ndata; // hidden neurons / modules
 
-  std::vector<std::ofstream> mdata; // modules
+  std::vector<std::ofstream> idata, odata, // neural i/o
+                             mdata; // modules
 };
 
 Evaluator::LogData* Evaluator::logging_getData(void) {
@@ -136,6 +135,15 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
 
   static const auto header = [] (auto &os) {
     os << "Time Count LSpeed ASpeed Health TotalHealth Energy\n";
+  };
+
+  uint team0Size = s.teams()[0].size();
+  const auto filename = [&team0Size] (const std::string &name,
+                                      const std::string &ext,
+                                      uint i) {
+    std::string id;
+    if (team0Size > 1) id = utils::mergeToString("_", i);
+    return utils::mergeToString(name, id, ".", ext);
   };
 
   d->lhs.open(f / "lhs.dat");
@@ -163,23 +171,19 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
   }
   alog << "\n";
 
-  d->traj.open(f / "trajectories.dat");
-  d->traj << "Env size: " << s.simulation().environment().xextent()
-          << " " << s.simulation().environment().yextent() << "\n\n";
-  static const std::string tt [] {"I", "O"};
-  for (uint t : {0,1})
-    for (uint c=0; c<s.teams()[t].size(); c++)
-      for (const auto s: {"X", "Y", "A", "H"})
-        d->traj << tt[t] << c << s << " ";
-  d->traj << "\n";
+  d->idata.resize(team0Size);
+  d->odata.resize(team0Size);
+  for (uint i=0; i<team0Size; i++) {
+    auto &ilog = d->idata[i];
+    ilog.open(f / filename("inputs", "dat", i));
+    for (auto s: s.subject()->neuralInputsHeader()) ilog << s << " ";
+    ilog << "\n";
 
-  d->idata.open(f / "inputs.dat");
-  for (auto s: s.subject()->neuralInputsHeader()) d->idata << s << " ";
-  d->idata << "\n";
-
-  d->odata.open(f / "outputs.dat");
-  for (auto s: s.subject()->neuralOutputsHeader()) d->odata << s << " ";
-  d->odata << "\n";
+    auto &olog = d->odata[i];
+    olog.open(f / filename("outputs", "dat", i));
+    for (auto s: s.subject()->neuralOutputsHeader()) olog << s << " ";
+    olog << "\n";
+  }
 
   if (s.neuralEvaluation() && annTagsFile.empty()) {
     auto &nlog = d->ndata;
@@ -193,12 +197,10 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
 
   if (!annTagsFile.empty()) {
     auto &mlogs = d->mdata;
-    mlogs.resize(s.teams()[0].size());
+    mlogs.resize(team0Size);
     for (uint i=0; i<mlogs.size(); i++) {
       auto &mlog = mlogs[i];
-      std::string id;
-      if (mlogs.size() > 1) id = utils::mergeToString("_", i);
-      mlog.open(f / utils::mergeToString("modules" + id + ".dat"));
+      mlog.open(f / filename("modules", "dat", i));
       mlog << NEURAL_FLAGS;
       for (const auto &p: manns[i]->modules()) {
         if (p.second->type() == phenotype::ANN::Neuron::H) {
@@ -243,6 +245,12 @@ void Evaluator::logging_step(LogData *d, Scenario &s) {
   if (d->rhs.is_open()) log(d->rhs, teams[1], t);
 
   if (teams[0].empty()) return;
+  uint team0Size = s.teams()[0].size();
+  const auto teammate = [&s] (uint i) {
+    auto it = s.teams()[0].begin();
+    std::advance(it, i);
+    return *it;
+  };
 
   if (d->fdata.is_open()) {
     auto timestamp = s.simulation().currTime().timestamp();
@@ -261,23 +269,18 @@ void Evaluator::logging_step(LogData *d, Scenario &s) {
     alog << "\n";
   }
 
-  if (d->idata.is_open()) {
-    for (const auto &v: s.subject()->neuralInputs()) d->idata << v << " ";
-    d->idata << "\n";
-  }
+  for (uint i=0; i<team0Size; i++) {
+    auto &ilog = d->idata[i];
+    if (ilog.is_open()) {
+      for (const auto &v: teammate(i)->neuralInputs()) ilog << v << " ";
+      ilog << "\n";
+    }
 
-  if (d->odata.is_open()) {
-    for (const auto &v: s.subject()->neuralOutputs()) d->odata << v << " ";
-    d->odata << "\n";
-  }
-
-  if (d->traj.is_open()) {
-    auto &traj = d->traj;
-    for (auto t: s.teams())
-      for (const simu::Critter *c: t)
-        traj << c->x() << " " << c->y() << " "
-             << c->rotation() << " " << c->bodyHealthness() << " ";
-    traj << "\n";
+    auto &olog = d->odata[i];
+    if (olog.is_open()) {
+      for (const auto &v: teammate(i)->neuralOutputs()) olog << v << " ";
+      olog << "\n";
+    }
   }
 
   if (s.neuralEvaluation()) {

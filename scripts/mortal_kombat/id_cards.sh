@@ -6,6 +6,9 @@ normalized=$(dirname $stats)/$(basename $stats .dat).normalized.dat
 ofolder=$base/idcards
 mkdir -p $ofolder
 
+ext="png"
+[ ! -z ${EXT} ] && ext=$EXT
+
 cols="ID bdy-mass arm-mass viw-prec ann-hidn Damage Talkativeness"
 pretty_names="Body mass,Arms mass,Retina size,Hidden neurons,Damage,Talkativeness"
 
@@ -88,7 +91,7 @@ print(data.columns[1:], '>>', prettyHeaders)
 
 data.sort_values(by='ID', inplace=True)
 
-plt.rcParams['figure.constrained_layout.use'] = True
+# plt.rcParams['figure.constrained_layout.use'] = True
 ax = plt.subplot(projection='polar')
 
 ax.set_ylim(0, 1)
@@ -119,7 +122,7 @@ for r in range(data.shape[0]):
   for rect, v in zip(rects, data.iloc[r,1:]):
     rect.set_height(v)
 
-  o = "$ofolder/{}.png".format(data.iloc[r,0].replace('/', ''))
+  o = "$ofolder/{}.$ext".format(data.iloc[r,0].replace('/', ''))
   print(r, o, end='\r')
   plt.savefig(o, dpi=150)
   
