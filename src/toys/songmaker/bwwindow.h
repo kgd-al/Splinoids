@@ -6,7 +6,7 @@
 #include <QCheckBox>
 #include <QSplitter>
 
-#include "../gui/es_hyperneatpanel.h"
+#include "kgd/eshn/gui/es_hyperneatpanel.h"
 #include "sound/visualizer.h"
 
 namespace kgd::watchmaker {

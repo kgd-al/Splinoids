@@ -23,7 +23,7 @@
 #define DEBUG_MIDI_AUDIO 100
 #endif
 
-#include "../../../midi/midifile/include/MidiFile.h"
+#include "../../midifile/include/MidiFile.h"
 
 namespace kgd::watchmaker::sound {
 

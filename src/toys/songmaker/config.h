@@ -2,7 +2,7 @@
 #define KGD_WATCHMAKER_CONFIG_H
 
 #include "kgd/settings/configfile.h"
-#include "../phenotype/ann.h"
+#include "kgd/eshn/phenotype/ann.h"
 
 DEFINE_NAMESPACE_SCOPED_PRETTY_ENUMERATION(
     kgd::watchmaker, TemporalInput,

@@ -16,3 +16,6 @@
 [submodule "gaga"]
 	path = gaga
 	url = git@github.com:kgd-al/gaga.git
+[submodule "midifile"]
+	path = midifile
+	url = git@github.com:kgd-al/midifile.git

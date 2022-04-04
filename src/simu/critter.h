@@ -11,7 +11,7 @@
 #include "box2d/b2_body.h"
 #include "box2d/b2_revolute_joint.h"
 
-#include "../enumarray.hpp"
+#include "../simu/enumarray.hpp"
 
 DEFINE_PRETTY_ENUMERATION(Motor, LEFT = 1, RIGHT = -1)
 

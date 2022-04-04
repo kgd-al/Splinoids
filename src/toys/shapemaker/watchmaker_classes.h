@@ -1,7 +1,7 @@
 #include <QToolButton>
 
-#include "../visu/graphicsimulation.h"
-#include "../gui/geneticmanipulator.h"
+#include "../../visu/graphicsimulation.h"
+#include "../../gui/geneticmanipulator.h"
 
 using Genome = genotype::Critter;
 

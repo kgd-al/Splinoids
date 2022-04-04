@@ -7,7 +7,7 @@ cmake_minimum_required(VERSION 3.4)
 
 project("Splinoids")
 message("\n####################################################################"
-    "############\n## CMakeFile for ${PROJECT_NAME}")
+        "############\n## CMakeFile for ${PROJECT_NAME}")
 
 set(CMAKE_CXX_FLAGS "-Wall -Wextra -pedantic")#"-ftime-report")
 
@@ -69,9 +69,9 @@ message("  > Gui libraries " "${GUI_LIBS}")
 list(APPEND KGD_DEFINITIONS ${ES-HyperNEAT_KGD_DEFINITIONS})
 
 if (WITH_MIDI)
-    add_subdirectory(midi/midifile)
+    add_subdirectory(midifile)
     list(APPEND GUI_LIBS midifile)
-    include_directories(midi/midifile/include)
+    include_directories(midifile/include)
 endif()
 
 ################################################################################
@@ -99,71 +99,19 @@ ENDFUNCTION(PREPEND)
 include(src/CMakeLists.txt)
 
 ################################################################################
-## ?
-################################################################################
-
-if (EXP_ECOSYSTEM)
-    ############################################################################
-    ## Target (simulation)
-    ############################################################################
-    add_executable(
-      simulator
-      $<TARGET_OBJECTS:SIMU_OBJS>
-      "src/simulator.cpp")
-    target_link_libraries(simulator ${CORE_LIBS})
-
-    ############################################################################
-    ## Target (evaluation)
-    ############################################################################
-    #add_executable(
-    #  evaluator
-    #  $<TARGET_OBJECTS:SIMU_OBJS>
-    #  "src/evaluator.cpp")
-    #target_link_libraries(evaluator ${CORE_LIBS})
-
-    ############################################################################
-    ## Target (timelines explorer)
-    ############################################################################
-    find_package(OpenMP)
-    #if (OPENMP_FOUND)
-    #    message("> OpenMP Found.")
-    #    message("  > OpenMP flags are " ${OpenMP_CXX_LIBRARIES})
-    #  add_executable(
-    #    timelines
-    #    $<TARGET_OBJECTS:SIMU_OBJS>
-    #    "src/timelines.cpp")
-    #  target_link_libraries(timelines ${CORE_LIBS} OpenMP::OpenMP_CXX)
-    #endif()
-
-
-    ################################################################################
-    ## Target (tester may be with gui)
-    ################################################################################
-    #if (CLUSTER_BUILD)
-    #    add_executable(
-    #        tester
-    #        $<TARGET_OBJECTS:SIMU_OBJS>
-    #        "src/tests/tester.cpp")
-    #    target_link_libraries(tester ${CORE_LIBS})
-    #else()
-    #    add_executable(
-    #        tester
-    #        $<TARGET_OBJECTS:SIMU_OBJS>
-    #        $<TARGET_OBJECTS:VISU_OBJS>
-    #        "src/tests/tester.cpp")
-    #    target_link_libraries(tester ${CORE_LIBS} ${GUI_LIBS})
-    #endif()
-
-endif()
-
-
-################################################################################
 ## Experiments
 ################################################################################
 
 ################################################################################
+## Complete ecosystem with spontaneous reproductions
+##  (needs more work to be stable)
+if (EXP_ECOSYSTEM)
+    include(src/experiments/ecosystem/CMakeLists.txt)
+endif()
+
+################################################################################
 ## Life-dinner (Discrimination, motion)
-if (EXP_LIFE-DINNER)
+if (EXP_LIFEDINNER)
     include(src/experiments/life-dinner/CMakeLists.txt)
 endif()
 
@@ -180,7 +128,7 @@ endif()
 if (NOT CLUSTER_BUILD)
     ############################################################################
     ## Song-maker (ANN-based sound production, watchmaker)
-    if (TOYS_SONGMAKER)
+    if(WITH_MIDI AND TOYS_SONGMAKER)
         include(src/toys/songmaker/CMakeLists.txt)
     endif()
 
@@ -221,8 +169,8 @@ message("> Building Songmaker target: " ${TOYS_SONGMAKER})
 option(EXP_ECOSYSTEM "Whether or not to build these targets" OFF)
 message("> Building Ecosystem targets: " ${EXP_ECOSYSTEM})
 
-option(EXP_ALIFE2021 "Whether or not to build these targets" OFF)
-message("> Building ALife2021 targets: " ${EXP_ALIFE2021})
+option(EXP_LIFEDINNER "Whether or not to build these targets" OFF)
+message("> Building Life/Dinner targets: " ${EXP_LIFEDINNER})
 
 option(EXP_KOMBAT "Whether or not to build these targets" OFF)
 message("> Building Mortal Kombat targets: " ${EXP_KOMBAT})

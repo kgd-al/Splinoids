@@ -1,6 +1,7 @@
 message("  ###############################################################")
 message("  Processing Mortal Kombat CMakeLists.txt")
 set(BASE "src/experiments/mkombat/")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "mortal-kombat")
 
 ############################################################################
 ## Target (ga evolution)

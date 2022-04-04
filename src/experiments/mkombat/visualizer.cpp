@@ -552,6 +552,10 @@ int main(int argc, char *argv[]) {
   } else if (!annRender.empty() && !annNeuralTags.empty()
              && annAggregateNeurons) {
 
+#if ESHN_SUBSTRATE_DIMENSION == 2
+        cs->brainPanel()->annViewer->updateCustomColors();
+#endif
+
     MANNViewer av;
     phenotype::ANN &ann = scenario.subject()->brain();
     simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);

@@ -1,6 +1,6 @@
 #include <csignal>
 
-#include "simu/simulation.h"
+#include "../../simu/simulation.h"
 
 #include "kgd/external/cxxopts.hpp"
 

@@ -27,15 +27,16 @@ set(SIMU_SRC
     "time.h"
     "time.cpp"
 
-    "../enumarray.hpp"
+    "enumarray.hpp"
 )
 PREPEND(SIMU_SRC "src/simu")
 
+message("  Genotype: ${GNTP_SRC}")
+message("Simulation: ${SIMU_SRC}")
 add_library(SIMU_OBJS OBJECT ${GNTP_SRC} ${SIMU_SRC})
 
 include_directories(box2d/include)
 add_subdirectory(box2d)
-
 list(APPEND CORE_LIBS box2d)
 
 ################################################################################
@@ -81,7 +82,6 @@ if (NOT CLUSTER_BUILD)
         "joystick.h"
         "joystick.cpp"
     )
-
     PREPEND(GUI_SRC "src/gui")
 
     set(GUI_MISC_SRC

@@ -3,7 +3,7 @@
 #include <QPainter>
 
 #include "watchmaker_classes.h"
-#include "../visu/config.h"
+#include "../../visu/config.h"
 
 #include <QDebug>
 

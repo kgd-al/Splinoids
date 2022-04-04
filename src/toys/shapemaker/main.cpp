@@ -13,8 +13,8 @@
 
 #include "kgd/external/cxxopts.hpp"
 
-#include "gui/geneticmanipulator.h"
-#include "misc/watchmaker_classes.h"
+#include "../../gui/geneticmanipulator.h"
+#include "watchmaker_classes.h"
 
 #include <QDebug>
 
