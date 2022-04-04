@@ -1,7 +1,7 @@
 #ifndef SCENARIO_H
 #define SCENARIO_H
 
-#include "../simu/simulation.h"
+#include "../../simu/simulation.h"
 
 namespace simu {
 

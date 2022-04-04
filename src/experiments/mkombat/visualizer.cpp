@@ -8,10 +8,10 @@
 #include "kgd/external/cxxopts.hpp"
 
 #include "indevaluator.h"
-#include "../gui/mainview.h"
+#include "../../gui/mainview.h"
 
 #include <QDebug>
-#include "../visu/config.h"
+#include "../../visu/config.h"
 #include <QPrinter>
 
 #include "kgd/eshn/gui/ann/2d/viewer.h"
@@ -19,6 +19,83 @@
 Q_DECLARE_METATYPE(BrainDead)
 
 //#include "config/dependencies.h"
+
+#ifdef WITH_MIDI
+#include "MidiFile.h"
+struct MidiFileWrapper {
+  static constexpr auto C = simu::Critter::VOCAL_CHANNELS;
+  using Notes = std::array<float, C>;
+
+private:
+  static constexpr auto TPQ = 96;
+
+  static constexpr uint BASE_OCTAVE = 1;
+  static constexpr uint BASE_A = 21 + 12 * BASE_OCTAVE;
+
+  Notes previousNotes;
+
+  smf::MidiFile midifile;
+
+  static uchar key (int index) {   return BASE_A+12*index;  }
+  static uchar velocity (float volume) {
+    assert(-1 <= volume && volume <= 1);
+    return std::round(127*std::max(0.f, volume));
+  }
+
+public:
+  MidiFileWrapper (int instrument) {
+    midifile.setTicksPerQuarterNote(TPQ);
+
+    const auto TEMPO = 60 * config::Simulation::ticksPerSecond();
+    midifile.addTempo(0, 0, TEMPO);
+    midifile.addTimbre(0, 0, 0, instrument);
+
+    previousNotes.fill(0);
+  }
+
+  void process (uint timestep, const Notes &notes) {
+    int t = TPQ * timestep;  /// TODO Debug
+//    std::cerr << "t(" << n << ") = " << t << "\n";
+    for (uint c=0; c<C; c++) {
+      float fn = notes[c];
+      uchar cn = velocity(fn);
+      if (previousNotes[c] != cn) {
+        if (previousNotes[c] > 0) midifile.addNoteOff(0, t, 0, key(c), 0);
+        if (cn > 0) midifile.addNoteOn(0, t, 0, key(c), cn);
+      }
+    }
+
+    previousNotes = notes;
+  }
+
+  void processEnd (uint timestep) {
+    std::vector<uchar> notesOff { 0xB0, 0x7B, 0x00 };
+    midifile.addEvent(0, TPQ*timestep, notesOff);
+  }
+
+  void write (const stdfs::path &path) {
+
+  //  for (uint c=0; c<C; c++)
+  //    if (on[c])
+  //      midifile.addNoteOff(0, tpq * N, 0, A+c, 0);
+//    midifile.addEvent(0, TPQ * N, notesOff);
+
+//    midifile.sortTracks();
+    midifile.doTimeAnalysis();
+    midifile.write(path);
+
+//    midifile.get
+
+#define GET(X) "\t" #X ": " << midifile.get##X() << "\n"
+    std::cout << "Wrote " << path << ":\n"
+              << GET(FileDurationInQuarters)
+              << GET(FileDurationInSeconds)
+              << GET(FileDurationInTicks)
+              << GET(FileDurationInSeconds);
+#undef GET
+  }
+};
+#endif
 
 long maybeSeed(const std::string& s) {
   if (s.empty())  return -2;
@@ -38,6 +115,10 @@ auto &apoget_force_link = config::PTree::rsetSize;
 
 int main(int argc, char *argv[]) {
   using ANNViewer = kgd::es_hyperneat::gui::ann::Viewer;
+
+  // Can only do color tagging for modular ANN (in xy-projected 2d)
+  using MANNViewer = kgd::es_hyperneat::gui::ann2d::Viewer;
+
   using Ind = simu::Evaluator::Ind;
   using utils::operator<<;
 
@@ -50,7 +131,7 @@ int main(int argc, char *argv[]) {
   Verbosity verbosity = Verbosity::QUIET;
 
   std::string lhsTeamArg, rhsTeamArg, scenarioArg, scenarioAddArg;
-  int teamSize = -1;
+  int forcedTeamSize = -1;
 
   int startspeed = 1;
   bool autoquit = false;
@@ -63,10 +144,17 @@ int main(int argc, char *argv[]) {
   bool noRestore = false;
 
   static const std::vector<std::string> validSnapshotViews {
-    "simu"/*, "ann", "mann", "io"*/
+    "simu", /*"ann",*/ "mann", "io",
+#ifdef WITH_MIDI
+    "midi",
+#endif
   };
   std::vector<std::string> snapshotViews;
   std::string background;
+
+#ifdef WITH_MIDI
+  uint midiInstrument = 123;
+#endif
 
   std::string annRender = ""; // no extension
   std::string annNeuralTags;
@@ -96,7 +184,7 @@ int main(int argc, char *argv[]) {
      cxxopts::value(scenarioAddArg))
     ("team-size", "Force a specific team size"
                   " (independantly from genomes' preferences)",
-     cxxopts::value(teamSize))
+     cxxopts::value(forcedTeamSize))
 
     ("start", "Whether to start running immendiatly after initialisation"
               " (and optionally at which speed > 1)",
@@ -119,6 +207,12 @@ int main(int argc, char *argv[]) {
           << "Specifies which views to render. Valid values: "
           << validSnapshotViews)).str(),
      cxxopts::value(snapshotViews))
+#ifdef WITH_MIDI
+    ("midi-instrument",
+     utils::mergeToString("Specify instrument for midi output (default: ",
+                          midiInstrument, ")"),
+     cxxopts::value(midiInstrument))
+#endif
     ("no-restore", "Don't restore interactive view options",
      cxxopts::value(noRestore)->implicit_value("true"))
     ("background", "Override color for the views background",
@@ -220,8 +314,9 @@ int main(int argc, char *argv[]) {
 
   auto params = simu::Evaluator::Params::fromArgv(lhsTeamArg, {rhsTeamArg},
                                                   scenarioArg, scenarioAddArg,
-                                                  teamSize);
+                                                  forcedTeamSize);
   outputFolder /= params.kombatNames[0];
+  const uint teamSize = params.teamSize;
 
 
   // ===========================================================================
@@ -329,6 +424,13 @@ int main(int argc, char *argv[]) {
     // Build list of views requested for rendering
     std::map<std::string, QWidget*> views;
     std::unique_ptr<phenotype::ModularANN> mann;
+    std::unique_ptr<MANNViewer> mannViewer;
+#ifdef WITH_MIDI
+    std::vector<std::unique_ptr<MidiFileWrapper>> midis;
+#else
+    bool midis = false;
+#endif
+
     for (const std::string &v_name: snapshotViews) {
       QWidget *view = nullptr;
       if (v_name == "simu") {
@@ -339,9 +441,9 @@ int main(int argc, char *argv[]) {
         QRectF b = simulation.bounds();
         view->setFixedSize(snapshots, snapshots * b.height() / b.width());
 
-      }/* else if (v_name == "ann") {
-        view = cs->brainPanel()->annViewerWidget;
-        view->setMinimumSize(snapshots, snapshots);
+//      } else if (v_name == "ann") {
+//        view = cs->brainPanel()->annViewerWidget;
+//        view->setMinimumSize(snapshots, snapshots);
 
       } else if (v_name == "io") {
         view = cs->brainIO();
@@ -350,60 +452,87 @@ int main(int argc, char *argv[]) {
       } else if (v_name == "mann" && !annNeuralTags.empty()
                && annAggregateNeurons) {
         phenotype::ANN &ann = scenario.subject()->brain();
-        simu::IndEvaluator::applyNeuralFlags(ann, annNeuralTags);
-
-        ANNViewer *av = cs->brainPanel()->annViewer;
-        av->updateCustomColors();
+        simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);
 
         mann.reset(new phenotype::ModularANN(ann));
-        auto mav = new ANNViewer;
+        mannViewer.reset(new MANNViewer);
+        auto mav = mannViewer.get();
         mav->setGraph(*mann);
         mav->updateCustomColors();
         mav->startAnimation();
 
         view = mav;
         view->setMinimumSize(snapshots, snapshots);
-      }*/
+
+#ifdef WITH_MIDI
+      } else if (v_name == "midi") {
+        for (uint i=0; i<teamSize; i++)
+          midis.push_back(std::make_unique<MidiFileWrapper>(midiInstrument));
+#endif
+      }
 
       if (view) views[v_name] = view;
     }
 
     // On each step, render all views
     const auto generate =
-      [v, &simulation, &savefolder, &views, &mann, snapshots] {
+      [v, &simulation, &scenario, &savefolder, &views,
+        teamSize, &mann, &midis, snapshots] {
       v->focusOnSelection();
       v->characterSheet()->readCurrentStatus();
 
+      auto t = simulation.currTime().timestamp();
       for (const auto &p: views) {
-//        if (p.first == "mann") {
-//          mann->update();
-//          static_cast<ANNViewer*>(p.second)->updateAnimation();
-//        }
+        if (p.first == "mann") {
+          mann->update();
+          static_cast<MANNViewer*>(p.second)->updateAnimation();
+        }
 
         std::ostringstream oss;
         oss << savefolder.string() << "/" << std::setfill('0') << std::setw(5)
-            << simulation.currTime().timestamp() << "_" << p.first << ".png";
+            << t << "_" << p.first << ".png";
         auto savepath = oss.str();
         auto qsavepath = QString::fromStdString(savepath);
+        oss.str();
 
-        std::cout << "Saving to " << savepath << ": ";
-        if (p.second->grab().save(qsavepath))
-          std::cout << "OK     \r";
-        else {
-          std::cout << "FAILED !";
-          exit (1);
-        }
+        oss << "Saving to " << savepath << ": ";
+        bool ok = p.second->grab().save(qsavepath);
+
+        oss << (ok ? "OK\n" : "FAILED\n");
+        std::cout << std::setw(80) << oss.str();
+        if (!ok) exit (1);
       }
+
+#ifdef WITH_MIDI
+      uint i = 0;
+      for (const simu::Critter *c: scenario.teams()[0]) {
+        if (midis.size() <= i) continue;
+        auto sounds = c->producedSound();
+        MidiFileWrapper::Notes notes;
+        for (uint j=0; j<notes.size(); j++) notes[j] = sounds[j+1];
+        midis[i++]->process(t, notes);
+      }
+#endif
     };
 
+    std::cerr << "\n\nStarting snapshots generation\n";
+
     generate();
+    std::cerr << "Generated\n";
     while (!simulation.finished()) {
       simulation.step();
       generate();
     }
 
+#ifdef WITH_MIDI
+    for (uint i=0; i<midis.size(); i++) {
+      midis[i]->processEnd(simulation.currTime().timestamp());
+      midis[i]->write(savefolder / utils::mergeToString(i, ".mid"));
+    }
+#endif
+
     r = 0;
-    std::cerr << "Batch snapshot mode incompatible with 3D ANN Viewer\n";
+//    std::cerr << "Batch snapshot mode incompatible with 3D ANN Viewer\n";
 
   } else if (trace >= 0) {
     config::Visualisation::trace.overrideWith(trace);
@@ -422,10 +551,8 @@ int main(int argc, char *argv[]) {
 
   } else if (!annRender.empty() && !annNeuralTags.empty()
              && annAggregateNeurons) {
-    // Can only do color tagging for modular ANN (in xy-projected 2d)
-    using MANNViewer = kgd::es_hyperneat::gui::ann2d::Viewer;
-    MANNViewer av;
 
+    MANNViewer av;
     phenotype::ANN &ann = scenario.subject()->brain();
     simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);
 

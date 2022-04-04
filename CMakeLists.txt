@@ -68,6 +68,12 @@ message("  > Gui libraries " "${GUI_LIBS}")
 
 list(APPEND KGD_DEFINITIONS ${ES-HyperNEAT_KGD_DEFINITIONS})
 
+if (WITH_MIDI)
+    add_subdirectory(midi/midifile)
+    list(APPEND GUI_LIBS midifile)
+    include_directories(midi/midifile/include)
+endif()
+
 ################################################################################
 ## Process additional pre-processor definitions
 ################################################################################
@@ -75,7 +81,7 @@ add_definitions(${KGD_DEFINITIONS})
 message("Using additionnal pre-processor definitions: ${KGD_DEFINITIONS}")
 
 ################################################################################
-## Source files (simulation)
+## Subfolders helper
 ################################################################################
 
 FUNCTION(PREPEND output prefix)
@@ -86,291 +92,105 @@ FUNCTION(PREPEND output prefix)
    SET(${output} "${listVar}" PARENT_SCOPE)
 ENDFUNCTION(PREPEND)
 
-set(GNTP_SRC
-    "config.h"
-    "critter.h"
-    "critter.cpp"
-    "environment.h"
-    "environment.cpp"
-)
-PREPEND(GNTP_SRC "src/genotype")
+################################################################################
+## Base libraries (core + gui)
+################################################################################
 
-set(SIMU_SRC
-    "critter.h"
-    "critter.cpp"
-    "foodlet.h"
-    "foodlet.cpp"
-    "environment.h"
-    "environment.cpp"
-    "simulation.h"
-    "simulation.cpp"
-    "box2dutils.h"
-    "box2dutils.cpp"
-    "config.h"
-    "config.cpp"
-    "time.h"
-    "time.cpp"
-
-    "../enumarray.hpp"
-)
-PREPEND(SIMU_SRC "src/simu")
-
-add_library(SIMU_OBJS OBJECT ${GNTP_SRC} ${SIMU_SRC})
-
-include_directories(box2d/include)
-add_subdirectory(box2d)
-
-list(APPEND CORE_LIBS box2d)
+include(src/CMakeLists.txt)
 
 ################################################################################
-## Target (simulation)
+## ?
 ################################################################################
-add_executable(
-  simulator
-  $<TARGET_OBJECTS:SIMU_OBJS>
-  "src/simulator.cpp")
-target_link_libraries(simulator ${CORE_LIBS})
 
-################################################################################
-## Target (evaluation)
-################################################################################
-#add_executable(
-#  evaluator
-#  $<TARGET_OBJECTS:SIMU_OBJS>
-#  "src/evaluator.cpp")
-#target_link_libraries(evaluator ${CORE_LIBS})
-
-################################################################################
-## Target (timelines explorer)
-################################################################################
-find_package(OpenMP)
-#if (OPENMP_FOUND)
-#    message("> OpenMP Found.")
-#    message("  > OpenMP flags are " ${OpenMP_CXX_LIBRARIES})
-#  add_executable(
-#    timelines
-#    $<TARGET_OBJECTS:SIMU_OBJS>
-#    "src/timelines.cpp")
-#  target_link_libraries(timelines ${CORE_LIBS} OpenMP::OpenMP_CXX)
-#endif()
-
-if (EXP_ALIFE2021)
+if (EXP_ECOSYSTEM)
     ############################################################################
-    ## Target (alife2021 ga evolution)
-    ############################################################################
-    set(PP_SRC
-        "scenario.cpp"
-        "scenario.h"
-        "indevaluator.cpp"
-        "indevaluator.h"
-    )
-    PREPEND(PP_SRC "src/alife2021")
-    add_library(PP_OBJS OBJECT ${PP_SRC})
-    add_executable(
-      pp-evolver
-      $<TARGET_OBJECTS:SIMU_OBJS>
-      $<TARGET_OBJECTS:PP_OBJS>
-      "src/alife2021/evolver.cpp")
-    target_link_libraries(pp-evolver ${CORE_LIBS} pthread)
-
-    ############################################################################
-    ## Target (alife2021 evaluation)
+    ## Target (simulation)
     ############################################################################
     add_executable(
-      pp-evaluator
+      simulator
       $<TARGET_OBJECTS:SIMU_OBJS>
-      $<TARGET_OBJECTS:PP_OBJS>
-      "src/alife2021/evaluator.cpp")
-    target_link_libraries(pp-evaluator ${CORE_LIBS})
+      "src/simulator.cpp")
+    target_link_libraries(simulator ${CORE_LIBS})
+
+    ############################################################################
+    ## Target (evaluation)
+    ############################################################################
+    #add_executable(
+    #  evaluator
+    #  $<TARGET_OBJECTS:SIMU_OBJS>
+    #  "src/evaluator.cpp")
+    #target_link_libraries(evaluator ${CORE_LIBS})
+
+    ############################################################################
+    ## Target (timelines explorer)
+    ############################################################################
+    find_package(OpenMP)
+    #if (OPENMP_FOUND)
+    #    message("> OpenMP Found.")
+    #    message("  > OpenMP flags are " ${OpenMP_CXX_LIBRARIES})
+    #  add_executable(
+    #    timelines
+    #    $<TARGET_OBJECTS:SIMU_OBJS>
+    #    "src/timelines.cpp")
+    #  target_link_libraries(timelines ${CORE_LIBS} OpenMP::OpenMP_CXX)
+    #endif()
+
+
+    ################################################################################
+    ## Target (tester may be with gui)
+    ################################################################################
+    #if (CLUSTER_BUILD)
+    #    add_executable(
+    #        tester
+    #        $<TARGET_OBJECTS:SIMU_OBJS>
+    #        "src/tests/tester.cpp")
+    #    target_link_libraries(tester ${CORE_LIBS})
+    #else()
+    #    add_executable(
+    #        tester
+    #        $<TARGET_OBJECTS:SIMU_OBJS>
+    #        $<TARGET_OBJECTS:VISU_OBJS>
+    #        "src/tests/tester.cpp")
+    #    target_link_libraries(tester ${CORE_LIBS} ${GUI_LIBS})
+    #endif()
+
 endif()
 
+
+################################################################################
+## Experiments
+################################################################################
+
+################################################################################
+## Life-dinner (Discrimination, motion)
+if (EXP_LIFE-DINNER)
+    include(src/experiments/life-dinner/CMakeLists.txt)
+endif()
+
+################################################################################
+## Mortal Kombat (morphogenesis, competition, communication)
 if (EXP_KOMBAT)
-    ############################################################################
-    ## Target (Mortal Kombat ga evolution)
-    ############################################################################
-    set(MK_SRC
-        "scenario.cpp"
-        "scenario.h"
-        "indevaluator.cpp"
-        "indevaluator.h"
-    )
-    PREPEND(MK_SRC "src/mkombat")
-    add_library(MK_OBJS OBJECT ${MK_SRC})
-    add_executable(
-      mk-evolver
-      $<TARGET_OBJECTS:SIMU_OBJS>
-      $<TARGET_OBJECTS:MK_OBJS>
-      "src/mkombat/evolver.cpp")
-    target_link_libraries(mk-evolver ${CORE_LIBS} pthread)
-
-    ############################################################################
-    ## Target (Mortal Kombat evaluation)
-    ############################################################################
-    add_executable(
-      mk-evaluator
-      $<TARGET_OBJECTS:SIMU_OBJS>
-      $<TARGET_OBJECTS:MK_OBJS>
-      "src/mkombat/evaluator.cpp")
-    target_link_libraries(mk-evaluator ${CORE_LIBS})
+    include(src/experiments/mkombat/CMakeLists.txt)
 endif()
 
 ################################################################################
-## Graphics
+## Toy projects
+################################################################################
+
 if (NOT CLUSTER_BUILD)
     ############################################################################
-    ## Shut gcc9/Qt deprecated-copy QVariant-related warnings
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "9")
-        add_compile_options(-Wno-deprecated-copy)
+    ## Song-maker (ANN-based sound production, watchmaker)
+    if (TOYS_SONGMAKER)
+        include(src/toys/songmaker/CMakeLists.txt)
     endif()
 
-################################################################################
-## Sources files (visualizer)
-################################################################################
-
-    set(VISU_SRC
-        "critter.h"
-        "critter.cpp"
-        "foodlet.h"
-        "foodlet.cpp"
-        "obstacle.h"
-        "obstacle.cpp"
-        "environment.h"
-        "environment.cpp"
-        "graphicsimulation.h"
-        "graphicsimulation.cpp"
-        "config.h"
-        "config.cpp"
-
-        "b2debugdrawer.h"
-        "b2debugdrawer.cpp"
-    )
-    PREPEND(VISU_SRC "src/visu")
-
-    set(GUI_SRC
-        "mainview.h"
-        "mainview.cpp"
-        "actionsbuilder.hpp"
-        "geneticmanipulator.h"
-        "geneticmanipulator.cpp"
-        "statsview.h"
-        "statsview.cpp"
-        "joystick.h"
-        "joystick.cpp"
-    )
-
-    PREPEND(GUI_SRC "src/gui")
-
-    set(GUI_MISC_SRC
-        "joystick/joystick.hh"
-        "joystick/joystick.cc"
-
-        "qt-collapsible-section/Section.h"
-        "qt-collapsible-section/Section.cpp"
-    )
-
-    add_library(VISU_OBJS OBJECT ${VISU_SRC} ${GUI_SRC} ${GUI_MISC_SRC})
-    target_include_directories(VISU_OBJS PRIVATE
-        $<TARGET_PROPERTY:Qt5::Widgets,INTERFACE_INCLUDE_DIRECTORIES>)
-    target_compile_definitions(VISU_OBJS PRIVATE
-        $<TARGET_PROPERTY:Qt5::Widgets,INTERFACE_COMPILE_DEFINITIONS>)
-    set_property(TARGET VISU_OBJS PROPERTY POSITION_INDEPENDENT_CODE ON)
-    set_property(TARGET VISU_OBJS PROPERTY AUTOMOC ON)
-
-
-################################################################################
-### Target (visualizer)
-################################################################################
-
-    add_executable(
-      visualizer
-      $<TARGET_OBJECTS:SIMU_OBJS>
-      $<TARGET_OBJECTS:VISU_OBJS>
-      "src/visualizer.cpp"
-    )
-    set_property(TARGET visualizer PROPERTY AUTOMOC ON)
-    target_link_libraries(visualizer ${CORE_LIBS} ${GUI_LIBS})
-
-################################################################################
-### Targets (Watchmaker)
-################################################################################
-
-    if (EXP_WATCHMAKER)
-        add_executable(
-          watchmaker
-          $<TARGET_OBJECTS:SIMU_OBJS>
-          $<TARGET_OBJECTS:VISU_OBJS>
-          "src/misc/watchmaker_classes.h"
-          "src/misc/watchmaker_classes.cpp"
-          "src/watchmaker.cpp"
-        )
-        set_property(TARGET watchmaker PROPERTY AUTOMOC ON)
-        target_link_libraries(watchmaker ${CORE_LIBS} ${GUI_LIBS})
+    ############################################################################
+    ## Shape-maker (Spline-based morphology, watchmaker)
+    if (TOYS_SHAPEMAKER)
+        include(src/toys/shapemaker/CMakeLists.txt)
     endif()
-
-    if (EXP_ALIFE2021)
-    ############################################################################
-    ### Targets (alife2021 visualizer)
-    ############################################################################
-
-        add_executable(
-            pp-visualizer
-            $<TARGET_OBJECTS:SIMU_OBJS>
-            $<TARGET_OBJECTS:VISU_OBJS>
-            $<TARGET_OBJECTS:PP_OBJS>
-            "src/alife2021/visualizer.cpp"
-        )
-        set_property(TARGET pp-visualizer PROPERTY AUTOMOC ON)
-        target_link_libraries(pp-visualizer ${CORE_LIBS} ${GUI_LIBS})
-    endif()
-
-    if (EXP_KOMBAT)
-    ############################################################################
-    ### Targets (mortal kombat visualizer)
-    ############################################################################
-
-        add_executable(
-            mk-visualizer
-            $<TARGET_OBJECTS:SIMU_OBJS>
-            $<TARGET_OBJECTS:VISU_OBJS>
-            $<TARGET_OBJECTS:MK_OBJS>
-            "src/mkombat/visualizer.cpp"
-        )
-        set_property(TARGET mk-visualizer PROPERTY AUTOMOC ON)
-        target_link_libraries(mk-visualizer ${CORE_LIBS} ${GUI_LIBS})
-    endif()
-
-################################################################################
-### Targets (Visu tool)
-################################################################################
-
-#    add_executable(
-#        visu-tool
-#        $<TARGET_OBJECTS:SIMU_OBJS>
-#        $<TARGET_OBJECTS:VISU_OBJS>
-#        "src/visualuator.cpp"
-#    )
-#    set_property(TARGET visu-tool PROPERTY AUTOMOC ON)
-#    target_link_libraries(visu-tool ${CORE_LIBS} ${GUI_LIBS})
 
 endif()
-
-################################################################################
-## Target (tester may be with gui)
-################################################################################
-#if (CLUSTER_BUILD)
-#    add_executable(
-#        tester
-#        $<TARGET_OBJECTS:SIMU_OBJS>
-#        "src/tests/tester.cpp")
-#    target_link_libraries(tester ${CORE_LIBS})
-#else()
-#    add_executable(
-#        tester
-#        $<TARGET_OBJECTS:SIMU_OBJS>
-#        $<TARGET_OBJECTS:VISU_OBJS>
-#        "src/tests/tester.cpp")
-#    target_link_libraries(tester ${CORE_LIBS} ${GUI_LIBS})
-#endif()
 
 ################################################################################
 ### Additional flags
@@ -391,44 +211,27 @@ message("> Sexual dimorphism is " ${USE_DIMORPHISM})
 if(USE_DIMORPHISM)
     add_definitions(-DUSE_DIMORPHISM)
 endif()
-if (EXP_ALIFE2021)
-    ############################################################################
-    ## Target (alife2021 ga evolution)
-    ############################################################################
-    set(PP_SRC
-        "scenario.cpp"
-        "scenario.h"
-        "indevaluator.cpp"
-        "indevaluator.h"
-    )
-    PREPEND(PP_SRC "src/alife2021")
-    add_library(PP_OBJS OBJECT ${PP_SRC})
-    add_executable(
-      pp-evolver
-      $<TARGET_OBJECTS:SIMU_OBJS>
-      $<TARGET_OBJECTS:PP_OBJS>
-      "src/alife2021/evolver.cpp")
-    target_link_libraries(pp-evolver ${CORE_LIBS} pthread)
 
-    ############################################################################
-    ## Target (alife2021 evaluation)
-    ############################################################################
-    add_executable(
-      pp-evaluator
-      $<TARGET_OBJECTS:SIMU_OBJS>
-      $<TARGET_OBJECTS:PP_OBJS>
-      "src/alife2021/evaluator.cpp")
-    target_link_libraries(pp-evaluator ${CORE_LIBS})
-endif()
+option(TOYS_SHAPEMAKER "Whether or not to build morphological watchmaker" OFF)
+message("> Building Shapemaker target: " ${TOYS_SHAPEMAKER})
 
-option(EXP_WATCHMAKER "Whether or not to build these targets" OFF)
-message("> Building watchamker target: " ${EXP_WATCHMAKER})
+option(TOYS_SONGMAKER "Whether or not to build songmaker" OFF)
+message("> Building Songmaker target: " ${TOYS_SONGMAKER})
+
+option(EXP_ECOSYSTEM "Whether or not to build these targets" OFF)
+message("> Building Ecosystem targets: " ${EXP_ECOSYSTEM})
 
 option(EXP_ALIFE2021 "Whether or not to build these targets" OFF)
 message("> Building ALife2021 targets: " ${EXP_ALIFE2021})
 
 option(EXP_KOMBAT "Whether or not to build these targets" OFF)
 message("> Building Mortal Kombat targets: " ${EXP_KOMBAT})
+
+option(WITH_MIDI "Whether or not use midifile library" OFF)
+message("> Midi support is " ${WITH_MIDI})
+if(WITH_MIDI)
+    add_definitions(-DWITH_MIDI)
+endif()
 
 #option(UPDATE_DEPENDENCIES "Whether or not to keep dependency data up-to-date
 #                            (implies extra compilation time)" ON)

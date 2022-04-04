@@ -162,31 +162,31 @@ void Overlay::drawFights(QPainter *painter, const QRectF &drawBounds) const {
 #ifndef NDEBUG
   if (ddlevel < 2)  return;
 
-  for (const simu::Environment::FightingDrawData &fdd:
-       env._environment.fightingDrawData) {
+//  for (const simu::Environment::FightingDrawData &fdd:
+//       env._environment.fightingDrawData) {
 
-    QPointF pA = toQt(fdd.pA), pB = toQt(fdd.pB);
-    if (!drawBounds.contains(pA.toPoint()))  continue;
-    if (!drawBounds.contains(pB.toPoint())) continue;
+//    QPointF pA = toQt(fdd.pA), pB = toQt(fdd.pB);
+//    if (!drawBounds.contains(pA.toPoint()))  continue;
+//    if (!drawBounds.contains(pB.toPoint())) continue;
 
-    pen.setStyle(Qt::SolidLine);
-    pen.setColor(Qt::blue);
-    painter->setPen(pen);
-    painter->drawPoint(pA);
-    painter->drawPoint(pB);
-    painter->drawLine(pA, pB);
+//    pen.setStyle(Qt::SolidLine);
+//    pen.setColor(Qt::blue);
+//    painter->setPen(pen);
+//    painter->drawPoint(pA);
+//    painter->drawPoint(pB);
+//    painter->drawLine(pA, pB);
 
-    pen.setStyle(Qt::DotLine);
-    pen.setColor(Qt::darkRed);
-    painter->setPen(pen);
-    painter->drawLine(pA, pA + toQt(fdd.vA));
-    painter->drawLine(pB, pB + toQt(fdd.vB));
+//    pen.setStyle(Qt::DotLine);
+//    pen.setColor(Qt::darkRed);
+//    painter->setPen(pen);
+//    painter->drawLine(pA, pA + toQt(fdd.vA));
+//    painter->drawLine(pB, pB + toQt(fdd.vB));
 
-    pen.setColor(Qt::green);
-    painter->setPen(pen);
-    painter->drawLine(pA, pA + toQt(fdd.VA * fdd.C_ ));
-    painter->drawLine(pB, pB - toQt(fdd.VB * fdd.C_));
-  }
+//    pen.setColor(Qt::green);
+//    painter->setPen(pen);
+//    painter->drawLine(pA, pA + toQt(fdd.VA * fdd.C_ ));
+//    painter->drawLine(pB, pB - toQt(fdd.VB * fdd.C_));
+//  }
 #endif
 }
 
