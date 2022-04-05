@@ -47,7 +47,7 @@ endif()
 #    target_link_libraries(tester ${CORE_LIBS})
 #else()
 #    add_executable(
-#        tester
+#        es-tester
 #        $<TARGET_OBJECTS:SIMU_OBJS>
 #        $<TARGET_OBJECTS:VISU_OBJS>
 #        "src/tests/tester.cpp")

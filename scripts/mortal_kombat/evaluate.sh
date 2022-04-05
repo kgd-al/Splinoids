@@ -84,7 +84,7 @@ fi
 
 output=$(dirname $lhs)/$(basename $lhs .dna)
 
-build=build/release
+build=build/release/mortal-kombat
 [ ! -z ${BUILD+x} ] && build=$BUILD
 [ ! -z ${CMD+x} ] && set -x
 [ ! -z ${TOOL+x} ] && tool=$TOOL
