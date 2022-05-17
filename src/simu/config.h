@@ -38,7 +38,7 @@ struct b2BodyUserData {
   union {
     Critter *critter;
     Foodlet *foodlet;
-    Obstacle *obstacle; // Always null
+    Obstacle *obstacle; // null for edges
   } ptr;
 
   friend void assertEqual (const b2BodyUserData &lhs, const b2BodyUserData &rhs,

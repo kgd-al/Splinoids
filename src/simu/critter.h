@@ -34,8 +34,8 @@ public:
 
   static constexpr auto SPLINES_COUNT = Genome::SPLINES_COUNT;
 
-  static constexpr auto ARMS = 2;
-  static constexpr auto ARTICULATIONS_PER_ARM = 2;
+  static constexpr auto ARMS = 2 * NUMBER_OF_ARMS;
+  static constexpr auto ARTICULATIONS_PER_ARM = NUMBER_OF_ARM_PARTS;
   static constexpr auto ARTICULATIONS = ARMS * ARTICULATIONS_PER_ARM;
 
   static constexpr uint VOCAL_CHANNELS = 3;

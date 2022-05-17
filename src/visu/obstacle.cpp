@@ -6,16 +6,17 @@
 #include <QStyleOptionGraphicsItem>
 #include <QPainterPath>
 
-#include "box2d/b2_fixture.h"
-#include "box2d/b2_polygon_shape.h"
+#include "../simu/environment.h"
+//#include "box2d/b2_fixture.h"
+//#include "box2d/b2_polygon_shape.h"
 
 namespace visu {
 
-Obstacle::Obstacle(b2Body &body) : _obstacle(body) {
+Obstacle::Obstacle(simu::Obstacle *o) : _obstacle(*o) {
   setAcceptedMouseButtons(Qt::NoButton);
-  setPos(toQt(body.GetPosition()));
+  setPos(toQt(o->body().GetPosition()));
 
-  b2Fixture *f = body.GetFixtureList();
+  b2Fixture *f = o->body().GetFixtureList();
   while (f) {
     const b2PolygonShape *s =
         dynamic_cast<const b2PolygonShape*>(f->GetShape());
@@ -28,6 +29,11 @@ Obstacle::Obstacle(b2Body &body) : _obstacle(body) {
     f = f->GetNext();
   }
 
+  if (_obstacle.color() == config::Simulation::obstacleColor())
+    _color == Qt::black;
+  else
+    _color = toQt(_obstacle.color());
+
   setZValue(-10);
 }
 
@@ -36,9 +42,9 @@ QRectF Obstacle::boundingRect (void) const {
 }
 
 void Obstacle::paint(QPainter *painter,
-                  const QStyleOptionGraphicsItem*, QWidget*) {
+                     const QStyleOptionGraphicsItem*, QWidget*) {
   painter->setPen(Qt::NoPen);
-  painter->fillPath(_body, Qt::black);
+  painter->fillPath(_body, _color);
 }
 
 } // end of namespace visu

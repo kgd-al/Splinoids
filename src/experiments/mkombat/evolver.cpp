@@ -36,9 +36,8 @@ auto timestamp (void) {
   return duration_cast<D>(system_clock::now().time_since_epoch()).count();
 }
 
+auto &apoget_force_link = config::PTree::rsetSize;
 int main(int argc, char *argv[]) {
-  std::cerr << config::PTree::rsetSize() << std::endl;
-
 //  using CGenome = ga::CoEvolution::Genome;
   using Ind = simu::Evaluator::Ind;
   using Team = simu::Evaluator::Genome;

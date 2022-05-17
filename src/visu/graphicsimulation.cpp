@@ -197,10 +197,12 @@ void GraphicSimulation::delFoodlet(simu::Foodlet *foodlet) {
   Simulation::delFoodlet(foodlet);
 }
 
-b2Body* GraphicSimulation::addObstacle(float x, float y, float w, float h) {
-  auto b = Simulation::addObstacle(x, y, w, h);
-  _scene->addItem(new Obstacle(*b));
-  return b;
+simu::Obstacle*
+GraphicSimulation::addObstacle(float x, float y, float w, float h,
+                               simu::Color c) {
+  auto o = Simulation::addObstacle(x, y, w, h, c);
+  _scene->addItem(new Obstacle(o));
+  return o;
 }
 
 void GraphicSimulation::render (QPaintDevice *d, QRectF trect) const {

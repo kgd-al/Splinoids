@@ -40,6 +40,8 @@ protected:
   uint _nextFoodletID;
   std::set<Foodlet*> _foodlets;
 
+  std::set<Obstacle*> _obstacles;
+
   Time _time;
   struct {
     uint min, max, goal;
@@ -234,7 +236,8 @@ public:
   virtual Foodlet* addFoodlet (BodyType t, float x, float y, float r, decimal e);
   virtual void delFoodlet (Foodlet *foodlet);
 
-  virtual b2Body* addObstacle (float x, float y, float w, float h);
+  virtual Obstacle *addObstacle(float x, float y, float w, float h,
+                                Color c = Color{-1});
 
   void clear (void);
   virtual void preClear (void) {}

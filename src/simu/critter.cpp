@@ -555,7 +555,9 @@ void Critter::performVision(const Environment &env) {
         break;
 
       case BodyType::OBSTACLE:
-        _retina[ie] = config::Simulation::obstacleColor();
+        _retina[ie] =
+          get(other)->ptr.obstacle ? get(other)->ptr.obstacle->color()
+                                   : config::Simulation::obstacleColor();
         break;
 
       case BodyType::WARP_ZONE:
@@ -608,9 +610,9 @@ void Critter::neuralStep(void) {
     if (!selectiveBrainDead[3]) _voice[0] = _neuralOutputs[3];
     if (!selectiveBrainDead[4]) _voice[1] = _neuralOutputs[4];
 
-    for (uint i=5; i<9; i++)
-      if (!selectiveBrainDead[i])
-        _amotors[i-5] = _neuralOutputs[i];
+    for (uint i=0; i<_arms.size(); i++)
+      if (!selectiveBrainDead[i+5])
+        _amotors[i] = _neuralOutputs[i+5];
 
 //    _reproduction = _neuralOutputs[?];
 
@@ -1234,7 +1236,7 @@ b2Fixture* Critter::addBodyFixture (void) {
 
 /// TODO Make more robust
 bool Critter::isStaticSpline(uint splineIndex) {
-  return splineIndex >= 2;
+  return splineIndex >= ARMS * ARTICULATIONS_PER_ARM;
 }
 
 /// TODO Hot-fix
@@ -1520,55 +1522,61 @@ void Critter::updateObjects(void) {
     _body.SetMassData(&d);
   }
 
-  // Place arm's bodies at appropriate (world) positions and create joints
-  b2RevoluteJointDef jointDef {};
-  jointDef.collideConnected = false;
-  jointDef.enableLimit = false;
-//  jointDef.lowerAngle = 0;
-//  jointDef.upperAngle = 0;
-  jointDef.enableMotor = true;
-  jointDef.maxMotorTorque = .1;
+  if (ARMS == 1 && ARTICULATIONS_PER_ARM == 2) {
+    // Place arm's bodies at appropriate (world) positions and create joints
+    b2RevoluteJointDef jointDef {};
+    jointDef.collideConnected = false;
+    jointDef.enableLimit = false;
+  //  jointDef.lowerAngle = 0;
+  //  jointDef.upperAngle = 0;
+    jointDef.enableMotor = true;
+    jointDef.maxMotorTorque = .1;
 
-  for (Side s: {Side::LEFT, Side::RIGHT}) {
-    if (!activeSpline(0, s)) continue;
+    for (Side s: {Side::LEFT, Side::RIGHT}) {
+      if (!activeSpline(0, s)) continue;
 
-    uint ix = ARTICULATIONS_PER_ARM*uint(s);
-    auto a = _arms[ix];
-    b2Vec2 p0 = _splinesData[0].p0;
-    if (s == Side::RIGHT) p0.y *= -1;
-    b2Vec2 p = _body.GetWorldPoint(p0);
-    a->SetTransform(p, rotation());
+      uint ix = ARTICULATIONS_PER_ARM*uint(s);
+      auto a = _arms[ix];
+      b2Vec2 p0 = _splinesData[0].p0;
+      if (s == Side::RIGHT) p0.y *= -1;
+      b2Vec2 p = _body.GetWorldPoint(p0);
+      a->SetTransform(p, rotation());
 
-    jointDef.Initialize(&_body, a, p);
-    _joints[ix] = (b2RevoluteJoint*)world->CreateJoint(&jointDef);
-  }
+      jointDef.Initialize(&_body, a, p);
+      _joints[ix] = (b2RevoluteJoint*)world->CreateJoint(&jointDef);
+    }
 
-  for (Side s: {Side::LEFT, Side::RIGHT}) {
-    if (!activeSpline(0, s)) continue;
-    if (!activeSpline(1, s)) continue;
+    for (Side s: {Side::LEFT, Side::RIGHT}) {
+      if (!activeSpline(0, s)) continue;
+      if (!activeSpline(1, s)) continue;
 
-    uint ix = 1+ARTICULATIONS_PER_ARM*uint(s);
-    auto a = _arms[ix];
-    b2Vec2 p1 = _splinesData[0].p1;
-    if (s == Side::RIGHT) p1.y *= -1;
-    b2Vec2 p = _body.GetWorldPoint(p1);
-    a->SetTransform(p, rotation());
-    jointDef.Initialize(_arms[ix-1], a, p);
-    _joints[ix] = (b2RevoluteJoint*)world->CreateJoint(&jointDef);
-  }
+      uint ix = 1+ARTICULATIONS_PER_ARM*uint(s);
+      auto a = _arms[ix];
+      b2Vec2 p1 = _splinesData[0].p1;
+      if (s == Side::RIGHT) p1.y *= -1;
+      b2Vec2 p = _body.GetWorldPoint(p1);
+      a->SetTransform(p, rotation());
+      jointDef.Initialize(_arms[ix-1], a, p);
+      _joints[ix] = (b2RevoluteJoint*)world->CreateJoint(&jointDef);
+    }
+  } else if (ARMS != 0)
+    utils::Thrower<std::logic_error>(
+      "Unmanaged arms/articulations combinations: ", ARMS, "/",
+      ARTICULATIONS_PER_ARM);
 }
 
 // =============================================================================
 // == Unsorted stuff
 
+/// TODO Deactivate healthness red-display
 void Critter::updateColors(void) {
   _currentColors[0] = initialBodyColor();
-  _currentColors[0][0] = 1-bodyHealthness();
+//  _currentColors[0][0] = 1-bodyHealthness();
 
   for (Side s: {Side::LEFT, Side::RIGHT}) {
     for (uint i=0; i<SPLINES_COUNT; i++) {
       auto c = initialSplineColor(i);
-      c[0] = 1 - splineHealthness(i, s);
+//      c[0] = 1 - splineHealthness(i, s);
       _currentColors[1+SPLINES_COUNT*uint(s)+i] = c;
     }
   }
@@ -1634,6 +1642,7 @@ bool Critter::applyHealthDamage (const FixtureData &d, float amount,
 }
 
 void Critter::destroySpline(uint k) {
+#if NUMBER_OF_SPLINES > 0
   if (debugHealthLoss)
     std::cerr << "Spline " << CID(this) << "S" << k << " was destroyed"
               << std::endl;
@@ -1675,6 +1684,9 @@ void Critter::destroySpline(uint k) {
     d.center = {0,0};
     _body.SetMassData(&d);
   }
+#else
+  (void)k;
+#endif
 }
 
 void Critter::generateVisionRays(void) {

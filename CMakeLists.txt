@@ -122,6 +122,12 @@ if (EXP_KOMBAT)
 endif()
 
 ################################################################################
+## Language (communication, phonemes)
+if (EXP_LANGUAGE)
+    include(src/experiments/language/CMakeLists.txt)
+endif()
+
+################################################################################
 ## Toy projects
 ################################################################################
 
@@ -160,20 +166,37 @@ if(USE_DIMORPHISM)
     add_definitions(-DUSE_DIMORPHISM)
 endif()
 
+set(CRITTER_SPLINES 4 CACHE STRING "Number of splines on each side")
+add_definitions(-DNUMBER_OF_SPLINES=${CRITTER_SPLINES})
+message("> Splines/critter: " ${CRITTER_SPLINES})
+
+set(CRITTER_ARMS 1 CACHE STRING "Number of arms on each side")
+add_definitions(-DNUMBER_OF_ARMS=${CRITTER_ARMS})
+message(">    Arms/critter: " ${CRITTER_ARMS})
+
+set(CRITTER_ARM_PARTS 2 CACHE STRING "Number of splines per arm")
+add_definitions(-DNUMBER_OF_ARM_PARTS=${CRITTER_ARM_PARTS})
+message(">    Arm sections: " ${CRITTER_ARM_PARTS})
+
+message("< Building targets >")
+
 option(TOYS_SHAPEMAKER "Whether or not to build morphological watchmaker" OFF)
-message("> Building Shapemaker target: " ${TOYS_SHAPEMAKER})
+message(">    Shapemaker: " ${TOYS_SHAPEMAKER})
 
 option(TOYS_SONGMAKER "Whether or not to build songmaker" OFF)
-message("> Building Songmaker target: " ${TOYS_SONGMAKER})
+message(">     Songmaker: " ${TOYS_SONGMAKER})
 
 option(EXP_ECOSYSTEM "Whether or not to build these targets" OFF)
-message("> Building Ecosystem targets: " ${EXP_ECOSYSTEM})
+message(">     Ecosystem: " ${EXP_ECOSYSTEM})
 
 option(EXP_LIFEDINNER "Whether or not to build these targets" OFF)
-message("> Building Life/Dinner targets: " ${EXP_LIFEDINNER})
+message(">   Life/Dinner: " ${EXP_LIFEDINNER})
 
 option(EXP_KOMBAT "Whether or not to build these targets" OFF)
-message("> Building Mortal Kombat targets: " ${EXP_KOMBAT})
+message("> Mortal Kombat: " ${EXP_KOMBAT})
+
+option(EXP_LANGUAGE "Whether or not to build these targets" OFF)
+message(">      Language: " ${EXP_LANGUAGE})
 
 option(WITH_MIDI "Whether or not use midifile library" OFF)
 message("> Midi support is " ${WITH_MIDI})

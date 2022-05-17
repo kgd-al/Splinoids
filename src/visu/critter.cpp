@@ -141,9 +141,13 @@ void Critter::updateShape (void) {
       abr = abr.united(p.boundingRect());
   }
 
-  float arms_radius = _critter.bodyRadius()
-      + (splines[0].p1 - splines[0].p0).Length()
-      + (splines[1].p1 - splines[1].p0).Length();
+  float arms_radius = _critter.bodyRadius();
+  if (simu::Critter::ARMS>0) {
+    for (uint j=0; j<simu::Critter::ARTICULATIONS_PER_ARM; j++) {
+      const auto &s = splines[j];
+      arms_radius += (s.p1 - s.p0).Length();
+    }
+  }
   QRectF armsbr (-arms_radius, -arms_radius, 2*arms_radius, 2*arms_radius);
 
   updateVision();
@@ -386,19 +390,23 @@ void Critter::doPaint (QPainter *painter) const {
               });
 
             const auto &arms = _critter.arms();
-            for (uint i=0; i<2; i++) {
-              for (Side s: {Critter::Side::LEFT, Critter::Side::RIGHT}) {
-                b2Body *a = arms[i+uint(s)*2];
-                if (!a) continue;
+            static constexpr auto A = simu::Critter::ARMS;
+            if (A > 0) {
+              static constexpr auto AP = simu::Critter::ARTICULATIONS_PER_ARM;
+              for (uint i=0; i<AP; i++) {
+                for (Side s: {Critter::Side::LEFT, Critter::Side::RIGHT}) {
+                  b2Body *a = arms[i+uint(s)*AP];
+                  if (!a) continue;
 
-                auto offset = toQt(a->GetPosition()) - pos();
-                painter->save();
-                  painter->rotate(-qRadiansToDegrees(_critter.rotation()));
-                  painter->translate(offset);
-                  painter->rotate(qRadiansToDegrees(a->GetAngle()));
-                  if (s == Critter::Side::RIGHT) painter->scale(1, -1);
-                  painter->fillPath(_artifacts[i], splineColor(i, s));
-                painter->restore();
+                  auto offset = toQt(a->GetPosition()) - pos();
+                  painter->save();
+                    painter->rotate(-qRadiansToDegrees(_critter.rotation()));
+                    painter->translate(offset);
+                    painter->rotate(qRadiansToDegrees(a->GetAngle()));
+                    if (s == Critter::Side::RIGHT) painter->scale(1, -1);
+                    painter->fillPath(_artifacts[i], splineColor(i, s));
+                  painter->restore();
+                }
               }
             }
           }

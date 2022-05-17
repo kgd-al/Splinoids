@@ -422,8 +422,17 @@ void Simulation::delFoodlet(Foodlet *foodlet) {
   delete foodlet;
 }
 
-b2Body* Simulation::addObstacle(float x, float y, float w, float h) {
-  return _environment->createObstacle(x, y, w, h);
+Obstacle* Simulation::addObstacle(float x, float y, float w, float h, Color c) {
+  b2BodyDef bodyDef;
+  bodyDef.type = b2_staticBody;
+  bodyDef.position.Set(x+.5f*w, y+.5f*h);
+
+  b2Body *body = physics().CreateBody(&bodyDef);
+
+  Obstacle *o = new Obstacle(body, w, h, c);
+  _obstacles.insert(o);
+
+  return o;
 }
 
 void Simulation::clear (void) {

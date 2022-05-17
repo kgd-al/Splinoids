@@ -13,6 +13,31 @@ static constexpr int debugMating = 0;
 static constexpr int debugFighting = 0;
 static constexpr int debugTouching = 0;
 
+
+// =============================================================================
+
+Obstacle::Obstacle (b2Body *body, float w, float h, Color c)
+  : _body(*body), _color(c[0] < 0 ? config::Simulation::obstacleColor() : c) {
+
+  _userData.type = BodyType::OBSTACLE;
+  _userData.ptr.obstacle = this;
+
+  b2PolygonShape box;
+  box.SetAsBox(.5f*w, .5f*h);
+
+  b2FixtureDef fixtureDef;
+  fixtureDef.shape = &box;
+  fixtureDef.density = 0;
+  fixtureDef.isSensor = false;
+  fixtureDef.filter.categoryBits = uint16(CollisionFlag::OBSTACLE_FLAG);
+  fixtureDef.filter.maskBits = uint16(CollisionFlag::OBSTACLE_MASK);
+
+  body->CreateFixture(&fixtureDef);
+  body->SetUserData(&_userData);
+}
+
+// =============================================================================
+
 // between arms of a single critter
 static constexpr bool ignoreSelfCollisions = true;
 
@@ -475,6 +500,8 @@ struct CollisionMonitor : public b2ContactListener {
   }
 };
 
+// =============================================================================
+
 bool Environment::ID_CMP::operator() (const DestroyedSpline &lhs,
                                       const DestroyedSpline &rhs) const {
   if (lhs.first->id() != rhs.first->id())
@@ -491,9 +518,6 @@ Environment::Environment(const Genome &g)
   _physics.SetContactListener(_cmonitor);
 
   _energyReserve = 0;
-
-  _obstaclesUserData.type = BodyType::OBSTACLE;
-  _obstaclesUserData.ptr.obstacle = nullptr;
 }
 
 Environment::~Environment (void) {
@@ -541,29 +565,6 @@ void Environment::step (void) {
 
 //  std::cerr << "Physical step took " << _physics.GetProfile().step
 //            << " ms" << std::endl;
-}
-
-b2Body* Environment::createObstacle(float x, float y, float w, float h) {
-  b2BodyDef bodyDef;
-  bodyDef.type = b2_staticBody;
-  bodyDef.position.Set(x+.5f*w, y+.5f*h);
-
-  b2Body *body = _physics.CreateBody(&bodyDef);
-
-  b2PolygonShape box;
-  box.SetAsBox(.5f*w, .5f*h);
-
-  b2FixtureDef fixtureDef;
-  fixtureDef.shape = &box;
-  fixtureDef.density = 0;
-  fixtureDef.isSensor = false;
-  fixtureDef.filter.categoryBits = uint16(CollisionFlag::OBSTACLE_FLAG);
-  fixtureDef.filter.maskBits = uint16(CollisionFlag::OBSTACLE_MASK);
-
-  body->CreateFixture(&fixtureDef);
-  body->SetUserData(&_obstaclesUserData);
-
-  return body;
 }
 
 void Environment::createEdges(void) {

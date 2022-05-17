@@ -13,6 +13,18 @@ struct Critter;
 
 struct CollisionMonitor;
 
+class Obstacle {
+  b2Body &_body;
+  Color _color;
+  b2BodyUserData _userData;
+
+public:
+  Obstacle (b2Body *body, float w, float h, Color c);
+
+  const auto& color (void) const { return _color; }
+  b2Body& body (void) { return _body; }
+};
+
 class Environment {
   friend CollisionMonitor;
 public:
@@ -65,7 +77,7 @@ private:
   CollisionMonitor *_cmonitor;
 
   b2Body *_edges;
-  b2BodyUserData _edgesUserData, _obstaclesUserData;
+  b2BodyUserData _edgesUserData;
 
   CritterDataMap _critterData;
 
@@ -126,8 +138,6 @@ public:
   auto& physics (void) {
     return _physics;
   }
-
-  b2Body* createObstacle (float x, float y, float w, float h);
 
   b2Body* edges (void) {
     return _edges;

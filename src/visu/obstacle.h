@@ -5,15 +5,18 @@
 
 #include "box2d/b2_body.h"
 
+namespace simu { struct Obstacle; }
+
 namespace visu {
 
 class Obstacle : public QGraphicsItem {
 private:
-  b2Body &_obstacle;
+  simu::Obstacle &_obstacle;
   QPainterPath _body;
+  QColor _color;
 
 public:
-  Obstacle(b2Body &body);
+  Obstacle(simu::Obstacle *o);
 
   const auto& object (void) const {
     return _obstacle;
