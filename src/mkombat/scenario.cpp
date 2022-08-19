@@ -87,7 +87,7 @@ simu::Critter* Scenario::makeCritter (uint team, uint id,
 
   if (neuralEvaluation()) pin(c, team != 0);
 
-//  if (team == 0 && id == 0)  c->mute = true;
+  if (team == 0 && id == 0)  c->mute = 0x7;
 
   return c;
 }
@@ -237,6 +237,8 @@ void Scenario::postStep(void) {
     ears.fill(0);
     ears[channel] = ears[channel+Critter::VOCAL_CHANNELS+1] = 1;
   };
+
+//  {auto it=_teams[0].begin(); std::advance(it,1); (*it)->mute = 0x7 * (t<100 || t > 300);}
 
   if (neuralEvaluation()) {
     const auto step = t / PERIOD;

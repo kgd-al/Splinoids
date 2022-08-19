@@ -173,12 +173,12 @@ for i in range(2, data.shape[1]):
   ax.set_ylabel(prettyHeaders[name] if name in prettyHeaders else name)
   
   ax.violinplot(flists, showextrema=False, points=1000)
-  ax.boxplot(flists, widths=.15, whis=[0, 100])
+  ax.boxplot(flists, widths=.15, whis=[0, 95], medianprops=dict(linewidth=1.5))
   ax.set_xticks([i+1 for i in range(len(keys))])
-  ax.set_xticklabels(keys)
+  ax.set_xticklabels(np.vectorize(lambda s: s.upper())(keys), weight = 'bold')
 
   plt.tight_layout()
-  plt.savefig(output, dpi=150)
+  plt.savefig(output, dpi=150, bbox_inches='tight', pad_inches=0.05)
   plt.close()
 __DOC
 

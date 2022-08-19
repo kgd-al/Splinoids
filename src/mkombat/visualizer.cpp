@@ -20,6 +20,83 @@ Q_DECLARE_METATYPE(BrainDead)
 
 //#include "config/dependencies.h"
 
+#ifdef WITH_MIDI
+#include "MidiFile.h"
+struct MidiFileWrapper {
+  static constexpr auto C = simu::Critter::VOCAL_CHANNELS;
+  using Notes = std::array<float, C>;
+
+private:
+  static constexpr auto TPQ = 96;
+
+  static constexpr uint BASE_OCTAVE = 1;
+  static constexpr uint BASE_A = 21 + 12 * BASE_OCTAVE;
+
+  Notes previousNotes;
+
+  smf::MidiFile midifile;
+
+  static uchar key (int index) {   return BASE_A+12*index;  }
+  static uchar velocity (float volume) {
+    assert(-1 <= volume && volume <= 1);
+    return std::round(127*std::max(0.f, volume));
+  }
+
+public:
+  MidiFileWrapper (int instrument) {
+    midifile.setTicksPerQuarterNote(TPQ);
+
+    const auto TEMPO = 60 * config::Simulation::ticksPerSecond();
+    midifile.addTempo(0, 0, TEMPO);
+    midifile.addTimbre(0, 0, 0, instrument);
+
+    previousNotes.fill(0);
+  }
+
+  void process (uint timestep, const Notes &notes) {
+    int t = TPQ * timestep;  /// TODO Debug
+//    std::cerr << "t(" << n << ") = " << t << "\n";
+    for (uint c=0; c<C; c++) {
+      float fn = notes[c];
+      uchar cn = velocity(fn);
+      if (previousNotes[c] != cn) {
+        if (previousNotes[c] > 0) midifile.addNoteOff(0, t, 0, key(c), 0);
+        if (cn > 0) midifile.addNoteOn(0, t, 0, key(c), cn);
+      }
+    }
+
+    previousNotes = notes;
+  }
+
+  void processEnd (uint timestep) {
+    std::vector<uchar> notesOff { 0xB0, 0x7B, 0x00 };
+    midifile.addEvent(0, TPQ*timestep, notesOff);
+  }
+
+  void write (const stdfs::path &path) {
+
+  //  for (uint c=0; c<C; c++)
+  //    if (on[c])
+  //      midifile.addNoteOff(0, tpq * N, 0, A+c, 0);
+//    midifile.addEvent(0, TPQ * N, notesOff);
+
+//    midifile.sortTracks();
+    midifile.doTimeAnalysis();
+    midifile.write(path);
+
+//    midifile.get
+
+#define GET(X) "\t" #X ": " << midifile.get##X() << "\n"
+    std::cout << "Wrote " << path << ":\n"
+              << GET(FileDurationInQuarters)
+              << GET(FileDurationInSeconds)
+              << GET(FileDurationInTicks)
+              << GET(FileDurationInSeconds);
+#undef GET
+  }
+};
+#endif
+
 long maybeSeed(const std::string& s) {
   if (s.empty())  return -2;
   if (std::find_if(
@@ -38,6 +115,8 @@ auto &apoget_force_link = config::PTree::rsetSize;
 
 int main(int argc, char *argv[]) {
   using ANNViewer = kgd::es_hyperneat::gui::ann::Viewer;
+  using MANNViewer = kgd::es_hyperneat::gui::ann2d::Viewer;
+
   using Ind = simu::Evaluator::Ind;
   using utils::operator<<;
 
@@ -50,7 +129,7 @@ int main(int argc, char *argv[]) {
   Verbosity verbosity = Verbosity::QUIET;
 
   std::string lhsTeamArg, rhsTeamArg, scenarioArg, scenarioAddArg;
-  int teamSize = -1;
+  int forcedTeamSize = -1;
 
   int startspeed = 1;
   bool autoquit = false;
@@ -63,14 +142,23 @@ int main(int argc, char *argv[]) {
   bool noRestore = false;
 
   static const std::vector<std::string> validSnapshotViews {
-    "simu"/*, "ann", "mann", "io"*/
+    "simu"/*, "ann"*/, "mann", "io",
+#ifdef WITH_MIDI
+    "midi",
+#endif
   };
   std::vector<std::string> snapshotViews;
   std::string background;
 
-  std::string annRender = ""; // no extension
+#ifdef WITH_MIDI
+  uint midiInstrument = 123;
+#endif
+
+  std::string cppnRender = "", annRender = ""; // no extension
   std::string annNeuralTags;
   bool annAggregateNeurons = false;
+
+  int cppnPhenotype = 0;
 
   int lesions = 0;
 
@@ -96,7 +184,7 @@ int main(int argc, char *argv[]) {
      cxxopts::value(scenarioAddArg))
     ("team-size", "Force a specific team size"
                   " (independantly from genomes' preferences)",
-     cxxopts::value(teamSize))
+     cxxopts::value(forcedTeamSize))
 
     ("start", "Whether to start running immendiatly after initialisation"
               " (and optionally at which speed > 1)",
@@ -127,12 +215,17 @@ int main(int argc, char *argv[]) {
     ("trace", "Render trajectories through alpha-increasing traces",
      cxxopts::value(trace))
 
+    ("cppn-render", "Export qt-bqsed visualisation of the genotype's CPPN",
+     cxxopts::value(cppnRender)->implicit_value("pdf"))
     ("ann-render", "Export qt-based visualisation of the phenotype's ANN",
      cxxopts::value(annRender)->implicit_value("png"))
     ("ann-tags", "Specifiy a collections of position -> tag for the ANN nodes",
      cxxopts::value(annNeuralTags))
     ("ann-aggregate", "Group neurons into behavioral modules",
      cxxopts::value(annAggregateNeurons)->implicit_value("true"))
+
+    ("cppn-phenotype", "Generate images of the CPPN's outputs",
+     cxxopts::value(cppnPhenotype)->implicit_value("50"))
 
     ("lesions", "Lesion type to apply (def: 0/none)", cxxopts::value(lesions))
 
@@ -220,8 +313,118 @@ int main(int argc, char *argv[]) {
 
   auto params = simu::Evaluator::Params::fromArgv(lhsTeamArg, {rhsTeamArg},
                                                   scenarioArg, scenarioAddArg,
-                                                  teamSize);
+                                                  forcedTeamSize);
   outputFolder /= params.kombatNames[0];
+  const uint teamSize = params.teamSize;
+
+
+  // ===========================================================================
+  // == Headless computation(s)
+  if (!cppnRender.empty()) {
+    kgd::es_hyperneat::gui::cppn::Viewer v;
+    genotype::Critter g = simu::Evaluator::fromJsonFile(lhsTeamArg).dna.genome;
+    v.setGraph(g.brain.cppn);
+
+    const auto doRender = [&v] (QPaintDevice *d, QRect trect) {
+      QPainter painter (d);
+      painter.setRenderHint(QPainter::Antialiasing, true);
+
+      QRect srect = v.mapFromScene(v.sceneRect()).boundingRect();
+      trect.adjust(.5*(srect.height() - srect.width()), 0, 0, 0);
+      v.render(&painter, trect, srect);
+    };
+
+    stdfs::path p = stdfs::path(lhsTeamArg).parent_path() / "cppn";
+    p.replace_extension(cppnRender);
+    QString qp = QString::fromStdString(p);
+
+    if (cppnRender == "png") {
+      QImage img (v.sceneRect().size().toSize(), QImage::Format_RGB32);
+      img.fill(Qt::white);
+
+      doRender(&img, img.rect());
+
+      if (img.save(qp))
+        std::cout << "Rendered subject cppn into " << p << "\n";
+       else
+        std::cerr << "Failed to render subject cppn into " << p << "\n";
+
+    } else if (cppnRender == "pdf") {
+      QPrinter printer (QPrinter::HighResolution);
+      printer.setPageSize(QPageSize(v.sceneRect().size(), QPageSize::Point));
+      printer.setPageMargins(QMarginsF(0, 0, 0, 0));
+      printer.setOutputFileName(qp);
+
+      doRender(&printer,
+               printer.pageLayout().paintRectPixels(printer.resolution()));
+
+      std::cout << "Generated " << p << "\n";
+    }
+
+    return 0;
+  } else if (cppnPhenotype > 0) {
+    uint S = cppnPhenotype;
+    phenotype::CPPN cppn = phenotype::CPPN::fromGenotype(
+      simu::Evaluator::fromJsonFile(lhsTeamArg).dna.genome.brain);
+
+    QVector<QImage> imgs {
+      QImage(S, S, QImage::Format_ARGB32),
+      QImage(S, S, QImage::Format_ARGB32),
+      QImage(S, S, QImage::Format_ARGB32),
+    };
+
+    phenotype::CPPN::Outputs outputs;
+
+    static const auto rw_color = [] (float v) {
+      assert(-1 <= v && v <= 1);
+      return (v < 0) ? QColor::fromHsv(0, -v*255, -v*255).rgb()
+                     : QColor::fromHsv(0, 0, v*255).rgb();
+    };
+
+    const auto w_color = [&outputs] { return rw_color(outputs[0]); };
+    const auto b_color = [&outputs] {
+      return rw_color(utils::clip(-1.f, outputs[2], 1.f));
+    };
+    const auto l_color = [&outputs] {
+      return QColor::fromHsv(0, 0, 255*outputs[1]).rgb();
+    };
+
+    using P = phenotype::Point;
+
+    for (P p1: { P{0, 0, 0}/*, P{0,1,0}, P{-1,0,0}, P{1,0,0}*/}) {
+      for (uint r=0; r<S; r++) {
+        QRgb* bytes_w = (QRgb*) imgs[0].scanLine(r),
+            * bytes_l = (QRgb*) imgs[1].scanLine(r),
+            * bytes_b = (QRgb*) imgs[2].scanLine(r);
+
+        P p0;
+        p0.set(1, -1);
+        p0.set(2, -2.*r/(S-1) + 1);
+
+        for (uint c=0; c<S; c++) {
+          p0.set(0, 2.*c/(S-1) - 1);
+          cppn(p0, p1, outputs);
+          bytes_w[c] = w_color();
+          bytes_l[c] = l_color();
+          bytes_b[c] = b_color();
+        }
+      }
+
+      std::ostringstream oss;
+      oss << stdfs::path(lhsTeamArg).parent_path().string() << "/cppn_x_-1_z__";
+      for (uint i=0; i<3; i++) oss << p1.get(i) << "_";
+      QString base = QString::fromStdString(oss.str());
+
+      QVector<QString> names = {"w", "l", "b"};
+      for (int i=0; i<3; i++) {
+        QString p = base + names[i] + ".png";
+        imgs[i].save(p);
+        qDebug() << "Generated" << p;
+      }
+    }
+
+    return 0;
+  }
 
 
   // ===========================================================================
@@ -329,6 +532,10 @@ int main(int argc, char *argv[]) {
     // Build list of views requested for rendering
     std::map<std::string, QWidget*> views;
     std::unique_ptr<phenotype::ModularANN> mann;
+    std::unique_ptr<MANNViewer> mannViewer;
+#ifdef WITH_MIDI
+    std::vector<std::unique_ptr<MidiFileWrapper>> midis;
+#endif
     for (const std::string &v_name: snapshotViews) {
       QWidget *view = nullptr;
       if (v_name == "simu") {
@@ -339,9 +546,9 @@ int main(int argc, char *argv[]) {
         QRectF b = simulation.bounds();
         view->setFixedSize(snapshots, snapshots * b.height() / b.width());
 
-      }/* else if (v_name == "ann") {
-        view = cs->brainPanel()->annViewerWidget;
-        view->setMinimumSize(snapshots, snapshots);
+//      } else if (v_name == "ann") {
+//        view = cs->brainPanel()->annViewerWidget;
+//        view->setMinimumSize(snapshots, snapshots);
 
       } else if (v_name == "io") {
         view = cs->brainIO();
@@ -350,39 +557,45 @@ int main(int argc, char *argv[]) {
       } else if (v_name == "mann" && !annNeuralTags.empty()
                && annAggregateNeurons) {
         phenotype::ANN &ann = scenario.subject()->brain();
-        simu::IndEvaluator::applyNeuralFlags(ann, annNeuralTags);
-
-        ANNViewer *av = cs->brainPanel()->annViewer;
-        av->updateCustomColors();
+        simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);
 
         mann.reset(new phenotype::ModularANN(ann));
-        auto mav = new ANNViewer;
+        mannViewer.reset(new MANNViewer);
+        auto mav = mannViewer.get();
         mav->setGraph(*mann);
         mav->updateCustomColors();
         mav->startAnimation();
 
         view = mav;
         view->setMinimumSize(snapshots, snapshots);
-      }*/
+
+#ifdef WITH_MIDI
+      } else if (v_name == "midi") {
+        for (uint i=0; i<teamSize; i++)
+          midis.push_back(std::make_unique<MidiFileWrapper>(midiInstrument));
+#endif
+      }
 
       if (view) views[v_name] = view;
     }
 
     // On each step, render all views
     const auto generate =
-      [v, &simulation, &savefolder, &views, &mann, snapshots] {
+      [v, &simulation, &scenario, &savefolder, &views,
+       teamSize, &mann, &midis, snapshots] {
       v->focusOnSelection();
       v->characterSheet()->readCurrentStatus();
 
+      auto t = simulation.currTime().timestamp();
       for (const auto &p: views) {
-//        if (p.first == "mann") {
-//          mann->update();
-//          static_cast<ANNViewer*>(p.second)->updateAnimation();
-//        }
+        if (p.first == "mann") {
+          mann->update();
+          static_cast<MANNViewer*>(p.second)->updateAnimation();
+        }
 
         std::ostringstream oss;
         oss << savefolder.string() << "/" << std::setfill('0') << std::setw(5)
-            << simulation.currTime().timestamp() << "_" << p.first << ".png";
+            << t << "_" << p.first << ".png";
         auto savepath = oss.str();
         auto qsavepath = QString::fromStdString(savepath);
 
@@ -394,6 +607,17 @@ int main(int argc, char *argv[]) {
           exit (1);
         }
       }
+
+#ifdef WITH_MIDI
+      uint i=0;
+      for (const simu::Critter *c: scenario.teams()[0]) {
+        if (midis.size() <= i) continue;
+        auto sounds = c->producedSound();
+        MidiFileWrapper::Notes notes;
+        for (uint j=0; j<notes.size(); j++) notes[j] = sounds[j+1];
+        midis[i++]->process(t, notes);
+      }
+#endif
     };
 
     generate();
@@ -402,8 +626,14 @@ int main(int argc, char *argv[]) {
       generate();
     }
 
+#ifdef WITH_MIDI
+    for (uint i=0; i<midis.size(); i++) {
+      midis[i]->processEnd(simulation.currTime().timestamp());
+      midis[i]->write(savefolder / utils::mergeToString(i, ".mid"));
+    }
+#endif
+
     r = 0;
-    std::cerr << "Batch snapshot mode incompatible with 3D ANN Viewer\n";
 
   } else if (trace >= 0) {
     config::Visualisation::trace.overrideWith(trace);

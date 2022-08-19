@@ -68,6 +68,12 @@ message("  > Gui libraries " "${GUI_LIBS}")
 
 list(APPEND KGD_DEFINITIONS ${ES-HyperNEAT_KGD_DEFINITIONS})
 
+if (WITH_MIDI)
+    add_subdirectory(midifile)
+    list(APPEND GUI_LIBS midifile)
+    include_directories(midifile/include)
+endif()
+
 ################################################################################
 ## Process additional pre-processor definitions
 ################################################################################
@@ -391,6 +397,7 @@ message("> Sexual dimorphism is " ${USE_DIMORPHISM})
 if(USE_DIMORPHISM)
     add_definitions(-DUSE_DIMORPHISM)
 endif()
+
 if (EXP_ALIFE2021)
     ############################################################################
     ## Target (alife2021 ga evolution)
@@ -429,6 +436,12 @@ message("> Building ALife2021 targets: " ${EXP_ALIFE2021})
 
 option(EXP_KOMBAT "Whether or not to build these targets" OFF)
 message("> Building Mortal Kombat targets: " ${EXP_KOMBAT})
+
+option(WITH_MIDI "Use midi?" OFF)
+message("> Midi support is " ${WITH_MIDI})
+if(WITH_MIDI)
+    add_definitions(-DWITH_MIDI)
+endif()
 
 #option(UPDATE_DEPENDENCIES "Whether or not to keep dependency data up-to-date
 #                            (implies extra compilation time)" ON)

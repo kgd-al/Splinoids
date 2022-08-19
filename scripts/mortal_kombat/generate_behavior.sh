@@ -51,35 +51,14 @@ line
 echo "Extracting generic behavior"
 line
 
-if ls $indfolder/*1998* >/dev/null 2>&1
-then
-  echo "Data folder '$indfolder' already exists. Skipping"
-else
-  $sfolder/evaluate.sh $ind
-  r=$?
-  [ $r -ne 0 -a $r -ne 42 ] && exit 2
-  
-  hitrate=$indfolder/hitrate.dat
-  if [ -f "$hitrate" ]
+communication(){
+  folder=$(dirname $1)/$(basename $1 .dna)
+  if [ ! -d $folder ]
   then
-    echo "Hit rates '$hitrate' already computed. Skipping"
-  else
-    awk -vt=$teams -vp=$nbopps '
-      function tid(str){ return int((substr(str, 4, 1)-1)/t) }
-      FNR>1{
-        if (tid($2) == 0) hits[tid($3) == 0]++;
-        mag[tid($2)][tid($3)] += $6;
-      } END {
-        print "True-hits:", hits[0]/p;
-        print "False-hits:", hits[1]/p;
-        print "Self-damage:", mag[0][0]/p;
-        print "Good-damage:", mag[0][1]/p;
-        print "Bad-damage:", mag[1][0]/p;
-        print "Enemy-stupidity:", mag[1][1]/p;
-      }' $indfolder/*1999*1998*/impacts.dat > $hitrate
+    $sfolder/evaluate.sh $1
   fi
   
-  communication=$indfolder/communication.dat
+  communication=$folder/communication.dat
   if [ -f "$communication" ]
   then
     echo "Communication profile '$communication' already computed. Skipping"
@@ -87,7 +66,7 @@ else
     awk 'FNR>1{
       print $10,$11,$12;
       if (NF >= 24) print $22, $23, $24;
-    }' $indfolder/*/acoustics.dat | awk '{
+    }' $folder/*/acoustics.dat | awk '{
       for (i=1; i<=3; i++) {
         sum += $i;
         on[i] += ($i > 0);
@@ -113,7 +92,38 @@ else
       for (i=1; i<=3; i++) printf " %.g", osum == 0 ? 0 : on[i] / osum;
       printf "\n";
     }' | tee $communication
-  fi  
+  fi
+}
+
+if ls $indfolder/*__* >/dev/null 2>&1
+then
+  echo "Data folder '$indfolder' already exists. Skipping"
+else
+  $sfolder/evaluate.sh $ind
+  r=$?
+  [ $r -ne 0 -a $r -ne 42 ] && exit 2
+  
+  hitrate=$indfolder/hitrate.dat
+  if [ -f "$hitrate" ]
+  then
+    echo "Hit rates '$hitrate' already computed. Skipping"
+  else
+    awk -vt=$teams -vp=$nbopps '
+      function tid(str){ return int((substr(str, 4, 1)-1)/t) }
+      FNR>1{
+        if (tid($2) == 0) hits[tid($3) == 0]++;
+        mag[tid($2)][tid($3)] += $6;
+      } END {
+        print "True-hits:", hits[0]/p;
+        print "False-hits:", hits[1]/p;
+        print "Self-damage:", mag[0][0]/p;
+        print "Good-damage:", mag[0][1]/p;
+        print "Bad-damage:", mag[1][0]/p;
+        print "Enemy-stupidity:", mag[1][1]/p;
+      }' $indfolder/*__*/impacts.dat > $hitrate
+  fi
+  
+  communication $indfolder
 fi
 
 ################################################################################
@@ -281,7 +291,7 @@ else
   done
 fi
 
-aggregate="$pfolder/neurons_groups.dat"
+aggregate="$pfolder/neural_groups.dat"
 if [ -f "$aggregate" ]
 then
   echo "Neural aggregate '$aggregate' already generated. Skipping"
@@ -346,7 +356,7 @@ else
   fi    
 fi
 
-aggregate="$pfolder/neurons_groups.dat"
+aggregate="$pfolder/neural_groups.dat"
 if [ -f "$aggregate" ]
 then
   echo "Neural aggregate '$aggregate' already generated. Skipping"
@@ -373,15 +383,16 @@ currentflags="4;2;1;0;0;0;0;0;0"
 get_channel(){
   field=$2
   [ -z $field ] && field="Preferred"
-  file=$(find $(dirname $1 | sed 's/1998/1999/') -name "communication.dat")
+  file=$(dirname $1)/$(basename $1 .dna)/"communication.dat"
   grep "$field:" $file | cut -d ' ' -f 2
 }
 
 get_opponent_for_e3o(){
   maxVolume=0
   opponent=""
-  for o in $(fetchopponents 0)
+  for o in $(fetchopponents)
   do
+    communication $o >&2 # ensure communication data available
     volume=$(get_channel $o "Volume")
     echo "volume($o): $volume" >&2
     echo "Greater: " $(awk "BEGIN{print ($volume > $maxVolume)}") >&2
@@ -418,6 +429,7 @@ else
   opp=$(get_opponent_for_scenario $s)
   $sfolder/evaluate.sh $ind $opp --scenario $s
   archive_eval_folder $(datafolder $ind $opp $s) $pfolder/$s
+  echo
 
   s="e3_f"
   channelA=$(get_channel $ind)
@@ -429,9 +441,11 @@ else
     $sfolder/evaluate.sh $ind $opp --scenario $s --scenario-arg $channelA
     archive_eval_folder $(datafolder $ind $opp $s) $pfolder/$s  
   fi
+  echo
   
   s="e3_o"
   opponent=$(get_opponent_for_e3o)
+  echo "opponent: '$opponent'"
   if [ -z $opponent ]
   then
     echo "Mute opponent(s). Skipping $s"
@@ -448,9 +462,10 @@ else
       archive_eval_folder $(datafolder $ind $opponent $s) $pfolder/$s
     fi
   fi
+  echo
 fi
 
-aggregate="$pfolder/neurons_groups.dat"
+aggregate="$pfolder/neural_groups.dat"
 if [ -f "$aggregate" ]
 then
   echo "Neural aggregate '$aggregate' already generated. Skipping"
@@ -483,6 +498,8 @@ currentflags="4;4;4;2;2;2;1;1;1"
 neuralclusteringcolors $mmann_aggregate $currentflags
 
 # cat $(dirname $aggregate)/$(basename $aggregate .dat).ntags
+
+[ -n ${FIRST_ONLY+x} ] && exit 1
 
 ################################################################################
 # Second pass: rerun everything while monitoring modules

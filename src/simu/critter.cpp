@@ -135,7 +135,8 @@ Critter::Critter (const Genome &g, b2Body *b) : _genotype(g), _body(*b) {
 
   brainDead = false;
   inPain = -1;
-  immobile = mute = paralyzed = false;
+  immobile = paralyzed = false;
+  mute = 0;
 }
 
 Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
@@ -668,13 +669,14 @@ void Critter::neuralStep(void) {
   }
 
   // Emit sounds (requested and otherwise)
-  if (!mute) {
-    _sounds.fill(0);
+  _sounds.fill(0);
+  if (mute != 0x7) {  // not all channels muted
     uint vi = std::min(VOCAL_CHANNELS - 1,
                        uint(VOCAL_CHANNELS * .5f * (_voice[1]+1)));
     assert(vi < VOCAL_CHANNELS);
     _sounds[0] = std::min(1.f, _body.GetLinearVelocity().Length());
-    _sounds[1+vi] = std::max(0.f, _voice[0]);
+    if (mute ^ (1<<vi))
+      _sounds[1+vi] = std::max(0.f, _voice[0]);
     assert(0 <= _sounds[1+vi] && _sounds[1+vi] <= 1);
   }
 

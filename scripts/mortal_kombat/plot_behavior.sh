@@ -139,76 +139,76 @@ do
   
   ##############################################################################
   # Final position/health
-  aggregate="$dfolder/finish_health.png"
+  aggregate="$dfolder/finish.png"
   if [ ! -f "$aggregate" ]
   then
     $(dirname $0)/evaluate.sh --gui $ind $opp --trace 0 --overwrite i
     mv $dfolder/ptrajectory.png $dfolder/finish.png
-    renderType=Health $(dirname $0)/evaluate.sh --gui $ind $opp --trace 0 --overwrite i
-    mv $dfolder/ptrajectory.png $dfolder/finish_health.png
+#     renderType=Health $(dirname $0)/evaluate.sh --gui $ind $opp --trace 0 --overwrite i
+#     mv $dfolder/ptrajectory.png $dfolder/finish_health.png
   fi
   
   ##############################################################################
   # Health dynamics (rough strategy overview)
-  healthoverview=$dfolder/health.png
-  if [ -f $healthoverview ]
-  then
-    echo "Health overview '$healthoverview' already generated. Skipping"
-  else
-    gnuplot -e "
-      set output '$healthoverview';
-      set term pngcairo size 1680,1050;
-      
-      set multiplot layout 1,2;
-      set xrange [0:20];
-      set yrange [-.05:1.05];
-      set key above;
-      
-      do for [f in system('ls $dfolder/[lr]hs.dat')] {
-        plot for [i=5:6] f using 1:i w l title columnhead;
-      };
-      unset multiplot;
-    " || rm -fv $healthoverview
-    echo "Generated Health overview '$healthoverview'"
-  fi
+#   healthoverview=$dfolder/health.png
+#   if [ -f $healthoverview ]
+#   then
+#     echo "Health overview '$healthoverview' already generated. Skipping"
+#   else
+#     gnuplot -e "
+#       set output '$healthoverview';
+#       set term pngcairo size 1680,1050;
+#       
+#       set multiplot layout 1,2;
+#       set xrange [0:20];
+#       set yrange [-.05:1.05];
+#       set key above;
+#       
+#       do for [f in system('ls $dfolder/[lr]hs.dat')] {
+#         plot for [i=5:6] f using 1:i w l title columnhead;
+#       };
+#       unset multiplot;
+#     " || rm -fv $healthoverview
+#     echo "Generated Health overview '$healthoverview'"
+#   fi
   
   ##############################################################################
   # Communication (rough conspecific interaction)
-  soundoverview=$dfolder/sounds.png
-  if [ -f $soundoverview ]
-  then
-    echo "Sound overview '$soundoverview' already generated. Skipping"
-  else
-    gnuplot -e "
-      set output '$soundoverview';
-      set term pngcairo size 1680,1050;
-      
-      set multiplot layout 4,3;
-      set yrange [-.05:1.05];
-      set key above;
-      
-      do for [j=0:3] {
-        do for [i=0:2] {
-          plot '$dfolder/acoustics.dat' using 0:i*4+j+1 w l title columnhead;
-        }
-      };
-      unset multiplot;
-    " || rm -fv $soundoverview
-    echo "Generated Sound overview '$soundoverview'"
-  fi
+#   soundoverview=$dfolder/sounds.png
+#   if [ -f $soundoverview ]
+#   then
+#     echo "Sound overview '$soundoverview' already generated. Skipping"
+#   else
+#     gnuplot -e "
+#       set output '$soundoverview';
+#       set term pngcairo size 1680,1050;
+#       
+#       set multiplot layout 4,3;
+#       set yrange [-.05:1.05];
+#       set key above;
+#       
+#       do for [j=0:3] {
+#         do for [i=0:2] {
+#           plot '$dfolder/acoustics.dat' using 0:i*4+j+1 w l title columnhead;
+#         }
+#       };
+#       unset multiplot;
+#     " || rm -fv $soundoverview
+#     echo "Generated Sound overview '$soundoverview'"
+#   fi
   
    
-  for f in $dfolder/outputs*.dat
-  do
-    o=$(dirname $f)/$(basename $f .dat).png
-    if [ -f "$o" ]
-    then
-      echo "Output overview '$o' already generated. Skipping"
-    else
-      plotoutputs $f $o
-      echo "Generated outputs overview '$o'"
-    fi
-  done
+#   for f in $dfolder/outputs*.dat
+#   do
+#     o=$(dirname $f)/$(basename $f .dat).png
+#     if [ -f "$o" ]
+#     then
+#       echo "Output overview '$o' already generated. Skipping"
+#     else
+#       plotoutputs $f $o
+#       echo "Generated outputs overview '$o'"
+#     fi
+#   done
 done
 
 ################################################################################
@@ -241,25 +241,25 @@ else
     unset multiplot;
   " #|| rm -v "$soundoverview"
   
-  soundlower=$indfolder/sounds_eval.png
-  gnuplot -e "
-    set output '$soundlower';
-    set term pngcairo size 1280, 800;
-    
-    files=system('ls $indfolder/eval_first_pass/e1/*/acoustics.dat');
-    set multiplot layout words(files), 1;
-    set xrange [0:600]; set yrange [0:1];
-    set style fill solid .25;
-    set key above;
-    
-    do for [f in files] {
-      plot for [i=10:12] f using 0:i:(0) with filledcurves title columnhead;
-    };
-    
-    unset multiplot;
-  "
+#   soundlower=$indfolder/sounds_eval.png
+#   gnuplot -e "
+#     set output '$soundlower';
+#     set term pngcairo size 1280, 800;
+#     
+#     files=system('ls $indfolder/eval_first_pass/e1/*/acoustics.dat');
+#     set multiplot layout words(files), 1;
+#     set xrange [0:600]; set yrange [0:1];
+#     set style fill solid .25;
+#     set key above;
+#     
+#     do for [f in files] {
+#       plot for [i=10:12] f using 0:i:(0) with filledcurves title columnhead;
+#     };
+#     
+#     unset multiplot;
+#   "
   
-  montage -tile x2 -geometry +0+0 $indfolder/sounds_{mk,eval}.png $soundoverview
+#   montage -tile x2 -geometry +0+0 $indfolder/sounds_{mk,eval}.png $soundoverview
   echo "Generated $soundoverview"
 fi
 
@@ -321,9 +321,9 @@ done
 
 # Render meta-modules
 pfolder=$(ffpass "first" "")
-for depth in false
+for depth in false #true false
 do
-  for symmetry in false
+  for symmetry in false #true false
   do
     suffix=""
     [ $depth == "true" ] && suffix="${suffix}_depth"
@@ -344,6 +344,8 @@ do
     fi
   done
 done
+
+[ -n ${FIRST_ONLY+x} ] && exit 1
 
 declare -A flags=([e1]="THI" [e2]="CBA" [e3]="OFN")
 declare -p flags
