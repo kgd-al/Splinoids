@@ -236,6 +236,15 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
   buildBrain();
   updateColors();
 
+  /// TODO Not returned to the environment
+  auto axonsCost = _brain.stats().axons * config::Simulation::axonEnergyCost();
+  _energy -= axonsCost;
+  if (debugMetabolism)
+    std::cerr << "Lost " << axonsCost << " energy to axons\n";
+
+  energyCosts.fill(0);
+  energyCosts[3] = axonsCost;
+
   _feedingSources.fill(0);
 
   userIndex = 0;
@@ -617,29 +626,29 @@ void Critter::neuralStep(void) {
 //    _reproduction = _neuralOutputs[?];
 
     if (debugShowNeurons) {
-//      std::cerr << std::setprecision(20);
-//      std::cerr << CID(this) << "@" << _age << " " << pos() << "\n";
+      std::cerr << std::setprecision(20);
+      std::cerr << CID(this) << "@" << _age << " " << pos() << "\n";
 
-//      const auto inames = [this] {
-//        std::vector<std::string> v;
-//        v.push_back("h");
-//        v.push_back("p");
-//        for (const auto &_: _retina) {
-//          (void)_;
-//          static const std::string c = "rgb";
-//          for (uint i=0; i<c.size(); i++)
-//            v.push_back("r" + c.substr(i, 1));
-//        }
-//        for (const auto &_: _ears) (void)_, v.push_back("e");
-//        for (const auto &_: _touch) (void)_, v.push_back("t");
-//        return v;
-//      }();
-//      std::cerr << "\tinputs:\n";
-//      for (uint i=0; i<_neuralInputs.size(); i++)
-//        std::cerr << "\t\t" << inames[i] << "\t" << inputs[i] << "\n";
-//      std::cerr << "\toutputs:\n";
-//      for (auto v: _neuralOutputs) std::cerr << "\t\t" << v << "\n";
-//      std::cerr << "\n\n";
+      const auto inames = [this] {
+        std::vector<std::string> v;
+        v.push_back("h");
+        v.push_back("p");
+        for (const auto &_: _retina) {
+          (void)_;
+          static const std::string c = "rgb";
+          for (uint i=0; i<c.size(); i++)
+            v.push_back("r" + c.substr(i, 1));
+        }
+        for (const auto &_: _ears) (void)_, v.push_back("e");
+        for (const auto &_: _touch) (void)_, v.push_back("t");
+        return v;
+      }();
+      std::cerr << "\tinputs:\n";
+      for (uint i=0; i<_neuralInputs.size(); i++)
+        std::cerr << "\t\t" << inames[i] << "\t" << _neuralInputs[i] << "\n";
+      std::cerr << "\toutputs:\n";
+      for (auto v: _neuralOutputs) std::cerr << "\t\t" << v << "\n";
+      std::cerr << "\n\n";
     }
   }
 
@@ -680,30 +689,7 @@ void Critter::neuralStep(void) {
     assert(0 <= _sounds[1+vi] && _sounds[1+vi] <= 1);
   }
 
-  // Test patterns for articulations
-  /// TODO REMOVE
-//  if (true)
-//    _amotors.fill(1);
-
-//  else if (id() == ID(1)) {
-//    if (false) {
-//      const auto f = [this] (double (*f) (double), auto x) -> float {
-//        return f(-50 * (x+uint(id())) * 2 * M_PI);
-//      };
-//      _amotors = {
-//        f(cos, _age), f(sin, _age),
-//        f(cos, _age+.5), f(sin, _age+.5)
-//      };
-//    } else
-//      for (uint i=0; i<ARTICULATIONS; i++)
-//        _amotors[i] = (i%2==0?1:-1)*cos(1250*(_age -.5f));
-
-//  } else
-//    _amotors.fill(0);
-//  using utils::operator <<;
-//  std::cerr << "Overridden articulations: " << _amotors << ". Age = "
-//            << _age << "\n";
-
+#if ARMS > 0
   // Activate/Lock joints
   if (!paralyzed) {
 //    static const auto &CAS = config::Simulation::critterArmSpeed();
@@ -743,15 +729,24 @@ void Critter::neuralStep(void) {
 //      }
     }
   }
+#endif
 
 #undef DEBUG
 }
 
 void Critter::energyConsumption (Environment &env) {
   static const auto &M = config::Simulation::motorEnergyConsumption();
+  static const auto &V = config::Simulation::voiceEnergyConsumption();
+#if ARTICULATIONS > 0
   static const auto &J = config::Simulation::armEnergyConsumption();
+#endif
   static const auto &N = config::Simulation::neuronEnergyConsumption();
-  static const auto &A = config::Simulation::axonEnergyConsumption();
+
+  static const auto activeNeurons = [] (auto brain) {
+    uint count = 0;
+    for (const auto &n: brain.neurons())  if (n->value != 0) count ++;
+    return count;
+  };
 
   decimal dt = env.dt();
   decimal de = 0;
@@ -759,9 +754,18 @@ void Critter::energyConsumption (Environment &env) {
   de += baselineEnergyConsumption(_size, _clockSpeed);
   de += M * (std::fabs(_lmotors[Motor::LEFT]) + std::fabs(_lmotors[Motor::RIGHT]))
         * _clockSpeed * _size;
+#if ARTICULATIONS > 0
   de += std::accumulate(_amotors.begin(), _amotors.end(), 0,
                         [] (float a, float b) { return a + fabs(b); }) * J;
-  de += _brain.neurons().size() * N + _brain.stats().axons * A;
+#endif
+  de += (_voice[0] > 0) * V;
+  de += activeNeurons(_brain) * N;
+
+  energyCosts[0] +=
+    M * (std::fabs(_lmotors[Motor::LEFT]) + std::fabs(_lmotors[Motor::RIGHT]))
+      * _clockSpeed * _size;
+  energyCosts[1] += (_voice[0] > 0) * V;
+  energyCosts[2] += activeNeurons(_brain) * N;
 
   if (debugMetabolism) {
     std::cerr << CID(this) << " de = " << de
@@ -770,12 +774,14 @@ void Critter::energyConsumption (Environment &env) {
                 << " * (" << std::fabs(_lmotors[Motor::LEFT])
                 << " + " << std::fabs(_lmotors[Motor::RIGHT]) << ") * "
                 << _clockSpeed << " * " << _size
-                << "\n\t + (" << fabs(_amotors[0]);
+                << "\n\t + (" << (_voice[0] > 0) << " * " << V << ")";
+#if ARTICULATIONS > 0
+    std::cerr << "\n\t + (" << fabs(_amotors[0]);
     for (uint i=1; i < ARTICULATIONS; i++)
       std::cerr << " + " << fabs(_amotors[i]);
-    std::cerr << ") * " << J
-              << "\n\t + " << _brain.neurons().size() * N
-              << "\n\t + " << _brain.stats().axons * A
+    std::cerr << ") * " << J;
+#endif
+    std::cerr << "\n\t + " << _brain.neurons().size() * N
               << std::endl;
   }
 
@@ -784,6 +790,9 @@ void Critter::energyConsumption (Environment &env) {
   de = std::min(de, _energy);
   _energy -= de;
   env.modifyEnergyReserve(de);
+
+  assert(de >= 0);
+  assert(storableEnergy() >= 0);
 }
 
 void Critter::regeneration (Environment &env) {

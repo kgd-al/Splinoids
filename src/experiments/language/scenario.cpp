@@ -4,36 +4,6 @@ namespace simu {
 
 // =============================================================================
 
-Scenario::Spec Scenario::Spec::fromString(const std::string &s) {
-  Spec spec;
-
-  spec.type = ERROR;
-  switch (s[0]) {
-  case 'd': spec.type = DIRECTION; break;
-  case 'c': spec.type = COLOR; break;
-  default:
-    utils::Thrower("Unknown scenario type ", s[0]);
-  }
-
-  if (spec.type == DIRECTION) {
-    switch (s[2]) {
-    case 'l': spec.target = 0; break;
-    case 'f': spec.target = 1; break;
-    case 'r': spec.target = 2; break;
-    default:
-      utils::Thrower("Unknown scenario direction subtype ", s[2]);
-    }
-  } else if (spec.type == COLOR) {
-    std::cerr << "Color spec is brick-implemented\n";
-    spec.target = 1;
-    spec.colors = {{ {1,0,0}, {0,1,0}, {0,0,1} }};
-  }
-
-  return spec;
-}
-
-// =============================================================================
-
 const Simulation::InitData Scenario::commonInitData = [] {
   Simulation::InitData d;
   d.ienergy = 0;
@@ -52,7 +22,7 @@ genotype::Environment Scenario::environmentGenome (bool eval) {
   e.taurus = 0;
 
   if (eval) e.width = e.height = 50;
-  else      e.width = 2*(e.height = 3);
+  else      e.width = 2*(e.height = 5);
 
   return e;
 }
@@ -73,18 +43,12 @@ Scenario::Scenario (Simulation &simulation) : _simulation(simulation) {
 Critter* Scenario::makeCritter (uint id, const genotype::Critter &genome) {
 
   static constexpr auto E = INFINITY;
-  static constexpr auto R = Critter::MAX_SIZE;
-  static constexpr auto D = 1;
 
-  static const auto x = [this] (int id) {
+  const auto x = [this] (int id) {
     return (1-2*id)
-        * _simulation.environment().xextent() / 3.f;
+        /** _simulation.environment().xextent() / 3.f*/;
   };
-  static const auto y = [] (int i, int teamSize) {
-    if (teamSize == 1)  return 0.f;
-    else                return D*R*(2*i-1);
-  };
-  static const auto pin = [] (auto c) {
+  const auto pin = [] (auto c) {
     c->immobile = true;
 //    c->paralyzed = true;
 //    c->body().SetType(b2_staticBody);
@@ -95,12 +59,23 @@ Critter* Scenario::makeCritter (uint id, const genotype::Critter &genome) {
   _critters.push_back(c);
   if (id == 0 || neuralEvaluation()) pin(c);  // emitter cannot move
 
-  std::cerr << "Pinning everyone\n";
-  pin(c);
-
 //  if (team == 0 && id == 0)  c->mute = true;
 
   return c;
+}
+
+Foodlet* Scenario::makeFoodlet (uint i, int side) {
+  const float W = _simulation.environment().xextent(),
+              H = _simulation.environment().yextent();
+
+  float fr = .25, fe = Foodlet::maxStorage(BodyType::PLANT, fr);
+  auto fy = -1 * side * (i-1.f) * std::min(H-fr, 1 * H);
+
+  auto f = _simulation.addFoodlet(BodyType::PLANT,
+                                  side * (W-fr), fy, fr, fe);
+  _foodlets.push_back(f);
+
+  return f;
 }
 
 void Scenario::init(const Params &params) {
@@ -142,25 +117,16 @@ void Scenario::init(const Params &params) {
     for (uint i=0; i<2; i++)
       makeCritter(i, params.genome);
 
-    float W = _simulation.environment().xextent(),
-          H = _simulation.environment().yextent();
-
+    const float H = _simulation.environment().yextent();
     float width = .25;
     _simulation.addObstacle(-.5*width, -H, width, 2*H);
 
-    if (params.spec.type == Scenario::Spec::DIRECTION) {
-      float fr = .25, fe = Foodlet::maxStorage(BodyType::PLANT, fr);
-      const auto fy =
-          [H, fr] (uint i) { return (1.f-i) * std::min(H-fr, 1 * H); };
+    if (params.type == Type::DIRECTION) {
+      for (uint i=0; i<3; i++) makeFoodlet(i, -1);
+      makeFoodlet(params.spec.target, 1);
+      assert(_foodlets.size() == 4);
 
-      _simulation.addFoodlet(BodyType::PLANT,
-                             W-fr, fy(params.spec.target),
-                             fr, fe);
-
-      for (uint i=0; i<3; i++)
-        _simulation.addFoodlet(BodyType::PLANT, -W+fr, fy(i), fr, fe);
-
-    } else if (params.spec.type == Scenario::Spec::COLOR) {
+    } /*else if (params.spec.type == Scenario::Spec::COLOR) {
       float width = .25, length = 2/3.f;
       _simulation.addObstacle(W-width, -.5*length, width, length,
                               Color{1,0,0});
@@ -168,9 +134,11 @@ void Scenario::init(const Params &params) {
       for (uint i=0; i<3; i++)
         _simulation.addObstacle(-W, 1.f-i-.5*length,
                                 width, length,
-                                Color{i==0,i==1,i==2});
-    }
+                                Color{float(i==0),float(i==1),float(i==2)});
+    }*/
   }
+
+  _mute = true;
 
   std::set<phylogeny::GID> gids;
   for (auto &c: _critters) {
@@ -180,40 +148,10 @@ void Scenario::init(const Params &params) {
   }
 }
 
-//void Scenario::applyLesions(int lesions) {
-//  if (lesions == 0) return;
-//  std::cout << "Applying lesion type: " << lesions;
-
-//  uint count = 0;
-//  for (auto &ptr: _subject->brain().neurons()) {
-//    phenotype::ANN::Neuron &n = *ptr;
-//    for (auto it=n.links().begin(); it!=n.links().end(); ) {
-//      phenotype::ANN::Neuron &tgt = *(it->in.lock());
-//      if (tgt.type == phenotype::ANN::Neuron::I
-//          && (lesions == 3
-//            || (lesions == 1 && tgt.pos.y() < -.75)   // deactivate vision
-//            || (lesions == 2 && tgt.pos.y() >= -.75)  // deactivate audition
-//            || (n.flags == 1024 && ( // deactivate amygdala inputs
-//                 (lesions == 4 && tgt.pos.y() == -1)    // deactivate red
-//              || (lesions == 5 && tgt.pos.y() == -.75))))) { // deactivate noise audition
-//        it = n.links().erase(it);
-//        count++;
-////        std::cerr << "Deactivated " << tgt.pos << " -> " << n.pos << "\n";
-//      } else {
-//        ++it;
-////        std::cerr << "Kept " << tgt.pos << " -> " << n.pos << " (" << n.flags << ")\n";
-//      }
-//    }
-//  }
-
-//  std::cout << " (" << count << " links deleted)\n";
-//}
-
 char Scenario::critterRole(uint id) {
   switch (id) {
   case 0: return 'e';
   case 1: return 'r';
-  case 2: return 'a';
   default:
     utils::Thrower("No role for critter id ", id);
     return '!';
@@ -229,21 +167,15 @@ void Scenario::postStep(void) {
 //  static const auto PERIOD = 4 * config::Simulation::ticksPerSecond();
   const auto t = _simulation.currTime().timestamp();
 
-//  static const auto damage = [] (simu::Critter *c, bool damage, bool allSplines) {
-//    decimal h = 1 - damage * INJURY;
-//    c->overrideBodyHealthness(h);
-//    if (allSplines)
-//      for (Critter::Side s: {Critter::Side::LEFT, Critter::Side::RIGHT})
-//        for (uint i=0; i<Critter::SPLINES_COUNT; i++)
-//          c->overrideSplineHealthness(h, i, s);
-//  };
 //  static const auto injectSound = [] (simu::Critter *c, uint channel) {
 //    auto &ears = c->ears();
 //    ears.fill(0);
 //    ears[channel] = ears[channel+Critter::VOCAL_CHANNELS+1] = 1;
 //  };
 
-//  if (neuralEvaluation()) {
+  _mute &= emitter()->silent(false);
+
+  if (neuralEvaluation()) {
 //    const auto step = t / PERIOD;
 //    if (step >= 6)  _simulation._finished = true;
 
@@ -303,21 +235,15 @@ void Scenario::postStep(void) {
 //    if (hasFlag(Params::SOUND_OPPN)) _currentFlags.flip(Params::SOUND_OPPN);
 
 //    return;
-//  }
+  }
 
 //  bool casualty = (_teams[0].size() < _teamsSize)
 //               || (_teams[1].size() < _teamsSize);
 
-//  bool awake = false;
-//  for (const auto &team: _teams) {
-//    for (const Critter *c: team) {
-//      awake |= c->body().IsAwake();
-//      if (awake)  break;
-//    }
-//    if (awake)  break;
-//  }
-
-  _simulation._finished = (t >= TIMEOUT);
+  _simulation._finished =
+       (t >= TIMEOUT)
+    || !receiver()->body().IsAwake()
+    || (!_simulation.environment().feedingEvents().empty());
 }
 
 void Scenario::preDelCritter(Critter *c) {(void)c;}
@@ -326,6 +252,36 @@ float Scenario::score (void) const {
   if (_simulation._aborted) return -std::numeric_limits<float>::max();
 
   float score = 0;
+
+  if (_mute || emitter()->brain().empty())
+    score = -1;
+
+  else {
+    simu::Environment::FeedingEvents events =
+      _simulation.environment().feedingEvents();
+
+    int success = 0;
+    if (events.empty()) {
+      const auto dist = [this] (uint id, const simu::Critter *c) {
+        return (_foodlets[id]->body().GetWorldCenter() - c->pos()).Length();
+      };
+
+      score += 1 - dist(_params.spec.target, receiver())
+                   / dist(3, emitter());
+
+    } else {
+      assert(events.size() == 1);
+
+      auto e = *events.begin();
+      success = (e.foodlet == _foodlets[_params.spec.target]) ? 1 : -1;
+      score += success;
+    }
+
+    if (success == 1)
+      for (const simu::Critter *c: _critters)
+        score += .5 * c->usableEnergy() / c->maxUsableEnergy();
+  }
+
   return score;
 }
 

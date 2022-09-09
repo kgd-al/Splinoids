@@ -12,43 +12,41 @@ struct Evaluator {
   using Genome = Scenario::Genome;
   struct LogData;
 
-  using Footprint = std::vector<float>;
-  static uint footprintSize (uint evaluations);
-  static std::vector<std::string> footprintFields (uint evaluations);
   using Spec = Scenario::Spec;
   using Specs = std::vector<Spec>;
 
-  using Ind = GAGA::NoveltyIndividual<Genome, Footprint>;
-  using GA = GAGA::GA<Genome, Ind>;
-
-  using Inds = std::vector<Ind>;
   struct Params {
-    Ind ind;
-
+    Scenario::Type type;
     Specs specs;
 
     Scenario::Params::Flags flags;
 
-    Params (Ind i) : ind(i) {}
-
-    static Params fromArgv (const std::string &indFile,
-                            const std::string &scenario);
+    static Params fromArgv (const std::string &scenario);
 
     Scenario::Params scenarioParams (uint i) const;
+
+    static std::string toString (const Scenario::Params &p);
   };
 
-  Evaluator (void);
+  using Footprint = std::vector<float>;
+  static Footprint footprint (const Params &p);
+  static std::vector<std::string> footprintFields (const Params &p);
+
+  using Ind = GAGA::NoveltyIndividual<Genome, Footprint>;
+  using GA = GAGA::GA<Genome, Ind>;
+
+  Evaluator (Scenario::Type type);
 
 //  void setLesionTypes (const std::string &s);
 
   static void applyNeuralFlags (phenotype::ANN &ann,
                                 const std::string &tagsfile);
 
-  // Regular combat between individuals
+  // Evolver operator
   void operator() (Ind &ind);
 
   // Actual evaluator
-  void operator() (Params &params);
+  void operator() (Ind &ind, Params &params);
 
   LogData* logging_getData (void);
   void logging_init (LogData *d, const stdfs::path &folder, Scenario &s);
@@ -65,14 +63,15 @@ struct Evaluator {
 
   static void dumpStats (const stdfs::path &dna, const stdfs::path &folder);
 
+  static std::string prettyEvalTypes (void);
+
   stdfs::path logsSavePrefix, annTagsFile;
 
   std::vector<std::unique_ptr<phenotype::ModularANN>> manns;
 
-//  std::vector<int> lesions;
-  static constexpr std::array<int,1> lesions {0};
-
   static std::atomic<bool> aborted;
+
+  Params params;
 };
 
 } // end of namespace simu

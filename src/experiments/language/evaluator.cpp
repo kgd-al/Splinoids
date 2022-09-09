@@ -1,4 +1,5 @@
 #include <csignal>
+#include <iomanip>
 
 #include "indevaluator.h"
 
@@ -29,6 +30,7 @@ void sigint_manager (int) {
 template <typename T>
 bool diffStatsMap (const T &prev, const T &curr) {
   bool allOk = true;
+
   for (const auto &p: curr) {
     auto it = prev.find(p.first);
     std::cout << "\t" << std::setw(10) << p.first << ": ";
@@ -39,6 +41,7 @@ bool diffStatsMap (const T &prev, const T &curr) {
       else
         std::cout << GAGA_COLOR_RED << it->second << " >> ";
       std::cout << p.second << GAGA_COLOR_NORMAL;
+      if (p.first == "wtime") ok = true;
       allOk &= ok;
 
     } else {
@@ -85,6 +88,7 @@ bool diffStatsArray (const T &prev, const T &curr, const U &fields) {
 auto &apoget_force_link = config::PTree::rsetSize;
 int main(int argc, char *argv[]) {
   using Ind = simu::Evaluator::Ind;
+  using Genome = simu::Evaluator::Genome;
 
   // To prevent missing linkages
 //  std::cout << config::PTree::rsetSize() << std::endl;
@@ -98,7 +102,7 @@ int main(int argc, char *argv[]) {
   Verbosity verbosity = Verbosity::QUIET;
 
   std::string indFile;
-  std::string scenarios;
+  std::string scenario;
 
   std::string outputFolder = "tmp/lg-eval/";
   char overwrite = simu::Simulation::PURGE;
@@ -127,7 +131,7 @@ int main(int argc, char *argv[]) {
      cxxopts::value(overwrite))
 
     ("ind", "Splinoid genome", cxxopts::value(indFile))
-    ("scenarios", "Scenario(s) name(s) to test", cxxopts::value(scenarios))
+    ("scenario", "Scenario name to test", cxxopts::value(scenario))
 //    ("scenario-arg", "Eventual argument for the requested scenario",
 //     cxxopts::value(scenarioArg))
 
@@ -161,6 +165,8 @@ int main(int argc, char *argv[]) {
 
   if (indFile.empty()) utils::Thrower("No splinoid genome provided");
 
+  if (scenario.empty()) utils::Thrower("No scenario provided");
+
   // ===========================================================================
   // == SIGINT management
 
@@ -174,13 +180,22 @@ int main(int argc, char *argv[]) {
   // ===========================================================================
   // == Core setup
 
+#define C(X) "\t" << #X << ": " << config::Simulation::X() << "\n"
+  std::cout.precision(17);
+  std::cout << "Loaded energy costs:\n"
+            << C(motorEnergyConsumption)
+            << C(voiceEnergyConsumption)
+            << C(neuronEnergyConsumption)
+            << C(axonEnergyCost);
+#undef C
+
   if (stats) {
 //    simu::Evaluator::dumpStats(lhsTeamArg, outputFolder);
     return 0;
   }
 
-  auto params = simu::Evaluator::Params::fromArgv(indFile, scenarios);
-  Ind &ind = params.ind;
+  auto params = simu::Evaluator::Params::fromArgv(scenario);
+  Ind ind = simu::Evaluator::fromJsonFile(indFile);
 
   auto start = simu::Simulation::now();
   const auto prevFitness = ind.fitnesses;
@@ -188,13 +203,13 @@ int main(int argc, char *argv[]) {
   const auto prevInfos = ind.infos;
   const auto prevStats = ind.stats;
 
-  simu::Evaluator eval;
+  simu::Evaluator eval (params.type);
 //  eval.setLesionTypes(lesions);
 
   eval.logsSavePrefix = stdfs::path(outputFolder);
   eval.annTagsFile = annNeuralTags;
 
-  eval(params);
+  eval(ind, params);
 
   auto duration = simu::Simulation::durationFrom(start);
   uint days, hours, minutes, seconds, mseconds;
@@ -226,9 +241,9 @@ int main(int argc, char *argv[]) {
     ok &= diffStatsMap(prevFitness, ind.fitnesses);
     std::cout << "\tStats:\n";
     ok &= diffStatsMap(prevStats, ind.stats);
-//    std::cout << "\tFootprint:\n";
-//    ok &= diffStatsArray(prevSignature, ind.signature,
-//                         simu::Evaluator::footprintFields(rhsTeamArgs.size()));
+    std::cout << "\tFootprint:\n";
+    ok &= diffStatsArray(prevSignature, ind.signature,
+                         simu::Evaluator::footprintFields(eval.params));
   }
 
 //  s.destroy();

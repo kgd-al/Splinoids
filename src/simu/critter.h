@@ -38,7 +38,7 @@ public:
   static constexpr auto ARTICULATIONS_PER_ARM = NUMBER_OF_ARM_PARTS;
   static constexpr auto ARTICULATIONS = ARMS * ARTICULATIONS_PER_ARM;
 
-  static constexpr uint VOCAL_CHANNELS = 3;
+  static constexpr uint VOCAL_CHANNELS = 1;
 
   using FixtureType_ut = uint8;
   enum class FixtureType : FixtureType_ut {
@@ -217,7 +217,7 @@ private:
   // Cached-data for sounds emitted into the environment
   // 0 -> Involuntary (motion, feeding, ...)
   // 1 -> Vocalisations
-  std::array<float, VOCAL_CHANNELS+1> _sounds;
+  std::array<float, 1+VOCAL_CHANNELS> _sounds;
   b2Fixture *_auditionSensor;
 
   // To monitor feeding behavior
@@ -244,6 +244,8 @@ public:
   bool immobile, mute, paralyzed; // prevent actions
 
   uint userIndex;  // To monitor source population
+
+  std::array<float, 4> energyCosts;
 
   Critter(const Genome &g, b2Body *body, decimal e, float age = 0);
   ~Critter (void);
@@ -685,8 +687,10 @@ public:
     return _ears;
   }
 
-  bool silent (void) const {
-    return std::all_of(_sounds.begin(), _sounds.end(),
+  bool silent (bool withNoise = true) const {
+    auto begin = _sounds.begin();
+    if (!withNoise) begin = std::next(begin);
+    return std::all_of(begin, _sounds.end(),
                        [] (auto v) { return v == 0; });
   }
 

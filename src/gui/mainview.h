@@ -72,6 +72,10 @@ public:
     return _actions.value(s);
   }
 
+  visu::Critter* selection (void) {
+    return _simu.selection();
+  }
+
 signals:
   void stepped (void);
 
@@ -117,10 +121,6 @@ private:
   void selectionChanged (visu::Critter *c);
 
   void externalCritterControl (void);
-
-  visu::Critter* selection (void) {
-    return _simu.selection();
-  }
 
   void setSelection (visu::Critter *c);
 };

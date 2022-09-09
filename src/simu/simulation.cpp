@@ -435,11 +435,18 @@ Obstacle* Simulation::addObstacle(float x, float y, float w, float h, Color c) {
   return o;
 }
 
+void Simulation::delObstacle(Obstacle *o) {
+  _obstacles.erase(o);
+  physics().DestroyBody(&o->body());
+  delete o;
+}
+
 void Simulation::clear (void) {
   preClear();
 //  _environment.reset(nullptr);
   while (!_critters.empty())  delCritter(*_critters.begin());
   while (!_foodlets.empty())  delFoodlet(*_foodlets.begin());
+  while (!_obstacles.empty()) delObstacle(*_obstacles.begin());
 }
 
 void Simulation::step (void) {

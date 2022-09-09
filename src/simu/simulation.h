@@ -238,6 +238,7 @@ public:
 
   virtual Obstacle *addObstacle(float x, float y, float w, float h,
                                 Color c = Color{-1});
+  virtual void delObstacle (Obstacle *o);
 
   void clear (void);
   virtual void preClear (void) {}
@@ -248,6 +249,10 @@ public:
 
   const auto& critters (void) const {
     return _critters;
+  }
+
+  const auto& foodlets (void) const {
+    return _foodlets;
   }
 
   decimal totalEnergy(void) const;

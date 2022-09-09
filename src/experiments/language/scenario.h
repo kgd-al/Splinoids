@@ -3,31 +3,36 @@
 
 #include "../../simu/simulation.h"
 
+DEFINE_NAMESPACE_SCOPED_PRETTY_ENUMERATION(
+  eval, Type,
+  ERROR=0,
+  DIRECTION = 1,
+  COLOR = 2)
+
 namespace simu {
 
 class Scenario {
 public:
   using Genome = Simulation::CGenome;
   static constexpr uint DURATION = 10; //seconds
-  struct Spec {
-    enum Type { ERROR=0, DIRECTION, COLOR } type;
-    uint target; // [0,2]
-    std::array<Color,3> colors;
 
-    static Spec fromString(const std::string &s);
+  using Type = eval::Type;
+  struct Spec {
+    uint target; // [0,2]
+//    std::array<Color, 3> colors;
   };
 
   struct Params {
     Genome genome;
+    Type type;
     Spec spec;
 
     enum Flag {
       NONE
     };
-    using Flags = std::bitset<9>;
+    using Flags = std::bitset<1>;
     Flags flags;
   };
-
 
   Scenario(Simulation &simulation);
 
@@ -43,6 +48,9 @@ public:
   }
 
   float score (void) const;
+  bool mute (void) const {
+    return _mute;
+  }
 
   bool neuralEvaluation (void) const {
     return _params.flags.any();
@@ -56,12 +64,14 @@ public:
     return _currentFlags;
   }
 
+  const Critter* emitter (void) const {   return _critters[0];  }
   Critter* emitter (void) {
-    return _critters[0];
+    return const_cast<Critter*>(const_cast<const Scenario*>(this)->emitter());
   }
 
+  const Critter* receiver (void) const {  return _critters[1];  }
   Critter* receiver (void) {
-    return _critters[1];
+    return const_cast<Critter*>(const_cast<const Scenario*>(this)->receiver());
   }
 
   const auto& critters (void) const {
@@ -79,13 +89,16 @@ private:
   Simulation &_simulation;
 
   std::vector<simu::Critter*> _critters;
+  std::vector<simu::Foodlet*> _foodlets;
 
   Params _params;
   Params::Flags _currentFlags;
 
+  bool _mute;
   uint _testChannel;
 
   Critter* makeCritter (uint id, const genotype::Critter &genome);
+  Foodlet* makeFoodlet (uint id, int side);
 
   static genotype::Environment environmentGenome (bool eval);
 };

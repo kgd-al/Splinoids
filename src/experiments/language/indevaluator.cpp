@@ -4,88 +4,88 @@ namespace simu {
 
 std::atomic<bool> Evaluator::aborted = false;
 
-Evaluator::Evaluator (void) {
-//  lesions = {0};
+Evaluator::Evaluator (Scenario::Type t) {
+  params.type = t;
+
+  using T = Scenario::Type;
+  if (t == T::DIRECTION) {
+    params.specs = {{0}, {1}, {2}};
+  } else
+    utils::Thrower("Unhandled spec type '", EnumUtils<T>::getName(t), "'");
 }
 
-//void Evaluator::setLesionTypes(const std::string &s) {
-//  if (s.empty())
-//    return;
-
-//  else if (s == "all")
-//    lesions = {0,1,2,3};
-
-//  else {
-//    for (const std::string str: utils::split(s, ';')) {
-//      int i;
-//      if (std::istringstream (str) >> i)
-//        lesions.push_back(i);
-//    }
-//  }
-//}
+std::string Evaluator::prettyEvalTypes(void) {
+  using T = Scenario::Type;
+  using U = EnumUtils<T>;
+  std::ostringstream oss;
+  oss << "[ ";
+  for (auto t: U::iteratorUValues()) if (t) oss << U::getName(t) << " ";
+  oss << "]";
+  return oss.str();
+}
 
 void Evaluator::applyNeuralFlags(phenotype::ANN &ann,
                                  const std::string &tagsfile) {
-  auto &n = ann.neurons();
+//  auto &n = ann.neurons();
 
-  std::ifstream ifs (tagsfile);
-  if (!ifs)
-    utils::Thrower("Failed to open neural tags file '", tagsfile, "'");
+//  std::ifstream ifs (tagsfile);
+//  if (!ifs)
+//    utils::Thrower("Failed to open neural tags file '", tagsfile, "'");
 
-  for (std::string line; std::getline(ifs, line); ) {
-    if (line.empty() || line[0] == '/') continue;
-    std::istringstream iss (line);
-    phenotype::Point pos;
-    iss >> pos;
+//  for (std::string line; std::getline(ifs, line); ) {
+//    if (line.empty() || line[0] == '/') continue;
+//    std::istringstream iss (line);
+//    phenotype::Point pos;
+//    iss >> pos;
 
-    auto it = n.find(pos);
-    if (it == n.end())
-      utils::Thrower("No neuron at position {", pos.x(), ", ", pos.y(), "}");
+//    auto it = n.find(pos);
+//    if (it == n.end())
+//      utils::Thrower("No neuron at position {", pos.x(), ", ", pos.y(), "}");
 
-    iss >> (*it)->flags;
-  }
+//    iss >> (*it)->flags;
+//  }
 
-  // Also aggregate similar inputs/outputs
-  for (auto &p: ann.neurons()) {
-    using P = phenotype::Point;
-    phenotype::ANN::Neuron &n = *p;
-    P pos = n.pos;
-    auto &f = n.flags;
+//  // Also aggregate similar inputs/outputs
+//  for (auto &p: ann.neurons()) {
+//    using P = phenotype::Point;
+//    phenotype::ANN::Neuron &n = *p;
+//    P pos = n.pos;
+//    auto &f = n.flags;
 
-    if (n.type == phenotype::ANN::Neuron::I) {
-      if (pos == P{0.f, -1.f, -.5f} || pos == P{0.f, -1.f, -1.f})
-        f = 1<<18;  // health
-      else if (pos.z() <= -1/3.) {
-        f = 1<<19;  // audition
-        if (pos.x() > 0)  f |= 1<<17;  // right
-      } else if (pos.z() >= 1/3.) {
-        f = 1<<20;  // vision
-        if (pos.x() > 0)  f |= 1<<17;  // right
-      } else {
-        f = 1<<21;  // touch
-        if (pos.x() > 0)  f |= 1<<17;  // right
-      }
-      if (f) f |= 1<<16; // input
+//    if (n.type == phenotype::ANN::Neuron::I) {
+//      if (pos == P{0.f, -1.f, -.5f} || pos == P{0.f, -1.f, -1.f})
+//        f = 1<<18;  // health
+//      else if (pos.z() <= -1/3.) {
+//        f = 1<<19;  // audition
+//        if (pos.x() > 0)  f |= 1<<17;  // right
+//      } else if (pos.z() >= 1/3.) {
+//        f = 1<<20;  // vision
+//        if (pos.x() > 0)  f |= 1<<17;  // right
+//      } else {
+//        f = 1<<21;  // touch
+//        if (pos.x() > 0)  f |= 1<<17;  // right
+//      }
+//      if (f) f |= 1<<16; // input
 
-    } else if (n.type == phenotype::ANN::Neuron::O) {
-      if (pos.z() >= .5)
-        f = 1 << 26;  // Voice
-      else if (pos.z() == -.5f) {
-        f = 1<<27;    // arms
-        if (pos.x() > 0) f |= 1<<25;  // right
-      }
-      if (f) f |= 1<<24; // output
-    }
-  }
+//    } else if (n.type == phenotype::ANN::Neuron::O) {
+//      if (pos.z() >= .5)
+//        f = 1 << 26;  // Voice
+//      else if (pos.z() == -.5f) {
+//        f = 1<<27;    // arms
+//        if (pos.x() > 0) f |= 1<<25;  // right
+//      }
+//      if (f) f |= 1<<24; // output
+//    }
+//  }
 
-  if (config::Simulation::verbosity() > 0) {
-    std::cout << "Neural flags:\n";
-    for (const auto &p: n)
-      std::cout << "\t" << std::setfill(' ') << std::setw(10) << p->pos
-                << ":\t"
-                << std::bitset<8*sizeof(p->flags)>(p->flags)
-                << "\n";
-  }
+//  if (config::Simulation::verbosity() > 0) {
+//    std::cout << "Neural flags:\n";
+//    for (const auto &p: n)
+//      std::cout << "\t" << std::setfill(' ') << std::setw(10) << p->pos
+//                << ":\t"
+//                << std::bitset<8*sizeof(p->flags)>(p->flags)
+//                << "\n";
+//  }
 }
 
 auto duration (const simu::Simulation &s) {
@@ -147,7 +147,7 @@ void Evaluator::logging_init(LogData *d, const stdfs::path &f,
   d->adata.open(f / "acoustics.dat");
   auto &alog = d->adata;
   for (uint i=0; i<critters.size(); i++) {
-    std::string prefix = ""+Scenario::critterRole(i);
+    std::string prefix = std::string(1, std::toupper(Scenario::critterRole(i)));
     for (auto s: {'L', 'R'}) {
       alog << prefix << "I" << s << "N ";
       for (uint i=0; i<Critter::VOCAL_CHANNELS; i++)
@@ -266,14 +266,60 @@ void Evaluator::logging_step(LogData *d, Scenario &s) {
 
 // ===
 
-Evaluator::Params Evaluator::Params::fromArgv (
-    const std::string &indFile, const std::string &scenario) {
+std::string Evaluator::Params::toString(const Scenario::Params &p) {
+  using Type = Scenario::Type;
+  std::ostringstream oss;
+  switch (p.type) {
+  case Type::DIRECTION:
+    oss << "d_" << std::array<char,3>{{'l','f','r'}}[p.spec.target];
+    break;
+  case Type::COLOR:     oss << "c"; break;
+  default:
+    utils::Thrower("Unable to generate string representation");
+  }
 
-//  Evaluator::Params params (fromJsonFile(indFile));
-  std::cerr << "Hijacked individual loading with random generation\n";
-  rng::FastDice dice (0);
-  Evaluator::Params params (Genome::random(dice));
-  params.specs = {Spec::fromString(scenario)};
+  return oss.str();
+}
+
+Evaluator::Params Evaluator::Params::fromArgv (const std::string &scenario) {
+  Evaluator::Params params;
+
+  using Type = Scenario::Type;
+  params.type = Type::ERROR;
+  switch (scenario[0]) {
+  case 'd': params.type = Type::DIRECTION; break;
+  case 'c': params.type = Type::COLOR; break;
+  default:
+    utils::Thrower("Unknown scenario type ", scenario[0]);
+  }
+
+  if (scenario.size() == 1) {
+    if (params.type == Type::DIRECTION)
+      params.specs = {{0},{1},{2}};
+    else
+      utils::Thrower("Unhandled scenario");
+
+  } else if (scenario.size() == 3) {
+    Scenario::Spec spec {};
+    if (params.type == Type::DIRECTION) {
+      switch (scenario[2]) {
+      case 'l': spec.target = 0; break;
+      case 'f': spec.target = 1; break;
+      case 'r': spec.target = 2; break;
+      default:
+        utils::Thrower("Unknown scenario direction subtype ", scenario[2]);
+      }
+    } else if (params.type == Type::COLOR) {
+      std::cerr << "Color spec is brick-implemented\n";
+      spec.target = 1;
+  //    spec.colors = {{ {1,0,0}, {0,1,0}, {0,0,1} }};
+    } else
+      utils::Thrower("Unrecognized scenario argument '", scenario, "'");
+    params.specs = {spec};
+
+  } else
+    utils::Thrower("Malformed scenario specification '", scenario, "'");
+
 
 //  if (neuralEvaluation(scenario)) {
 //    params.flags.reset();
@@ -329,69 +375,63 @@ Evaluator::Params Evaluator::Params::fromArgv (
 // ===
 
 bool Evaluator::neuralEvaluation(const std::string &scenario) {
-  return !scenario.empty() && scenario != "mk";
+  return !scenario.empty() && scenario.substr(0, 2) != "ne";
 }
 
 void Evaluator::operator () (Ind &ind) {
-  Params params = Params(ind);
-  operator() (params);
-  ind = params.ind;
+  operator() (ind, params);
 }
 
-uint Evaluator::footprintSize(uint evaluations) {
-  static constexpr auto NS = 2*Critter::SPLINES_COUNT;
-  return NS             // splines health at start
-       + 2              // mass and moment of inertia
-       + evaluations    // after each evaluation collect:
-         * (
-              1         // > body health
-            + NS        // > splines health
-            + 2         // > final position
-         );
+Evaluator::Footprint Evaluator::footprint(const Params &p) {
+  size_t s =
+      1 // axons cost
+      + p.specs.size() * (
+          4 // neurons (emitter/receiver), voice, motors energy consumption
+        + config::Simulation::ticksPerSecond()
+          // Store 1st second of emitter's talk
+      );
+  return Footprint(s, NAN);
 }
 
-std::vector<std::string> Evaluator::footprintFields (uint evaluations) {
-  std::vector<std::string> v (footprintSize(evaluations));
+std::vector<std::string> Evaluator::footprintFields (const Params &p) {
+  std::vector<std::string> v (footprint(p).size(), "UNASSIGNED");
   uint f = 0;
 
-  using SSide = Critter::Side;
-  for (SSide s: {SSide::LEFT, SSide::RIGHT})
-    for (uint i=0; i<Critter::SPLINES_COUNT; i++)
-      v[f++] = utils::mergeToString("SH1", uint(s), i);
-  v[f++] = "Mass";
-  v[f++] = "MoI";
+  v[f++] = "e_ax";
 
-  for (uint i=0; i<evaluations; i++) {
-    auto prefix = utils::mergeToString("E", i);
-    v[f++] = prefix + "BH1";
-    for (SSide s: {SSide::LEFT, SSide::RIGHT})
-      for (uint i=0; i<Critter::SPLINES_COUNT; i++)
-        v[f++] = utils::mergeToString(prefix, "SH1", uint(s), i);
-    v[f++] = prefix + "X";
-    v[f++] = prefix + "Y";
+  for (uint i=0; i<p.specs.size(); i++) {
+    auto l = Params::toString(p.scenarioParams(i));
+    v[f++] = "e_an_e_" + l;
+    v[f++] = "e_an_r_" + l;
+    v[f++] = "e_vc_e" + l;
+    v[f++] = "e_mt_r" + l;
+
+    for (uint j=0; j<config::Simulation::ticksPerSecond(); j++)
+      v[f++] = utils::mergeToString("v_", l, "_s", j);
   }
 
   return v;
 }
 
 Scenario::Params Evaluator::Params::scenarioParams (uint i) const {
-  Scenario::Params params;
-  params.genome = ind.dna;
-  params.spec = specs[i];
-  params.flags.reset();
-  return params;
+  Scenario::Params p;
+  p.type = type;
+  p.spec = specs[i];
+  p.flags.reset();
+  return p;
 }
 
-void Evaluator::operator() (Params &params) {
-  bool brainless;
+void Evaluator::operator() (Ind &ind, Params &params) {
+  bool brainless, mute = false;
 
 //  using utils::operator<<;
 //  for (int lesion: lesions) {
 
   uint n = params.specs.size();
-  Ind &ind = params.ind;
   std::vector<float> scores (n);
-  Footprint footprint (n);
+
+  Footprint footprint = Evaluator::footprint(params);
+  uint f = 0;
 
   ind.stats["stime"] = 0;
 
@@ -399,7 +439,10 @@ void Evaluator::operator() (Params &params) {
     Simulation simulation;
     Scenario scenario (simulation);
 
-    scenario.init(params.scenarioParams(i));
+    auto s_params = params.scenarioParams(i);
+    s_params.genome = ind.dna;
+    scenario.init(s_params);
+    auto pstr = Params::toString(s_params);
 
     const Critter *emitter = scenario.emitter();
     brainless = emitter->brain().empty();
@@ -426,14 +469,20 @@ void Evaluator::operator() (Params &params) {
 
     LogData log;
     if (!logsSavePrefix.empty())
-      logging_init(&log, logsSavePrefix, scenario);
+      logging_init(&log, logsSavePrefix / Params::toString(s_params), scenario);
 
     auto start_time = Simulation::now();
 
-    while (!simulation.finished() && !aborted) {
+    std::vector<float> emission;
+    emission.reserve(config::Simulation::ticksPerSecond());
+
+    while (!simulation.finished() && !aborted && !brainless) {
       simulation.step();
 
-  //    // Update modules values (if modular ann is used)
+      if (emission.size() < emission.capacity())
+        emission.push_back(scenario.emitter()->producedSound()[1]);
+
+      // Update modules values (if modular ann is used)
       for (auto &mann: manns)
         for (const auto &p: mann->modules())
           p.second->update();
@@ -442,28 +491,44 @@ void Evaluator::operator() (Params &params) {
     }
 
     scores[i] = scenario.score();
-    ind.stats[utils::mergeToString("lg_", i)] = scores[i];
+    ind.stats["lg_" + pstr] = scores[i];
+    mute |= scenario.mute();
 
-    if (n > 1) ind.stats[utils::mergeToString("mk", i)] = scores[i];
+
+    auto ee = scenario.emitter()->energyCosts,
+         er = scenario.receiver()->energyCosts;
+
+    if (i==0) footprint[f++] = ee[3]; // axons cost
+    footprint[f++] = ee[2]; // emitter neural consumption
+    footprint[f++] = er[2]; // receiver neural consumption
+    footprint[f++] = ee[1]; // emitter vocal consumption
+    footprint[f++] = er[0]; // receiver motor consumption
+
+    // If aborted too quickly
+    for (uint j=emission.size(); j<emission.capacity(); j++)
+      emission.push_back(0);
+    // Vocal pattern over 1st second (emitter)
+    for (uint j=0; j<emission.size(); j++) footprint[f++] = emission[j];
 
     ind.stats["wtime"] += Simulation::durationFrom(start_time);
     ind.stats["stime"] += Scenario::DURATION - duration(simulation);
-
-    const Critter *receiver = scenario.receiver();
-    footprint[2*i] = receiver->x();
-    footprint[2*i+1] = receiver->y();
   }
 
-  assert(f == footprintSize(n));
+  if (brainless || mute)
+    std::replace(footprint.begin(), footprint.end(), NAN, 0.f);
+  else if (f != footprint.size())
+    utils::Thrower("Mismatch between allocated (",
+                   footprint.size(), ") and used (", f, ") footprint size");
+
   ind.signature = footprint;
 
   float totalScore = 0;
   for (float score: scores) totalScore += score;
-  ind.fitnesses["lg"] = totalScore;
+  ind.fitnesses["lg"] = totalScore / n;
 
-  if (n > 1) {
+  if (n > 1)
     ind.stats["stime"] = float(ind.stats["stime"]) / n;
-  }
+  ind.stats["mute"] = mute;
 }
 
 void Evaluator::dumpStats(const stdfs::path &dna,

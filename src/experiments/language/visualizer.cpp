@@ -301,7 +301,8 @@ int main(int argc, char *argv[]) {
   // ===========================================================================
   // == Data load
 
-  auto params = simu::Evaluator::Params::fromArgv(indFile, spec);
+  auto params = simu::Evaluator::Params::fromArgv(spec);
+  Ind ind = simu::Evaluator::fromJsonFile(indFile);
 
   // ===========================================================================
   // == Window/layout setup
@@ -324,7 +325,9 @@ int main(int argc, char *argv[]) {
   // ===========================================================================
   // == Simulation setup
 
-  scenario.init(params.scenarioParams(0));
+  auto s_params = params.scenarioParams(0);
+  s_params.genome = ind.dna;
+  scenario.init(s_params);
 //  if (!annNeuralTags.empty() /*&& snapshots == -1 && annRender.empty()*/) {
 //    phenotype::ANN &ann = scenario.subject()->brain();
 //    simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);
@@ -341,7 +344,7 @@ int main(int argc, char *argv[]) {
   // Final preparations (for all versions)
 
   v->fitInView(simulation.bounds(), Qt::KeepAspectRatio);
-  v->select(simulation.critters().at(scenario.receiver()));
+//  v->select(simulation.critters().at(scenario.receiver()));
 
   if (tag)
     for (auto p: simulation.critters())
@@ -353,7 +356,6 @@ int main(int argc, char *argv[]) {
 //  v->action("b2 debug draw")->trigger();
 //  v->action("Stats")->trigger();
 //#endif
-
 
   if (!background.empty()) {
     auto p = a.palette();
@@ -522,13 +524,15 @@ int main(int argc, char *argv[]) {
     config::Visualisation::trace.overrideWith(trace);
 
     config::Visualisation::brainDeadSelection.overrideWith(BrainDead::UNSET);
+    v->select(v->selection());  // refresh selection (if any) brainDead flag
+
     config::Visualisation::drawVision.overrideWith(0);
     config::Visualisation::drawAudition.overrideWith(0);
 
     stdfs::path savepath = outputFolder / "ptrajectory.png";
     stdfs::create_directories(savepath.parent_path());
 
-    while (!simulation.finished())  simulation.step();
+    while (!simulation.finished()) simulation.step();
 
     simulation.render(QString::fromStdString(savepath));
     std::cout << "Saved to: " << savepath << "\n";
@@ -599,7 +603,6 @@ int main(int argc, char *argv[]) {
 
     v->setAutoQuit(autoquit);
     v->fitInView(simulation.bounds(), Qt::KeepAspectRatio);
-    v->select(nullptr);
 
     QTimer::singleShot(100, [&v, startspeed] {
       if (startspeed) v->start(startspeed);
