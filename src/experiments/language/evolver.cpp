@@ -301,8 +301,8 @@ int main(int argc, char *argv[]) {
   ga.setNewGenerationFunction([&ga, gagaSavePopulations] {
     std::cout << "\nNew generation at " << utils::CurrentTime{} << "\n";
 
-    auto gen = ga.getCurrentGenerationNumber();
 #ifndef CLUSTER_BUILD
+    auto gen = ga.getCurrentGenerationNumber();
     if (gen == 0) symlink_as_last(ga.getSaveFolder());
 #endif
 

@@ -422,7 +422,7 @@ Scenario::Params Evaluator::Params::scenarioParams (uint i) const {
 }
 
 void Evaluator::operator() (Ind &ind, Params &params) {
-  bool brainless, mute = false;
+  bool brainless = true, mute = false;
 
 //  using utils::operator<<;
 //  for (int lesion: lesions) {
