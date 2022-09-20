@@ -92,7 +92,8 @@ public:
   simu::Critter* addCritter(CGenome genome,
                             float x, float y, float a,
                             simu::decimal e,
-                            float age, bool overrideGID) override;
+                            float age, bool overrideGID,
+                            const phenotype::ANN *brainTemplate) override;
   void delCritter (simu::Critter *critter) override;
 
   simu::Foodlet* addFoodlet(simu::BodyType t, float x, float y,

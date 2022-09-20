@@ -138,13 +138,12 @@ Critter::Critter (const Genome &g, b2Body *b) : _genotype(g), _body(*b) {
   immobile = mute = paralyzed = false;
 }
 
-Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
+Critter::Critter(const Genome &g, b2Body *body, decimal e, float age,
+                 const phenotype::ANN *brainTemplate)
   : Critter(g, body) {
 
   static const decimal initEnergyRatio =
     1 + config::Simulation::healthToEnergyRatio();
-
-  _visionRange = computeVisionRange(_genotype.vision.width);
 
   _b2Body = nullptr;
 
@@ -232,8 +231,14 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age)
 //                << " health: " << splineHealth(i, s) << " / "
 //                << splineMaxHealth(i) << "\n";
 //  std::cerr << std::endl;
+
   generateVisionRays();
-  buildBrain();
+
+  buildBrain(brainTemplate);
+
+  if (brainTemplate)
+    assertEqual(*brainTemplate, _brain, true);
+
   updateColors();
 
   /// TODO Not returned to the environment
@@ -274,9 +279,11 @@ std::vector<std::string> Critter::neuralInputsHeader(void) const {
   }
 
   v.push_back("TB");
+#if NUMBER_OF_SPLINES > 0
   for (auto c: {'L','R'})
     for (uint i=0; i<SPLINES_COUNT; i++)
       v.push_back(utils::mergeToString("T", c, "S", i));
+#endif
 
   return v;
 }
@@ -288,15 +295,25 @@ std::vector<std::string> Critter::neuralOutputsHeader (void) const {
   v.push_back("CS");
   v.push_back("VV");
   v.push_back("VC");
+#if ARMS > 0
   for (uint i=0; i<_arms.size(); i++) v.push_back(utils::mergeToString("A", i));
+#endif
   return v;
 }
 
+/// Public accessor (generates and discards visual rays)
+void Critter::buildBrain (const Genome &genotype, float bodyRadius,
+                          phenotype::ANN &brain) {
+  VisionStartPoints visionStart;
+  VisionEndPoints visionEnd;
+  generateVisionRays(genotype, bodyRadius, visionStart, visionEnd);
+  buildBrain(genotype, visionEnd, brain);
+}
 
-void Critter::buildBrain(void) {
-//  auto substrate = substrateFor(_raysEnd, _genotype.connectivity);
-//  _genotype.connectivity.BuildHyperNEATPhenotype(_brain, substrate);
-
+/// Private static builder (reuse previously generated visual rays)
+void Critter::buildBrain (const Genome &genotype,
+                          const VisionEndPoints &raysEnd,
+                          phenotype::ANN &brain) {
   using Coordinates = phenotype::ANN::Coordinates;
   using Point = Coordinates::value_type;
   static const auto add = [] (auto &v, auto... coords) {
@@ -321,7 +338,7 @@ void Critter::buildBrain(void) {
   // Vision
   std::set<float> tmpXCoords;
 //  std::cerr << "VRays\n";
-  for (const simu::P2D &r: _raysEnd) {
+  for (const simu::P2D &r: raysEnd) {
     float a = std::atan2(r.y, r.x);
     assert(-M_PI <= a && a <= M_PI);
     float x = int(Point::RATIO * (-a / M_PI)) / float(Point::RATIO);
@@ -364,6 +381,7 @@ void Critter::buildBrain(void) {
 
   // Touch
   add(inputs, 0.f, -1.f, 1.f/8.f);  // body
+#if NUMBER_OF_SPLINES > 0
   for (int s: {1,-1}) {
     for (uint i=0; i<SPLINES_COUNT; i++) {
       float a = s*_genotype.splines[i].data[genotype::Spline::Index::SA];
@@ -373,6 +391,7 @@ void Critter::buildBrain(void) {
       add(inputs, x, -1.f, -1.f/8.f + 2.f * i / (SPLINES_COUNT * 8.f));
     }
   }
+#endif
 
 
   // ========
@@ -394,28 +413,31 @@ void Critter::buildBrain(void) {
   add(outputs,  .0f, 1.f,  1.f);  // vocalisation:  volume
   add(outputs,  .0f, 1.f,   .5f); //                frequency
 
+#if ARMS > 0
   for (uint i=0; i<_arms.size(); i++)
     add(outputs, -1+2*i/float(_arms.size()-1), 1.f, -.5f);
+#endif
 #endif
 
 /// TODO Integrate remaining actions
 //  add(outputs, ?, ?); // reproduction
 //  add(outputs, ?, ?); // munching
 
-  phenotype::CPPN cppn = phenotype::CPPN::fromGenotype(_genotype.brain);
-  _brain = phenotype::ANN::build(inputs, outputs, cppn);
+  phenotype::CPPN cppn = phenotype::CPPN::fromGenotype(genotype.brain);
+  brain = phenotype::ANN::build(inputs, outputs, cppn);
+}
+
+/// Private member builder (reuses previously generated visual rays and
+/// initializes members variables)
+void Critter::buildBrain(const phenotype::ANN *brainTemplate) {
+  /// Either copy provided brain or create from scratch
+  if (brainTemplate)
+        brainTemplate->copyInto(_brain);
+  else  buildBrain(_genotype, _raysEnd, _brain);
+
   _neuralInputs = _brain.inputs();
   _neuralOutputs = _brain.outputs();
   selectiveBrainDead.resize(_neuralOutputs.size());
-
-  if (false) {
-    auto nn = _brain.neurons().size();
-    std::cerr << CID(this) << ": " << nn << " neurons ("
-              << nn - _brain.inputsCount() - _brain.outputsCount()
-              << " hidden) & "
-              << _brain.stats().edges << " connections & depth of "
-              << _brain.stats().depth << "\n";
-  }
 }
 
 void Critter::step(Environment &env) {
@@ -423,7 +445,9 @@ void Critter::step(Environment &env) {
   drivingCorrections();
 
   // Monitor articulations
+#if ARMS > 0
   articulationsManagement();
+#endif
 
   // Launch a bunch of rays
   performVision(env);
@@ -1698,41 +1722,44 @@ void Critter::destroySpline(uint k) {
 #endif
 }
 
-void Critter::generateVisionRays(void) {
-  const auto &v = _genotype.vision;
+/// Static method for generating start/end points of visual rays
+/// @warning Member variables cannot be set up (naturally). Use member method
+/// for embodied instantiation
+void Critter::generateVisionRays (const Genome &g, float radius,
+                                  VisionStartPoints &starts,
+                                  VisionEndPoints &ends) {
+  const auto &v = g.vision;
   uint rs_h = 2 * v.precision + 1;
   uint rs = 2 * rs_h;
-  _retina.resize(rs, Color());
-  _raysEnd.resize(rs, P2D(0,0));
-  _raysFraction.resize(rs, 1);
+
+  ends.resize(rs, P2D(0,0));
 
   float a0 = v.angleBody;
-  _raysStart[0] = fromPolar(a0, bodyRadius());
-  _raysStart[1] = ySymmetrical(_raysStart[0]);
+  starts[0] = fromPolar(a0, radius);
+  starts[1] = ySymmetrical(starts[0]);
 
-//  std::cerr << "\nGenerating vision rays\n";
-  float r = _visionRange;
+  float r = computeVisionRange(g.vision.width);
   for (uint i=0; i<rs_h; i++) {
     float da = 0;
     if (v.precision > 0) da = .5 * v.width * (i / float(v.precision) - 1);
     float a = a0 + v.angleRelative + da;
-//    std::cerr << "[" << i << "] a0 = "
-//              << 180*a0/M_PI << "; da = " << 180*da/M_PI
-//              << "; a = " << 180*a/M_PI << std::endl;
 
     uint il = rs_h-i-1, ir = rs_h+i;
-    _raysEnd[il] = _raysStart[0] + fromPolar(a, r);
-    _raysEnd[ir] = ySymmetrical(_raysEnd[il]);
-
-//    std::cerr << "E[" << il << "] = " << _raysEnd[il]
-//              << " = " << _raysStart[0] << " + "
-//              << r * P2D(std::cos(a), std::sin(a)) << std::endl;
-//    std::cerr << "E[" << ir << "] = " << _raysEnd[ir]
-//                 << " = { " << _raysEnd[il].x << ", -" << _raysEnd[il].y
-//                 << " }" << std::endl;
-//    std::cerr << std::endl;
+    ends[il] = starts[0] + fromPolar(a, r);
+    ends[ir] = ySymmetrical(ends[il]);
   }
-//  std::cerr << std::endl;
+}
+
+/// Member method for generating start/end points of visual rays
+/// Also initializes a handfull a related member variables
+/// (visionRange, retina, ...)
+void Critter::generateVisionRays(void) {
+  generateVisionRays(_genotype, bodyRadius(), _raysStart, _raysEnd);
+
+  _retina.resize(_raysEnd.size(), Color());
+  _raysFraction.resize(_raysEnd.size(), 1);
+
+  _visionRange = computeVisionRange(_genotype.vision.width);
 }
 
 void Critter::updateVisionRays(void) {

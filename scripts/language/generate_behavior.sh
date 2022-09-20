@@ -32,8 +32,11 @@ if ls $dfolder >/dev/null 2>&1
 then
   echo "Data folder '$dfolder' already exists. Skipping"
 else
-  $sfolder/evaluate.sh $ind --data-folder $dfolder --scenario d --verbosity SHOW
-  r=$?
+  mkdir -pv $dfolder
+  
+  $sfolder/evaluate.sh $ind --data-folder $dfolder --scenario d \
+    --verbosity SHOW 2>&1 | tee $dfolder/eval.log
+  r=${PIPESTATUS[0]}
   [ $r -ne 0 ] && exit $r
     
   communication=$indfolder/communication.dat

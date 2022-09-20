@@ -230,7 +230,8 @@ public:
 
   virtual Critter* addCritter (CGenome genome,
                                float x, float y, float a, decimal e,
-                               float age = 0, bool overrideGID = false);
+                               float age = 0, bool overrideGID = false,
+                               const phenotype::ANN *brainTemplate = nullptr);
   virtual void delCritter (Critter *critter);
 
   virtual Foodlet* addFoodlet (BodyType t, float x, float y, float r, decimal e);

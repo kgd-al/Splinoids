@@ -168,9 +168,16 @@ private:
   // (each vector of size 2*(2*genotype.vision.precision+1))
 
   std::vector<Color> _retina;
-  std::array<P2D, 2> _raysStart;
-  std::vector<P2D> _raysEnd;
+
+  using VisionStartPoints = std::array<P2D, 2>;
+  VisionStartPoints _raysStart;
+
+  using VisionEndPoints = std::vector<P2D>;
+  VisionEndPoints _raysEnd;
+
+#ifndef CLUSTER_BUILD
   std::vector<float> _raysFraction; // TODO Remove (debug visu only)
+#endif
 
   // ===========================================================================
   // == Audition cache data ==
@@ -247,7 +254,8 @@ public:
 
   std::array<float, 4> energyCosts;
 
-  Critter(const Genome &g, b2Body *body, decimal e, float age = 0);
+  Critter(const Genome &g, b2Body *body, decimal e, float age = 0,
+          const phenotype::ANN *brainTemplate = nullptr);
   ~Critter (void);
 
   void step (Environment &env);
@@ -731,6 +739,11 @@ public:
   }
 
   // ===========================================================================
+  // == Out-of-body brain instantiation
+  static void buildBrain (const Genome &genotype, float bodyRadius,
+                          phenotype::ANN &brain);
+
+  // ===========================================================================
   // == Conversion
 
   static b2BodyUserData* get (b2Body *b);
@@ -823,12 +836,18 @@ private:
 
   // ===========================================================================
   // == Vision range managing internal methods
+  static void generateVisionRays(const Genome &g, float radius,
+                                 VisionStartPoints &starts,
+                                 VisionEndPoints &ends);
   void generateVisionRays (void);
   void updateVisionRays (void);
 
   // ===========================================================================
   // == ANN-related generation
-  void buildBrain (void);
+  static void buildBrain (const Genome &genotype,
+                          const VisionEndPoints &raysEnd,
+                          phenotype::ANN &brain);
+  void buildBrain (const phenotype::ANN *brainTemplate);
 
   // ===========================================================================
 };

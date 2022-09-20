@@ -133,6 +133,8 @@ int main(int argc, char *argv[]) {
 
   int gagaSavePopulations = 0;
 
+  bool selfHearing = false; /// TODO REMOVE
+
   auto id = timestamp();
 
   cxxopts::Options options("Splinoids (lg-evolver)",
@@ -173,6 +175,9 @@ int main(int argc, char *argv[]) {
      "Whether to save populations after evaluation (1+) and maybe before (2) "
      "or just the last (-1)",
      cxxopts::value(gagaSavePopulations))
+
+    ("self-hearing", "Whether splinoids can hear their own vocalizations",
+     cxxopts::value(selfHearing)->implicit_value("true"))
     ;
 
   auto result = options.parse(argc, argv);
@@ -220,6 +225,7 @@ int main(int argc, char *argv[]) {
     overrideMutationRates();
   }
   calibrateEnergyCosts(); // Set stimulating energy costs
+  config::Simulation::selfHearing.overrideWith(selfHearing);
   if (verbosity != Verbosity::QUIET) config::Simulation::printConfig(std::cout);
   config::Simulation::printConfig(stdfs::path(dataFolder) / "configs");
 
@@ -294,7 +300,7 @@ int main(int argc, char *argv[]) {
   ga.setSaveParetoFront(false);
 
   ga.disableGenerationHistory();
-  if (gagaSavePopulations <= 0) ga.disablePopulationSave();
+  if (gagaSavePopulations == 0) ga.disablePopulationSave();
 
   ga.setSaveFolderGenerator([dataFolder] (auto) { return dataFolder; });
 
@@ -388,7 +394,7 @@ int main(int argc, char *argv[]) {
       stdfs::path previousPop = ga.getSaveFolder();
       previousPop /= utils::mergeToString("gen", i-1);
       previousPop /= utils::mergeToString("pop", i-1, ".pop");
-      std::cerr << "Removing pre-evolution cached population\n";
+      std::cerr << "Removing previous population\n";
       stdfs::remove(previousPop);
     }
 

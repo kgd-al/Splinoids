@@ -23,6 +23,7 @@ public:
   };
 
   struct Params {
+    const phenotype::ANN *brainTemplate;
     Genome genome;
     Type type;
     Spec spec;
@@ -48,6 +49,9 @@ public:
   }
 
   float score (void) const;
+  static float minScore (void);
+  static float maxScore (void);
+
   bool mute (void) const {
     return _mute;
   }
@@ -97,7 +101,8 @@ private:
   bool _mute;
   uint _testChannel;
 
-  Critter* makeCritter (uint id, const genotype::Critter &genome);
+  Critter* makeCritter (uint id, const genotype::Critter &genome,
+                        const phenotype::ANN *brainTemplate);
   Foodlet* makeFoodlet (uint id, int side);
 
   static genotype::Environment environmentGenome (bool eval);

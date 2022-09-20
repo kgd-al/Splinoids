@@ -143,9 +143,11 @@ void GraphicSimulation::addVisuCritter(simu::Critter *sc) {
 simu::Critter*
 GraphicSimulation::addCritter (CGenome genome,
                                float x, float y, float a, simu::decimal e,
-                               float age, bool overrideGID) {
+                               float age, bool overrideGID,
+                               const phenotype::ANN *brainTemplate) {
 
-  auto *sc = Simulation::addCritter(genome, x, y, a, e, age, overrideGID);
+  auto *sc = Simulation::addCritter(genome, x, y, a, e, age,
+                                    overrideGID, brainTemplate);
   addVisuCritter(sc);
   return sc;
 }

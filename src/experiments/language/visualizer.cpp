@@ -155,6 +155,7 @@ int main(int argc, char *argv[]) {
   uint midiInstrument = 123;
 #endif
 
+  std::string cppnRender = "";
   std::string annRender = ""; // no extension
   std::string annNeuralTags;
   bool annAggregateNeurons = false;
@@ -211,6 +212,9 @@ int main(int argc, char *argv[]) {
 
     ("trace", "Render trajectories through alpha-increasing traces",
      cxxopts::value(trace))
+
+    ("cppn-render", "Export qt-based visualisation of the genotype's CPPN",
+     cxxopts::value(cppnRender)->implicit_value("png"))
 
     ("ann-render", "Export qt-based visualisation of the phenotype's ANN",
      cxxopts::value(annRender)->implicit_value("png"))
@@ -282,8 +286,8 @@ int main(int argc, char *argv[]) {
 #undef RESTORE
 
   if (stdfs::path(configFile).filename() == "Simulation.config") {
-    config::Visualisation::setupConfig("auto", Verbosity::QUIET);
     config::Simulation::setupConfig(configFile, Verbosity::QUIET);
+    config::Visualisation::setupConfig("auto", Verbosity::QUIET);
 
   } else
     config::Visualisation::setupConfig(configFile, Verbosity::QUIET);
@@ -303,6 +307,54 @@ int main(int argc, char *argv[]) {
 
   auto params = simu::Evaluator::Params::fromArgv(spec);
   Ind ind = simu::Evaluator::fromJsonFile(indFile);
+
+  // ===========================================================================
+  // == CPPN Renderings
+
+  if (!cppnRender.empty()) {
+    kgd::es_hyperneat::gui::cppn::Viewer v;
+    v.setGraph(ind.dna.brain.cppn);
+
+    const auto doRender = [&v] (QPaintDevice *d, QRect trect) {
+      QPainter painter (d);
+      painter.setRenderHint(QPainter::Antialiasing, true);
+
+      QRect srect = v.mapFromScene(v.sceneRect()).boundingRect();
+      qDebug() << srect;
+//      trect.adjust(.5*(srect.height() - srect.width()), 0, 0, 0);
+      qDebug() << trect;
+      v.render(&painter, trect, srect);
+    };
+
+    stdfs::path p = stdfs::path(indFile).parent_path() / "cppn";
+    p.replace_extension(cppnRender);
+    QString qp = QString::fromStdString(p);
+
+    if (cppnRender == "png") {
+      QImage img (v.sceneRect().size().toSize(), QImage::Format_RGB32);
+      img.fill(Qt::white);
+
+      doRender(&img, img.rect());
+
+      if (img.save(qp))
+        std::cout << "Rendered subject cppn into " << p << "\n";
+       else
+        std::cerr << "Failed to render subject cppn into " << p << "\n";
+
+    } else if (cppnRender == "pdf") {
+      QPrinter printer (QPrinter::HighResolution);
+      printer.setPageSize(QPageSize(v.sceneRect().size(), QPageSize::Point));
+      printer.setPageMargins(QMarginsF(0, 0, 0, 0));
+      printer.setOutputFileName(qp);
+
+      doRender(&printer,
+               printer.pageLayout().paintRectPixels(printer.resolution()));
+
+      std::cout << "Generated " << p << "\n";
+    }
+
+    return 0;
+  }
 
   // ===========================================================================
   // == Window/layout setup

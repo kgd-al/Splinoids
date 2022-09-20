@@ -134,6 +134,7 @@ struct CONFIG_FILE(Simulation) {
   DECLARE_PARAMETER(uint, secondsPerDay)
   DECLARE_PARAMETER(uint, daysPerYear)
   DECLARE_PARAMETER(float, soundAttenuation)
+  DECLARE_PARAMETER(bool, selfHearing)
 
   // Other
   DECLARE_PARAMETER(bool, screwTheEntropy)

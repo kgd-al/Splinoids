@@ -114,6 +114,19 @@ plotmodules(){
     ";
 }
 
+##############################################################################
+# CPPN
+line
+echo "Extracting CPPN"
+cppn=$(dirname $1)"/cppn.png"
+if [ -f "$cppn" ]
+then
+  echo "CPPN '$cppn' already generated. Skipping"
+else
+  $(dirname $0)/evaluate.sh --gui $ind --overwrite i \
+    --scenario "d" --data-folder $sfolder --cppn-render="$ext"
+fi
+
 ################################################################################
 # Generic output
 dfolder=$indfolder/baseline
@@ -127,7 +140,7 @@ do
   sfolder="$dfolder/d_$s"
   line '='
   echo "> scenario '$s'"
-  
+    
   ##############################################################################
   # Final position/health
   trajectory="$sfolder/ptrajectory.png"
@@ -215,7 +228,7 @@ do
 done
 
 aggregate=$dfolder/summary.png
-if false #[ -f "$aggregate" ]
+if [ -f "$aggregate" ]
 then
   echo "Behavorial aggregate '$aggregate' already generated. Skipping"
 else

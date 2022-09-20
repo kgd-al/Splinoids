@@ -40,7 +40,8 @@ Scenario::Scenario (Simulation &simulation) : _simulation(simulation) {
   });
 }
 
-Critter* Scenario::makeCritter (uint id, const genotype::Critter &genome) {
+Critter* Scenario::makeCritter (uint id, const genotype::Critter &genome,
+                                const phenotype::ANN *brainTemplate) {
 
   static constexpr auto E = INFINITY;
 
@@ -55,7 +56,8 @@ Critter* Scenario::makeCritter (uint id, const genotype::Critter &genome) {
   };
 
   auto c = _simulation.addCritter(genome, x(id), 0,
-                                  id*M_PI, E, .5, true);
+                                  id*M_PI, E, .5, true,
+                                  brainTemplate);
   _critters.push_back(c);
   if (id == 0 || neuralEvaluation()) pin(c);  // emitter cannot move
 
@@ -115,7 +117,7 @@ void Scenario::init(const Params &params) {
 
   } else {
     for (uint i=0; i<2; i++)
-      makeCritter(i, params.genome);
+      makeCritter(i, params.genome, params.brainTemplate);
 
     const float H = _simulation.environment().yextent();
     float width = .25;
@@ -248,13 +250,18 @@ void Scenario::postStep(void) {
 
 void Scenario::preDelCritter(Critter *c) {(void)c;}
 
+float Scenario::minScore(void) { return -1; }
+
+// Theoretical
+float Scenario::maxScore(void) { return 2; }
+
 float Scenario::score (void) const {
   if (_simulation._aborted) return -std::numeric_limits<float>::max();
 
   float score = 0;
 
   if (_mute || emitter()->brain().empty())
-    score = -1;
+    score = minScore();
 
   else {
     simu::Environment::FeedingEvents events =

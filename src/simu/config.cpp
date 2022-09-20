@@ -92,6 +92,7 @@ DEFINE_PARAMETER(uint, ticksPerSecond, 10)
 DEFINE_PARAMETER(uint, secondsPerDay, 100)
 DEFINE_PARAMETER(uint, daysPerYear, 1000)
 DEFINE_PARAMETER(float, soundAttenuation, 2.f/CFILE::auditionRange())
+DEFINE_PARAMETER(bool, selfHearing, true)
 
 DEFINE_PARAMETER(bool, screwTheEntropy, true)
 DEFINE_PARAMETER(uint, ssgaMinPopSizeRatio, 1)

@@ -417,6 +417,8 @@ struct CollisionMonitor : public b2ContactListener {
     if (d.fixtures.empty()) e._fightingEvents.erase(it);
   }
 
+  // ===========================================================================
+
   void registerFeedStart (Critter *c, b2Fixture *f, Foodlet *p) {
     // If not a body
     if (f->GetShape()->GetType() != b2Shape::e_circle)  return;
@@ -444,6 +446,8 @@ struct CollisionMonitor : public b2ContactListener {
     e._feedingEvents.erase({c,p});
   }
 
+  // ===========================================================================
+
   void registerStartOfHearing (Critter *cA, Critter *cB) {
     /// TODO Find a way (latter) to prevent both contacts to register
     if (debugHearing/* && cA->id() < cB->id()*/)
@@ -460,6 +464,8 @@ struct CollisionMonitor : public b2ContactListener {
     if (cA->id() < cB->id())
       e._hearingEvents.erase({cA,cB});
   }
+
+  // ===========================================================================
 
   void registerStartOfMatingAttempt (Critter *cA, Critter *cB) {
     static constexpr auto S = Critter::Genome::SEXUAL;
@@ -486,6 +492,8 @@ struct CollisionMonitor : public b2ContactListener {
                 << CID(cB) << std::endl;
     e._matingEvents.erase({cA,cB});
   }
+
+  // ===========================================================================
 
   void watchForWarp (Critter *c, const Critter::FixtureData *fd) {
 //    std::cerr << "Maybe teleport " << CID(c) << " (" << *fd << ") which is at "

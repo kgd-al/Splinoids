@@ -320,7 +320,8 @@ b2Body* Simulation::critterBody (float x, float y, float a) {
 
 Critter* Simulation::addCritter (CGenome genome,
                                  float x, float y, float a, decimal e,
-                                 float age, bool overrideGID) {
+                                 float age, bool overrideGID,
+                                 const phenotype::ANN *brainTemplate) {
 
   b2Body *body = critterBody(x, y, a);
 
@@ -338,7 +339,7 @@ Critter* Simulation::addCritter (CGenome genome,
   if (overrideGID)
     genome.gdata.self.gid = _gidManager();
 
-  Critter *c = new Critter (genome, body, e_, age);
+  Critter *c = new Critter (genome, body, e_, age, brainTemplate);
   _critters.insert(c);
 
   if (std::isinf(e)) e_ = c->energyEquivalent();
@@ -572,6 +573,9 @@ void Simulation::audition(void) {
     if (!a->silent()) process(b, a);
     if (!b->silent()) process(a, b);
   }
+
+  if (config::Simulation::selfHearing())
+    for (simu::Critter *c: _critters) process(c, c);
 }
 
 void Simulation::reproduction(void) {

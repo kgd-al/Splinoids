@@ -22,6 +22,7 @@ if (strlen(term) == 0) {
 
 set datafile separator comma;
 set grid;
+set autoscale xfix;
 
 if (term) {
   set term wxt;
@@ -49,23 +50,24 @@ plot for [i=0:2] folder.'/gen_stats.csv' using 1:lg_i+i w l t columnhead;
 unset yrange;
 
 nrn_i=columnid('neurons_avg'); cnx_i=columnid('cxts_avg');
-set ytics nomirror; set yrange [0:*];
-set y2tics; set y2range [0:*];
+set ytics nomirror; set yrange [.5:*];
+set y2tics; set y2range [.5:*];
 set logscale yy2 8;
 set arrow from graph 0, first 8 to graph 1, first 8 lc "gray" nohead;
 system('ls -v '.folder.'/gen*/lg*.dna | xargs jq -r ".stats | \"\(.neurons),\(.cxts)\"" > '.folder.'/champ_stats.csv');
 plot folder.'/gen_stats.csv' using 1:nrn_i+1:nrn_i+2 w filledcurves lc 2 fs transparent solid .25 notitle, \
-                        '' using 1:nrn_i w l dt 3 t columnhead, \
-                        '' using 1:cnx_i+1:cnx_i+2 w filledcurves axes x1y2 lc 4 fs transparent solid .25 notitle, \
-                        '' using 1:cnx_i w l axes x1y2 lc 4 dt 3 t columnhead, \
-    folder.'/champ_stats.csv' using 1 w l lc 2 title 'cn', \
-                        '' using 2 w l axes x1y2 lc 4 title 'cc';
+                          '' using 1:nrn_i w l dt 3 t columnhead, \
+                          '' using 1:cnx_i+1:cnx_i+2 w filledcurves axes x1y2 lc 4 fs transparent solid .25 notitle, \
+                          '' using 1:cnx_i w l axes x1y2 lc 4 dt 3 t columnhead, \
+     folder.'/champ_stats.csv' using 1 w l lc 2 title 'cn', \
+                            '' using 2 w l axes x1y2 lc 4 title 'cc';
 unset logscale;
 unset arrow;
 
 time_i=columnid('global_genTotalTime');
 stats=''.columnid('brain_avg').' '.columnid('mute_avg');
 set yrange [-.05:1.05];
+set format y2;
 plot for [i in stats] folder.'/gen_stats.csv' using int(i) w l t columnhead, \
                                            '' using 1:time_i w l axes x1y2 lc 7 t columnhead;
 unset yrange;

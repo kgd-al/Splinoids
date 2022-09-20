@@ -40,7 +40,10 @@ bool diffStatsMap (const T &prev, const T &curr) {
         std::cout << GAGA_COLOR_GREEN;
       else
         std::cout << GAGA_COLOR_RED << it->second << " >> ";
-      std::cout << p.second << GAGA_COLOR_NORMAL;
+      std::cout << p.second;
+      if (!ok)
+        std::cout << " (" << p.second - it->second << ")";
+      std::cout << GAGA_COLOR_NORMAL;
       if (p.first == "wtime") ok = true;
       allOk &= ok;
 

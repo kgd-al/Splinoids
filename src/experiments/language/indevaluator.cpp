@@ -387,8 +387,7 @@ Evaluator::Footprint Evaluator::footprint(const Params &p) {
       1 // axons cost
       + p.specs.size() * (
           4 // neurons (emitter/receiver), voice, motors energy consumption
-        + config::Simulation::ticksPerSecond()
-          // Store 1st second of emitter's talk
+        + 4 // Store mean/stddev for first and second half second of emitter's talk
       );
   return Footprint(s, NAN);
 }
@@ -403,11 +402,13 @@ std::vector<std::string> Evaluator::footprintFields (const Params &p) {
     auto l = Params::toString(p.scenarioParams(i));
     v[f++] = "e_an_e_" + l;
     v[f++] = "e_an_r_" + l;
-    v[f++] = "e_vc_e" + l;
-    v[f++] = "e_mt_r" + l;
+    v[f++] = "e_vc_e_" + l;
+    v[f++] = "e_mt_r_" + l;
 
-    for (uint j=0; j<config::Simulation::ticksPerSecond(); j++)
-      v[f++] = utils::mergeToString("v_", l, "_s", j);
+    v[f++] = utils::mergeToString("v_", l, "_m_1st");
+    v[f++] = utils::mergeToString("v_", l, "_s_1st");
+    v[f++] = utils::mergeToString("v_", l, "_m_lst");
+    v[f++] = utils::mergeToString("v_", l, "_s_lst");
   }
 
   return v;
@@ -418,10 +419,12 @@ Scenario::Params Evaluator::Params::scenarioParams (uint i) const {
   p.type = type;
   p.spec = specs[i];
   p.flags.reset();
+  p.brainTemplate = nullptr;
   return p;
 }
 
 void Evaluator::operator() (Ind &ind, Params &params) {
+  static const auto &TPS = config::Simulation::ticksPerSecond();
   bool brainless = true, mute = false;
 
 //  using utils::operator<<;
@@ -435,27 +438,27 @@ void Evaluator::operator() (Ind &ind, Params &params) {
 
   ind.stats["stime"] = 0;
 
-  for (uint i=0; i<n; i++) {
+  auto start_time = Simulation::now();
+
+  phenotype::ANN staticBrain;
+  Critter::buildBrain(ind.dna, Critter::RADIUS, staticBrain);
+  brainless = staticBrain.empty();
+
+  ind.stats["brain"] = !brainless;
+  ind.stats["neurons"] = staticBrain.neurons().size()
+                       - staticBrain.inputsCount() - staticBrain.outputsCount();
+  ind.stats["cxts"] = staticBrain.stats().edges;
+
+  for (uint i=0; i<n && !brainless; i++) {
+
     Simulation simulation;
     Scenario scenario (simulation);
 
     auto s_params = params.scenarioParams(i);
     s_params.genome = ind.dna;
+    s_params.brainTemplate = &staticBrain;
     scenario.init(s_params);
     auto pstr = Params::toString(s_params);
-
-    const Critter *emitter = scenario.emitter();
-    brainless = emitter->brain().empty();
-
-    if (i == 0) { // save subject specifics at the first evaluation
-      ind.stats["brain"] = !brainless;
-
-      const phenotype::ANN &b = emitter->brain();
-      ind.stats["neurons"] = b.neurons().size()
-                             - b.inputs().size()
-                             - b.outputs().size();
-      ind.stats["cxts"] = b.stats().edges;
-    }
 
     /// Modular ANN
 //    if (!logsSavePrefix.empty() && !annTagsFile.empty()) {
@@ -471,16 +474,32 @@ void Evaluator::operator() (Ind &ind, Params &params) {
     if (!logsSavePrefix.empty())
       logging_init(&log, logsSavePrefix / Params::toString(s_params), scenario);
 
-    auto start_time = Simulation::now();
+    float stddev_count = 0, stddev_mean = 0, stddev_M2 = 0;
+    float mean_first = 0, stddev_first = 0, mean_last = 0, stddev_last = 0;
+    const auto sm_compute =
+      [&stddev_count, &stddev_mean, &stddev_M2] (float &mean, float &stddev) {
+      mean = stddev_mean;
+      stddev = std::sqrt(stddev_M2 / (stddev_count - 1));
+    };
 
-    std::vector<float> emission;
-    emission.reserve(config::Simulation::ticksPerSecond());
+    const auto timestamp =
+      [&simulation] { return simulation.currTime().timestamp(); };
 
-    while (!simulation.finished() && !aborted && !brainless) {
+    while (!simulation.finished() && !aborted) {
       simulation.step();
 
-      if (emission.size() < emission.capacity())
-        emission.push_back(scenario.emitter()->producedSound()[1]);
+      // ====
+      // = Compute running variance of emitter
+      stddev_count++;
+      float stddev_x = scenario.emitter()->producedSound()[1];
+      float stddev_delta = stddev_x - stddev_mean;
+      stddev_mean += stddev_delta / stddev_count;
+      stddev_M2 += stddev_delta * (stddev_x - stddev_mean);
+      if (timestamp() == TPS) {
+        stddev_count = stddev_mean = stddev_M2 = 0;
+        sm_compute(mean_first, stddev_first);
+      }
+      // ====
 
       // Update modules values (if modular ann is used)
       for (auto &mann: manns)
@@ -494,7 +513,6 @@ void Evaluator::operator() (Ind &ind, Params &params) {
     ind.stats["lg_" + pstr] = scores[i];
     mute |= scenario.mute();
 
-
     auto ee = scenario.emitter()->energyCosts,
          er = scenario.receiver()->energyCosts;
 
@@ -505,18 +523,28 @@ void Evaluator::operator() (Ind &ind, Params &params) {
     footprint[f++] = er[0]; // receiver motor consumption
 
     // If aborted too quickly
-    for (uint j=emission.size(); j<emission.capacity(); j++)
-      emission.push_back(0);
-    // Vocal pattern over 1st second (emitter)
-    for (uint j=0; j<emission.size(); j++) footprint[f++] = emission[j];
+    if (timestamp() < TPS)
+      sm_compute(mean_first, stddev_first);
+    else
+      sm_compute(mean_last, stddev_last);
 
-    ind.stats["wtime"] += Simulation::durationFrom(start_time);
+    // Shorted vocalisation metrics
+    footprint[f++] = mean_first;
+    footprint[f++] = stddev_first;
+    footprint[f++] = mean_last;
+    footprint[f++] = stddev_last;
+
     ind.stats["stime"] += Scenario::DURATION - duration(simulation);
   }
 
-  if (brainless || mute)
-    std::replace(footprint.begin(), footprint.end(), NAN, 0.f);
-  else if (f != footprint.size())
+  if (brainless) {
+    std::replace_if(footprint.begin(), footprint.end(),
+                    static_cast<bool(*)(float)>(std::isnan), 0.f);
+    for (uint i=0; i<n; i++)
+      ind.stats["lg_" + Params::toString(params.scenarioParams(i))] =
+        scores[i] = Scenario::minScore();
+
+  } else if (f != footprint.size())
     utils::Thrower("Mismatch between allocated (",
                    footprint.size(), ") and used (", f, ") footprint size");
 
@@ -528,6 +556,12 @@ void Evaluator::operator() (Ind &ind, Params &params) {
 
   if (n > 1)
     ind.stats["stime"] = float(ind.stats["stime"]) / n;
+  ind.stats["wtime"] = Simulation::durationFrom(start_time) / 1000.f;
+
+  /// TODO REMOVE
+//  ind.fitnesses["time"] = ind.stats["wtime"];
+  ///
+
   ind.stats["mute"] = mute;
 }
 
