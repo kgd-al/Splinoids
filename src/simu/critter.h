@@ -680,9 +680,11 @@ public:
     return _raysEnd;
   }
 
+#ifndef CLUSTER_BUILD
   const auto &raysLength (void) const {
     return _raysFraction;
   }
+#endif
 
   // ===========================================================================
   // == Audition/Vocalisation data

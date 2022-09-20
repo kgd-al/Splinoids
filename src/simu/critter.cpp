@@ -601,11 +601,15 @@ void Critter::performVision(const Environment &env) {
         throw std::logic_error("Invalid body type");
       }
 
+#ifndef CLUSTER_BUILD
       _raysFraction[ie] = cvc.closestFraction;
+#endif
 
     } else {
       _retina[ie] = config::Simulation::emptyColor();
+#ifndef CLUSTER_BUILD
       _raysFraction[ie] = 1;
+#endif
     }
   }
 }
@@ -1757,7 +1761,9 @@ void Critter::generateVisionRays(void) {
   generateVisionRays(_genotype, bodyRadius(), _raysStart, _raysEnd);
 
   _retina.resize(_raysEnd.size(), Color());
+#ifndef CLUSTER_BUILD
   _raysFraction.resize(_raysEnd.size(), 1);
+#endif
 
   _visionRange = computeVisionRange(_genotype.vision.width);
 }
@@ -1944,7 +1950,9 @@ Critter* Critter::clone(const Critter *c, b2Body *b) {
   COPY(_retina);
   COPY(_raysStart);
   COPY(_raysEnd);
+#ifndef CLUSTER_BUILD
   COPY(_raysFraction);
+#endif
 
   COPY(_lmotors);
   COPY(_clockSpeed);
@@ -2017,7 +2025,9 @@ void assertEqual (const Critter &lhs, const Critter &rhs, bool deepcopy) {
   ASRT(_retina);
   ASRT(_raysStart);
   ASRT(_raysEnd);
+#ifndef CLUSTER_BUILD
   ASRT(_raysFraction);
+#endif
   ASRT(_lmotors);
   ASRT(_clockSpeed);
   ASRT(_reproduction);
