@@ -657,25 +657,14 @@ void Critter::neuralStep(void) {
       std::cerr << std::setprecision(20);
       std::cerr << CID(this) << "@" << _age << " " << pos() << "\n";
 
-      const auto inames = [this] {
-        std::vector<std::string> v;
-        v.push_back("h");
-        v.push_back("p");
-        for (const auto &_: _retina) {
-          (void)_;
-          static const std::string c = "rgb";
-          for (uint i=0; i<c.size(); i++)
-            v.push_back("r" + c.substr(i, 1));
-        }
-        for (const auto &_: _ears) (void)_, v.push_back("e");
-        for (const auto &_: _touch) (void)_, v.push_back("t");
-        return v;
-      }();
+      const auto &inames = neuralInputsHeader();
+      const auto &onames = neuralOutputsHeader();
       std::cerr << "\tinputs:\n";
       for (uint i=0; i<_neuralInputs.size(); i++)
         std::cerr << "\t\t" << inames[i] << "\t" << _neuralInputs[i] << "\n";
       std::cerr << "\toutputs:\n";
-      for (auto v: _neuralOutputs) std::cerr << "\t\t" << v << "\n";
+      for (uint i=0; i<_neuralOutputs.size(); i++)
+        std::cerr << "\t\t" << onames[i] << "\t" << _neuralOutputs[i] << "\n";
       std::cerr << "\n\n";
     }
   }
@@ -699,7 +688,7 @@ void Critter::neuralStep(void) {
 
       if (debugMotors)
         std::cerr << CID(this) << " Applied motor force for " << m.first
-                  << " of " << s << " = "
+                  << " of " << s << " =\n\t"
                   << config::Simulation::critterBaseSpeed() << " * "
                   << m.second << " * " << _clockSpeed << " * "
                   << _efficiency << " * " << _size << std::endl;

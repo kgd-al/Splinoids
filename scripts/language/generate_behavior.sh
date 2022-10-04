@@ -37,7 +37,7 @@ else
   $sfolder/evaluate.sh $ind --data-folder $dfolder --scenario d \
     --verbosity SHOW 2>&1 | tee $dfolder/eval.log
   r=${PIPESTATUS[0]}
-  [ $r -ne 0 ] && exit $r
+  [ $r -ne 0 -a $r -ne 42 ] && exit $r
     
   communication=$indfolder/communication.dat
   if [ -f "$communication" ]

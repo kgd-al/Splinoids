@@ -688,10 +688,10 @@ int main(int argc, char *argv[]) {
     SAVE(drawVision, int)
     SAVE(drawAudition, bool)
   #undef SAVE
-
-    if (!params.flags.any())
-      std::cout << "Score: " << scenario.score() << "\n";
   }
+
+  if (!params.flags.any())
+    std::cout << "Score: " << scenario.score() << "\n";
 
   return r;
 }

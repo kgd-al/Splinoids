@@ -444,6 +444,17 @@ void Evaluator::operator() (Ind &ind, Params &params) {
   Critter::buildBrain(ind.dna, Critter::RADIUS, staticBrain);
   brainless = staticBrain.empty();
 
+  if (false) {
+    std::cerr << std::setprecision(20) << "static brain:\n";
+    for (const auto &n: staticBrain.neurons()) {
+      std::cerr << "\t" << n->type << " "
+                << n->pos << " " << n->bias << " " << n->value << " "
+                << n->depth << " " << n->flags << "\n";
+      for (const auto &l: n->links())
+        std::cerr << "\t\t" << l.in.lock()->pos << " " << l.weight << "\n";
+    }
+  }
+
   ind.stats["brain"] = !brainless;
   ind.stats["neurons"] = staticBrain.neurons().size()
                        - staticBrain.inputsCount() - staticBrain.outputsCount();
@@ -479,7 +490,7 @@ void Evaluator::operator() (Ind &ind, Params &params) {
     const auto sm_compute =
       [&stddev_count, &stddev_mean, &stddev_M2] (float &mean, float &stddev) {
       mean = stddev_mean;
-      stddev = std::sqrt(stddev_M2 / (stddev_count - 1));
+      stddev = stddev_count == 0 ? 0 : sqrt(stddev_M2 / stddev_count);
     };
 
     const auto timestamp =
@@ -496,8 +507,8 @@ void Evaluator::operator() (Ind &ind, Params &params) {
       stddev_mean += stddev_delta / stddev_count;
       stddev_M2 += stddev_delta * (stddev_x - stddev_mean);
       if (timestamp() == TPS) {
-        stddev_count = stddev_mean = stddev_M2 = 0;
         sm_compute(mean_first, stddev_first);
+        stddev_count = stddev_mean = stddev_M2 = 0;
       }
       // ====
 

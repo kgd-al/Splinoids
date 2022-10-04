@@ -79,11 +79,13 @@ bool diffStatsArray (const T &prev, const T &curr, const U &fields) {
   if (it_p != prev.end())
     std::cout << GAGA_COLOR_YELLOW << "! "
               << std::distance(it_p, prev.end())
-              << " excess values in previous footprint\n";
+              << " excess values in previous footprint" << GAGA_COLOR_NORMAL
+              << "\n";
   if (it_c != curr.end())
     std::cout << GAGA_COLOR_YELLOW << "! "
               << std::distance(it_c, curr.end())
-              << " excess values in current footprint\n";
+              << " excess values in current footprint" << GAGA_COLOR_NORMAL
+              << "\n";
 
   return allOk;
 }
@@ -184,8 +186,8 @@ int main(int argc, char *argv[]) {
   // == Core setup
 
 #define C(X) "\t" << #X << ": " << config::Simulation::X() << "\n"
-  std::cout.precision(17);
   std::cout << "Loaded energy costs:\n"
+            << std::setprecision(std::numeric_limits<simu::decimal>::max_digits10)
             << C(motorEnergyConsumption)
             << C(voiceEnergyConsumption)
             << C(neuronEnergyConsumption)
