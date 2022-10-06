@@ -40,3 +40,5 @@ do
   l=$(sed 's|.*/gen\(.*\)/lg.*.dna|\1|' <<< "$c"| xargs printf "gen%0*d.dna" $width)
   ln -sv $c $l
 done
+
+ln -sv $(ls *.dna | tail -n 1) last.dna
