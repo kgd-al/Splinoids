@@ -320,14 +320,16 @@ int main(int argc, char *argv[]) {
       painter.setRenderHint(QPainter::Antialiasing, true);
 
       QRect srect = v.mapFromScene(v.sceneRect()).boundingRect();
-      qDebug() << srect;
-//      trect.adjust(.5*(srect.height() - srect.width()), 0, 0, 0);
-      qDebug() << trect;
       v.render(&painter, trect, srect);
     };
 
-    stdfs::path p = stdfs::path(indFile).parent_path() / "cppn";
-    p.replace_extension(cppnRender);
+    stdfs::path p;
+    if (!result.count("data-folder") == 0)  p = outputFolder / "cppn.png";
+    else {
+      p = indFile;
+      p.replace_extension();
+      p += "_cppn." + cppnRender;
+    }
     QString qp = QString::fromStdString(p);
 
     if (cppnRender == "png") {

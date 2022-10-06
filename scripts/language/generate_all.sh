@@ -7,7 +7,7 @@ usage(){
   echo "       if --gui is provided all generate screenshots, plots..."
   echo "       --clean deletes all previous evaluation data"
   echo "       --clean--gui deletes all previous pictures (png, pdf)"
-  echo "       champs restricts the selection to strictly different fitnesses"
+  echo "       champs restricts the selection to strictly different fitnesses (deprecated)"
 }
 
 steps=1
@@ -41,16 +41,16 @@ then
 fi
 
 champs=$(ls -v $1 2>/dev/null)
-if [ -n "$2" ]
-then
-  echo "Filtering out duplicate champions"
-  champs=$(awk '{
-    match($1, /.*lg__(.*)_0.dna/, tokens);
-    f=tokens[1];
-    if (NR==1 || prev < f) print $1;    
-    prev=f;
-  }' <<< "$champs")
-fi
+# if [ -n "$2" ]
+# then
+#   echo "Filtering out duplicate champions"
+#   champs=$(awk '{
+#     match($1, /.*lg__(.*)_0.dna/, tokens);
+#     f=tokens[1];
+#     if (NR==1 || prev < f) print $1;    
+#     prev=f;
+#   }' <<< "$champs")
+# fi
 nchamps=$(wc -w <<< "$champs")
 if [ $nchamps -gt 0 ]
 then

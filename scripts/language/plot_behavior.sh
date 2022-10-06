@@ -13,7 +13,8 @@ line(){
   echo
 }
 
-ind=$(dirname $1)/$(basename $1).dna
+indbase=$(dirname $1)/$(basename $1)
+ind=$indbase.dna
 if [ ! -f "$ind" ]
 then
   echo "Could not find champion dna for folder '$1'"
@@ -21,7 +22,7 @@ then
 fi
 
 echo "Processing $ind"
-indfolder=$(dirname $ind)/$(basename $ind .dna)
+indfolder=$indbase
 shift
 
 sfolder=$(dirname $0) # script folder
@@ -42,6 +43,18 @@ fi
 
 # Visu flag for pdf rendering
 annRender="--ann-render=$ext"
+
+glog(){
+  if [ "$1" == "S" ]
+  then
+    echo "[S] $2 '$3' already generated. Skipping"
+  elif [ "$1" == "G" ]
+  then
+    echo "[G] Generating $2 into '$3'"
+  else
+    echo "[!] Invalid invocation of glog function with arguments '$@'"
+  fi
+}
 
 plotoutputs(){
   gnuplot -e "
@@ -117,14 +130,14 @@ plotmodules(){
 ##############################################################################
 # CPPN
 line
-echo "Extracting CPPN"
-cppn=$(dirname $1)"/cppn.png"
+cppn="${indbase}/cppn.$ext"
 if [ -f "$cppn" ]
 then
-  echo "CPPN '$cppn' already generated. Skipping"
+  glog S CPPN $cppn
 else
+  glog G CPPN $cppn
   $(dirname $0)/evaluate.sh --gui $ind --overwrite i \
-    --scenario "d" --data-folder $sfolder --cppn-render="$ext"
+    --scenario "d" --data-folder $indfolder --cppn-render="$ext"
 fi
 
 ################################################################################
@@ -137,30 +150,32 @@ line
 
 for s in l f r
 do  
-  sfolder="$dfolder/d_$s"
+  ofolder="$dfolder/d_$s"
   line '='
   echo "> scenario '$s'"
     
   ##############################################################################
   # Final position/health
-  trajectory="$sfolder/ptrajectory.png"
+  trajectory="$ofolder/ptrajectory.png"
   if [ -f "$trajectory" ]
   then
-    echo "Trajectory overview '$trajectory' already generated. Skipping"
+    glog S 'Trajectory overview' $trajectory
   else
+    glog G 'Trajectory overview' $trajectory
     drawVision=0 $(dirname $0)/evaluate.sh --gui $ind --trace 10 --overwrite i \
-      --scenario "d_$s" --data-folder $sfolder --no-restore --tags
+      --scenario "d_$s" --data-folder $ofolder --no-restore --tags
   fi
   
   ##############################################################################
   # Communication (rough conspecific interaction)
-  soundoverview=$sfolder/sounds.png
+  soundoverview=$ofolder/sounds.png
   if [ -f $soundoverview ]
   then
-    echo "Sound overview '$soundoverview' already generated. Skipping"
+    glog S 'Sound overview' $soundoverview
   else
-    data=$sfolder/.acoustics.midpoints.dat
-    cut -d ' ' -f $vc_outputs $sfolder/acoustics.dat \
+    glog G 'Sound overview' $soundoverview
+    data=$ofolder/.acoustics.midpoints.dat
+    cut -d ' ' -f $vc_outputs $ofolder/acoustics.dat \
     | awk -vsteps=$ssteps -vchannels=$vchannels '
       NR==1{ 
         print "T", $0;
@@ -209,7 +224,7 @@ do
         
       unset multiplot;
     " || rm -fv $soundoverview
-    echo "Generated Sound overview '$soundoverview'"
+    ls $soundoverview
     
 #     rm $data
   fi
@@ -230,16 +245,16 @@ done
 aggregate=$dfolder/summary.png
 if [ -f "$aggregate" ]
 then
-  echo "Behavorial aggregate '$aggregate' already generated. Skipping"
+  glog S 'Behavorial aggregate' $aggregate
 else
-#   set -x
+  glog G 'Behavorial aggregate' $aggregate
   labels=$(jq -r '.stats | to_entries[] | "\(.key): \(.value)"' $ind \
     | sed -e 's/d_l/0 &/' -e 's/d_f/1 &/' -e 's/d_r/2 &/' | sort \
     | sed -n 's/lg_[0-2] d/label:d/p' | tr -d ' ')
   stats=$(jq -r '.stats | to_entries[] | "\(.key): \(.value)"' $ind \
-    | grep -v "lg_" | awk '{ printf "%s %g\n", $1, $2 }' | column -t)
-#   montage -geometry '640x>+0+0' $dfolder/d_{l,f,r}/ptrajectory.png $dfolder/d_{l,f,r}/sounds.png \
-#     $aggregate
+    | grep -v -e "lg_" -e "brain" -e "mute" \
+    | awk '{ printf "%s %g\n", $1, $2 }' | column -t)
+
   convert -family Courier \
           \( -font Courier -pointsize 24 label:"$ind" +append \) \
           \( -font Courier -pointsize 18 label:"------\n$stats\n" +append \) \
@@ -248,14 +263,15 @@ else
           \( $labels -gravity center -extent 640x -font Courier  +append \) \
           -append $aggregate
        
-  echo "Generated behavorial aggregate '$aggregate'"
+  ls $aggregate
 fi
 
 aggregate=$dfolder/phonems.png
 if [ -f "$aggregate" ]
 then
-  echo "Phonems aggregate '$aggregate' already (naively) generated. Skipping"
+  glog S '(naive) Phonems aggregate' $aggregate
 else
+  glog G '(naive) Phonems aggregate' $aggregate
   gnuplot -e "
       set term pngcairo size 1680,1050;
       set output '$aggregate';
@@ -284,6 +300,7 @@ else
       
       print('Generated $aggregate');
     " || rm -rfv $aggregate
+    ls $aggregate
 fi
 
 # ################################################################################
@@ -357,7 +374,7 @@ fi
 # #   then
 # #     echo "ANN coloring '$aggregate' already generated. Skipping"
 # #   else
-# #     CMD=yes $sfolder/evaluate.sh --gui $ind $firstopp --overwrite i \
+# #     CMD=yes $ofolder/evaluate.sh --gui $ind $firstopp --overwrite i \
 # #       --ann-render=$ext --ann-aggregate=-1 --ann-tags=$e/neurons_groups.ntags 
 # #     echo "Generated $aggregate"
 # #   fi
