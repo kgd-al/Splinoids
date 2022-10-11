@@ -4,23 +4,13 @@ namespace simu {
 
 std::atomic<bool> Evaluator::aborted = false;
 
-Evaluator::Evaluator (Scenario::Type t) {
-  params.type = t;
-
-  using T = Scenario::Type;
-  if (t == T::DIRECTION) {
-    params.specs = {{0}, {1}, {2}};
-  } else
-    utils::Thrower("Unhandled spec type '", EnumUtils<T>::getName(t), "'");
+Evaluator::Evaluator (const std::string &scenarioType) {
+  params = Params::fromArgv(scenarioType);
 }
 
 std::string Evaluator::prettyEvalTypes(void) {
-  using T = Scenario::Type;
-  using U = EnumUtils<T>;
   std::ostringstream oss;
-  oss << "[ ";
-  for (auto t: U::iteratorUValues()) if (t) oss << U::getName(t) << " ";
-  oss << "]";
+  oss << "[ d c22 ]";
   return oss.str();
 }
 
@@ -265,20 +255,147 @@ void Evaluator::logging_step(LogData *d, Scenario &s) {
 }
 
 // ===
+static constexpr Color RED    {{1.f, 0.f, 0.f}};
+static constexpr Color GREEN  {{0.f, 1.f, 0.f}};
+static constexpr Color BLUE   {{0.f, 0.f, 1.f}};
+static std::vector<Color> colors (uint n) {
+  if (n == 2)
+    return {RED, BLUE};
+  else if (n == 3)
+    return {RED, GREEN, BLUE};
+  else
+    return {};
+}
+
+bool rgb_cmp (const Color &lhs, const Color &rhs) {
+  return !std::lexicographical_compare(lhs.begin(), lhs.end(),
+                                       rhs.begin(), rhs.end());
+}
 
 std::string Evaluator::Params::toString(const Scenario::Params &p) {
+  return toString(p.type, p.spec);
+}
+
+std::string Evaluator::Params::toString (Scenario::Type t,
+                                         const Scenario::Spec &s) {
   using Type = Scenario::Type;
   std::ostringstream oss;
-  switch (p.type) {
+  switch (t) {
   case Type::DIRECTION:
-    oss << "d_" << std::array<char,3>{{'l','f','r'}}[p.spec.target];
+    oss << "d_" << std::array<char,3>{{'l','f','r'}}[s.target];
     break;
-  case Type::COLOR:     oss << "c"; break;
+  case Type::COLOR: {
+    uint cl = s.colors.size() - 1, cr = s.target;
+    auto l_colors = s.colors;
+    auto r_color = l_colors.back();
+    l_colors.pop_back();
+
+    auto vl = colors(cl);
+    int id_l = 0;
+    while (vl != l_colors && id_l >= 0) {
+      if (std::next_permutation(vl.begin(), vl.end(), rgb_cmp))
+        id_l++;
+      else
+        id_l = -1;
+    }
+
+    auto vr = colors(cr);
+    auto id_r = std::distance(vr.begin(),
+                              std::find(vr.begin(), vr.end(), r_color));
+
+    oss << "c" << cl << cr << "_" << id_l << id_r;
+    }
+    break;
   default:
     utils::Thrower("Unable to generate string representation");
   }
 
   return oss.str();
+}
+
+void parseDirectionSpecs (const std::string &s, Evaluator::Params &p) {
+  static const auto spec = [] (uint t) {
+    Scenario::Spec s {};
+    s.target = t;
+    return s;
+  };
+
+  if (s.size() == 1) {
+    p.specs = {spec(0), spec(1), spec(2)};
+
+  } else if (s.size() == 3) {
+    Scenario::Spec spec {};
+    switch (s[2]) {
+    case 'l': spec.target = 0; break;
+    case 'f': spec.target = 1; break;
+    case 'r': spec.target = 2; break;
+    default:
+      utils::Thrower("Unknown direction scenario subtype ", s[2]);
+    }
+    p.specs = {spec};
+
+  } else
+    utils::Thrower("Malformed direction scenario specification '", s, "'");
+}
+
+void parseColorSpecs (const std::string &s, Evaluator::Params &p) {
+  if (s.size() < 3)
+    utils::Thrower("Missing argument(s) for color scenario: '", s,
+                   "' != c[23][23]");
+
+  uint cl = s[1] - '0', cr = s[2] - '0';
+
+  std::vector<Color> l_colors = colors(cl);
+  if (l_colors.empty())
+    utils::Thrower("Invalid value ", cl, " for left-hand side colors");
+
+  std::vector<Color> r_colors = colors(cr);
+  if (r_colors.empty())
+    utils::Thrower("Invalid value ", cr, " for right-hand side colors");
+
+  if (s.size() == 3) {
+    for (const Color &r_c: r_colors) {
+      l_colors = colors(cl);
+
+      do {
+        Scenario::Spec spec;
+        spec.colors = l_colors;
+        spec.colors.push_back(r_c);
+        spec.target = cr;
+        p.specs.push_back(spec);
+
+      } while (std::next_permutation(l_colors.begin(), l_colors.end(), rgb_cmp));
+    }
+  } else if (s.size() == 6) {
+    uint cl_id = s[4] - '0', cr_id = s[5] - '0';
+    if (cl_id >= cl)
+      utils::Thrower("Unknown color scenario (left) subtype '", s[4], "'");
+    if (cr_id >= cr)
+      utils::Thrower("Unknown color scenario (right) subtype '", s[5], "'");
+
+    Scenario::Spec spec;
+    auto lc = colors(cl);
+    for (uint i=0; i<cl_id; i++)
+      std::next_permutation(lc.begin(), lc.end(), rgb_cmp);
+    spec.colors = lc;
+    spec.colors.push_back(colors(cr)[cr_id]);
+    spec.target = cr;
+    p.specs = {spec};
+
+  } else
+    utils::Thrower("Malformed color scenario specification '", s, "'");
+
+  static const auto str =
+      static_cast<std::string(*)(Scenario::Type, const Scenario::Spec&)>(
+        Evaluator::Params::toString);
+  std::cout << "Parsed '" << s << "' into:";
+  if (p.specs.size() == 1) std::cout << " " << str(p.type, p.specs.front());
+  else {
+    std::cout << "\n";
+    for (const Scenario::Spec &s: p.specs)
+      std::cout << "\t" << str(p.type, s) << "\n";
+  }
+  std::cout << "\n";
 }
 
 Evaluator::Params Evaluator::Params::fromArgv (const std::string &scenario) {
@@ -287,38 +404,19 @@ Evaluator::Params Evaluator::Params::fromArgv (const std::string &scenario) {
   using Type = Scenario::Type;
   params.type = Type::ERROR;
   switch (scenario[0]) {
-  case 'd': params.type = Type::DIRECTION; break;
-  case 'c': params.type = Type::COLOR; break;
+  case 'd':
+    params.type = Type::DIRECTION;
+    parseDirectionSpecs(scenario, params);
+    break;
+
+  case 'c':
+    params.type = Type::COLOR;
+    parseColorSpecs(scenario, params);
+    break;
+
   default:
     utils::Thrower("Unknown scenario type ", scenario[0]);
   }
-
-  if (scenario.size() == 1) {
-    if (params.type == Type::DIRECTION)
-      params.specs = {{0},{1},{2}};
-    else
-      utils::Thrower("Unhandled scenario");
-
-  } else if (scenario.size() == 3) {
-    Scenario::Spec spec {};
-    if (params.type == Type::DIRECTION) {
-      switch (scenario[2]) {
-      case 'l': spec.target = 0; break;
-      case 'f': spec.target = 1; break;
-      case 'r': spec.target = 2; break;
-      default:
-        utils::Thrower("Unknown scenario direction subtype ", scenario[2]);
-      }
-    } else if (params.type == Type::COLOR) {
-      std::cerr << "Color spec is brick-implemented\n";
-      spec.target = 1;
-  //    spec.colors = {{ {1,0,0}, {0,1,0}, {0,0,1} }};
-    } else
-      utils::Thrower("Unrecognized scenario argument '", scenario, "'");
-    params.specs = {spec};
-
-  } else
-    utils::Thrower("Malformed scenario specification '", scenario, "'");
 
 
 //  if (neuralEvaluation(scenario)) {
@@ -568,10 +666,6 @@ void Evaluator::operator() (Ind &ind, Params &params) {
   if (n > 1)
     ind.stats["stime"] = float(ind.stats["stime"]) / n;
   ind.stats["wtime"] = Simulation::durationFrom(start_time) / 1000.f;
-
-  /// TODO REMOVE
-//  ind.fitnesses["time"] = ind.stats["wtime"];
-  ///
 
   ind.stats["mute"] = mute;
 }

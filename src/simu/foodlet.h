@@ -72,8 +72,9 @@ public:
     return _color;
   }
 
-  void setBaseColor (config::Color base) {
-    _baseColor = base;
+  void setBaseColor (config::Color base);
+  const config::Color& baseColor (void) const {
+    return _baseColor;
   }
 
   void update (Environment &env);

@@ -26,6 +26,7 @@ struct Evaluator {
     Scenario::Params scenarioParams (uint i) const;
 
     static std::string toString (const Scenario::Params &p);
+    static std::string toString (Scenario::Type t, const Scenario::Spec &s);
   };
 
   using Footprint = std::vector<float>;
@@ -35,7 +36,7 @@ struct Evaluator {
   using Ind = GAGA::NoveltyIndividual<Genome, Footprint>;
   using GA = GAGA::GA<Genome, Ind>;
 
-  Evaluator (Scenario::Type type);
+  Evaluator (const std::string &scenarioType);
 
 //  void setLesionTypes (const std::string &s);
 

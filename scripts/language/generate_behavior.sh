@@ -1,9 +1,21 @@
 #!/bin/bash
 
+usage(){
+  echo "Usage: $0 <ind.dna> <scenario>"
+}
+
 if [ ! -f "$1" ]
 then
   echo "Please provide a valid genome to extract data from"
+  usage
   exit 1
+fi
+
+if [ -z $2 ]
+then
+  echo "No evaluation scenario provided"
+  usage
+  exit 2
 fi
 
 line(){ 
@@ -14,11 +26,16 @@ line(){
 }
 
 ind="$1"
-echo "Processing $ind"
+scenario=$2
+echo "Processing $ind for scenario $scenario"
 indfolder=$(dirname $ind)/$(basename $ind .dna)
 shift
 
 sfolder=$(dirname $0) # script folder
+
+vchannels=1 # vocal channels
+# vc_outputs=10-12,22-24 # Voice outputs in acoustics.dat
+vc_outputs=6,12 # Voice outputs in acoustics.dat
 
 ################################################################################
 # Behavior in all scenarios
@@ -34,20 +51,17 @@ then
 else
   mkdir -pv $dfolder
   
-  $sfolder/evaluate.sh $ind --data-folder $dfolder --scenario d \
+  $sfolder/evaluate.sh $ind --data-folder $dfolder --scenario $scenario \
     --verbosity SHOW 2>&1 | tee $dfolder/eval.log
   r=${PIPESTATUS[0]}
-  [ $r -ne 0 -a $r -ne 42 ] && exit $r
+  [ $r -ne 0 ] && exit $r
     
   communication=$indfolder/communication.dat
   if [ -f "$communication" ]
   then
     echo "Communication profile '$communication' already computed. Skipping"
   else
-    awk 'FNR>1{
-      print $10,$11,$12;
-      if (NF >= 24) print $22, $23, $24;
-    }' $dfolder/*/acoustics.dat | awk '{
+    cut -f $vc_outputs $dfolder/*/acoustics.dat | tail -n +2 | awk '{
       for (i=1; i<=3; i++) {
         sum += $i;
         on[i] += ($i > 0);

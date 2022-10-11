@@ -199,7 +199,6 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
-  auto params = simu::Evaluator::Params::fromArgv(scenario);
   Ind ind = simu::Evaluator::fromJsonFile(indFile);
 
   auto start = simu::Simulation::now();
@@ -208,13 +207,13 @@ int main(int argc, char *argv[]) {
   const auto prevInfos = ind.infos;
   const auto prevStats = ind.stats;
 
-  simu::Evaluator eval (params.type);
+  simu::Evaluator eval (scenario);
 //  eval.setLesionTypes(lesions);
 
   eval.logsSavePrefix = stdfs::path(outputFolder);
   eval.annTagsFile = annNeuralTags;
 
-  eval(ind, params);
+  eval(ind);
 
   auto duration = simu::Simulation::durationFrom(start);
   uint days, hours, minutes, seconds, mseconds;
@@ -240,7 +239,7 @@ int main(int argc, char *argv[]) {
   std::cout << mseconds << "ms" << std::endl;
 
   bool ok = true;
-  if (!params.flags.any()) {
+  if (!eval.params.flags.any()) {
     std::cout << "Comparison result for lhs:\n"
               << "\tfitness(es):\n";
     ok &= diffStatsMap(prevFitness, ind.fitnesses);

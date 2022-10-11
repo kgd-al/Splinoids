@@ -1,10 +1,42 @@
 #!/bin/bash
 
-if [ ! -d "$1" ]
+usage(){
+  echo "Usage: $0 <ind.dna> <scenario>"
+}
+
+ind=$1
+if [ ! -f "$1" ]
 then
-  echo "Please provide a genome data folder"
+  echo "No valid genome file provided"
+  usage
   exit 1
 fi
+
+indbase=$(dirname $1)/$(basename $1 .dna)
+indfolder=$indbase
+if [ ! -d $indfolder ]
+then
+  echo "Could not find datafolder for individual"
+  usage
+  exit 1
+fi
+
+scenario=$2
+if [ -z $2 ]
+then
+  echo "No evaluation scenario provided"
+  usage
+  exit 1
+fi
+
+case $scenario in
+  d)    subcases='l f r';;
+  c22)  subcases='00 01 10 11';;
+  *)    echo "Unhandled scenario $scenario"
+        exit 2
+        ;;
+esac
+
 
 line(){ 
   c=$1; [ -z $c ] && c='#'
@@ -13,15 +45,7 @@ line(){
   echo
 }
 
-indbase=$(dirname $1)/$(basename $1)
-ind=$indbase.dna
-if [ ! -f "$ind" ]
-then
-  echo "Could not find champion dna for folder '$1'"
-  exit 1
-fi
-
-echo "Processing $ind"
+echo "Processing $ind for scenario $scenario"
 indfolder=$indbase
 shift
 
@@ -62,7 +86,7 @@ plotoutputs(){
     set term pngcairo size 1680,1050;
     
     f='$1';
-    set multiplot layout 4,1;
+    set multiplot layout 3,1;
     set key above;
     set yrange [-1.05:1.05];
     set grid;
@@ -75,10 +99,7 @@ plotoutputs(){
     
     set title 'Voice';
     plot for [c in 'VV VC'] f using (column(c)) with lines title c;
-    
-    set title 'Arms';
-    plot for [c in 'A0 A1 A2 A3'] f using (column(c)) with lines title c;
-    
+
     unset multiplot;" #|| rm -fv $outputsoverview
 }
 
@@ -137,7 +158,7 @@ then
 else
   glog G CPPN $cppn
   $(dirname $0)/evaluate.sh --gui $ind --overwrite i \
-    --scenario "d" --data-folder $indfolder --cppn-render="$ext"
+    --scenario $scenario --data-folder $indfolder --cppn-render="$ext"
 fi
 
 ################################################################################
@@ -148,9 +169,9 @@ line
 echo "Plotting baseline behavior in '$dfolder'"
 line
 
-for s in l f r
+for s in $subcases
 do  
-  ofolder="$dfolder/d_$s"
+  ofolder="$dfolder/${scenario}_$s"
   line '='
   echo "> scenario '$s'"
     
@@ -163,7 +184,7 @@ do
   else
     glog G 'Trajectory overview' $trajectory
     drawVision=0 $(dirname $0)/evaluate.sh --gui $ind --trace 10 --overwrite i \
-      --scenario "d_$s" --data-folder $ofolder --no-restore --tags
+      --scenario "${scenario}_$s" --data-folder $ofolder --no-restore --tags
   fi
   
   ##############################################################################
@@ -248,19 +269,34 @@ then
   glog S 'Behavorial aggregate' $aggregate
 else
   glog G 'Behavorial aggregate' $aggregate
-  labels=$(jq -r '.stats | to_entries[] | "\(.key): \(.value)"' $ind \
-    | sed -e 's/d_l/0 &/' -e 's/d_f/1 &/' -e 's/d_r/2 &/' | sort \
-    | sed -n 's/lg_[0-2] d/label:d/p' | tr -d ' ')
+  
+  if [ "$scenario" == "d" ]
+  then
+    labels=$(jq -r '.stats | to_entries[] | "\(.key): \(.value)"' $ind \
+      | sed -e 's/d_l/0 &/' -e 's/d_f/1 &/' -e 's/d_r/2 &/' | sort \
+      | sed -n 's/lg_[0-2] d/label:d/p' | tr -d ' ')
+    traces=$(ls $dfolder/d_{l,f,r}/ptrajectory.png)
+    sounds=$(ls $dfolder/d_{l,f,r}/sounds.png)
+  else
+    labels=$(jq -r '.stats | to_entries[] | "\(.key): \(.value)"' $ind \
+      | sed -n 's/lg_/label:/p' | tr -d ' ')
+    traces=$(ls $dfolder/${scenario}_*/ptrajectory.png)
+    sounds=$(ls $dfolder/${scenario}_*/sounds.png)  
+  fi
+  
   stats=$(jq -r '.stats | to_entries[] | "\(.key): \(.value)"' $ind \
-    | grep -v -e "lg_" -e "brain" -e "mute" \
-    | awk '{ printf "%s %g\n", $1, $2 }' | column -t)
+    | grep -v -e "lg_" -e "brain" -e "mute")
+  grep -e "gen[0-9]" <<< $ind || stats=$(jq -r '"gen: \(.id[0])"' $ind; cat <<< $stats)
+  grep -e "lg_" <<< $ind || stats=$(jq -r '"lg: \(.fitnesses.lg)"' $ind; cat <<< $stats)
+  stats=$(awk '{ printf "%s %g\n", $1, $2 }' <<< "$stats" | column -t)
 
+  width=$((1920 / $(wc -w <<< $subcases)))
   convert -family Courier \
           \( -font Courier -pointsize 24 label:"$ind" +append \) \
           \( -font Courier -pointsize 18 label:"------\n$stats\n" +append \) \
-          \( $dfolder/d_{l,f,r}/ptrajectory.png -resize 640x +append \) \
-          \( $dfolder/d_{l,f,r}/sounds.png -resize 640x +append \) \
-          \( $labels -gravity center -extent 640x -font Courier  +append \) \
+          \( $traces -resize ${width}x +append \) \
+          \( $sounds -resize ${width}x +append \) \
+          \( $labels -gravity center -extent ${width}x -font Courier  +append \) \
           -append $aggregate
        
   ls $aggregate
@@ -284,12 +320,12 @@ else
       i=0;
       set key above;
       set xtics format '';
-      do for [s in 'l f r'] {
+      do for [s in '$subcases'] {
         if (i==2) { set xtics format; };
         if (i!=0) { unset key; };
         i=i+1;
         
-        folder='$dfolder/d_'.s.'/';
+        folder='$dfolder/${scenario}_'.s.'/';
         set yrange [0:1]; set ytics (.2, .4, .6, .8) rangelimited;
         plot for [j=0:$vchannels-1] folder.'acoustics.dat' using (\$0/$ssteps):6+j with boxes title columnhead;
         set yrange [-1:1]; set ytics (-.5, 0, .5) rangelimited; set y2label s;

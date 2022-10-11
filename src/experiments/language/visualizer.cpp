@@ -673,6 +673,11 @@ int main(int argc, char *argv[]) {
 
     r = a.exec();
 
+    if (!params.flags.any())
+      std::cout << "Score: " << scenario.score() << " ("
+                << simu::Evaluator::Params::toString(params.type, s_params.spec)
+                << ")\n";
+
 //    Eval::logging_freeData(&log);
 
     settings.setValue("cs::visible", cs->isVisible());
@@ -691,9 +696,6 @@ int main(int argc, char *argv[]) {
     SAVE(drawAudition, bool)
   #undef SAVE
   }
-
-  if (!params.flags.any())
-    std::cout << "Score: " << scenario.score() << "\n";
 
   return r;
 }

@@ -19,7 +19,7 @@ public:
   using Type = eval::Type;
   struct Spec {
     uint target; // [0,2]
-//    std::array<Color, 3> colors;
+    std::vector<Color> colors; // last is always right-hand side
   };
 
   struct Params {
@@ -103,7 +103,7 @@ private:
 
   Critter* makeCritter (uint id, const genotype::Critter &genome,
                         const phenotype::ANN *brainTemplate);
-  Foodlet* makeFoodlet (uint id, int side);
+  Foodlet* makeFoodlet (float x, int side, Color c = {0,1,0});
 
   static genotype::Environment environmentGenome (bool eval);
 };

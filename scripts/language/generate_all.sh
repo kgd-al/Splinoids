@@ -1,13 +1,13 @@
 #!/bin/bash
 
 usage(){
-  echo "Usage: $0 [--gui] [--clean|--clean-gui] <pattern> [champs]"
+  echo "Usage: $0 [--gui] [--clean|--clean-gui] <pattern> <scenario>"
   echo 
   echo "       Generate post-evolution data for all files matching 'pattern'"
+  echo "       Current valid scenarios are d, c22"
   echo "       if --gui is provided all generate screenshots, plots..."
   echo "       --clean deletes all previous evaluation data"
   echo "       --clean--gui deletes all previous pictures (png, pdf)"
-  echo "       champs restricts the selection to strictly different fitnesses (deprecated)"
 }
 
 steps=1
@@ -60,9 +60,18 @@ else
   exit 1
 fi
 
+scenario=$2
+if [ -n $2 ]
+then
+  echo "Evaluating for scenario $scenario"
+else
+  echo "No evaluation scenario provided"
+  usage
+  exit 1
+fi
+
 sfolder=$(dirname $0)
 
-procs=4
 for c in $champs
 do
   base=$(dirname $c)/$(basename $c .dna)/
@@ -77,7 +86,7 @@ do
   mkdir -p $base
   
   echo "Processing" $c
-  $sfolder/generate_behavior.sh $c > $base/.gn_bh.log 2>&1 <<< "y"
+  $sfolder/generate_behavior.sh $c $scenario > $base/.gn_bh.log 2>&1 <<< "y"
   
   r=$?
   if [ $r -ne 0 ]
@@ -89,7 +98,7 @@ do
   if [ ! -z $withgui ]
   then
     echo "Rendering" $c
-    $sfolder/plot_behavior.sh $base > $base/.pt_bh.log 2>&1
+    $sfolder/plot_behavior.sh $c $scenario > $base/.pt_bh.log 2>&1
   fi
   
 done | pv -l -s $(($nchamps * $steps)) > /dev/null

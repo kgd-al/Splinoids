@@ -66,15 +66,16 @@ Critter* Scenario::makeCritter (uint id, const genotype::Critter &genome,
   return c;
 }
 
-Foodlet* Scenario::makeFoodlet (uint i, int side) {
+Foodlet* Scenario::makeFoodlet (float x, int side, Color c) {
   const float W = _simulation.environment().xextent(),
               H = _simulation.environment().yextent();
 
   float fr = .25, fe = Foodlet::maxStorage(BodyType::PLANT, fr);
-  auto fy = -1 * side * (i-1.f) * std::min(H-fr, 1 * H);
+  auto fy = -2 * side * (x-.5f) * std::min(H-fr, 1 * H);
 
   auto f = _simulation.addFoodlet(BodyType::PLANT,
                                   side * (W-fr), fy, fr, fe);
+  f->setBaseColor(c);
   _foodlets.push_back(f);
 
   return f;
@@ -124,20 +125,16 @@ void Scenario::init(const Params &params) {
     _simulation.addObstacle(-.5*width, -H, width, 2*H);
 
     if (params.type == Type::DIRECTION) {
-      for (uint i=0; i<3; i++) makeFoodlet(i, -1);
-      makeFoodlet(params.spec.target, 1);
+      for (uint i=0; i<3; i++) makeFoodlet(i/2.f, -1);
+      makeFoodlet(params.spec.target/2.f, 1);
       assert(_foodlets.size() == 4);
 
-    } /*else if (params.spec.type == Scenario::Spec::COLOR) {
-      float width = .25, length = 2/3.f;
-      _simulation.addObstacle(W-width, -.5*length, width, length,
-                              Color{1,0,0});
-
-      for (uint i=0; i<3; i++)
-        _simulation.addObstacle(-W, 1.f-i-.5*length,
-                                width, length,
-                                Color{float(i==0),float(i==1),float(i==2)});
-    }*/
+    } else if (params.type == Type::COLOR) {
+      float n = params.spec.colors.size() - 1;
+      for (uint i=0; i<n; i++)
+        makeFoodlet(1-i/(n-1), -1, params.spec.colors[i]);
+      makeFoodlet((n-1)/2.f, 1, params.spec.colors.back());
+    }
   }
 
   _mute = true;
@@ -273,14 +270,29 @@ float Scenario::score (void) const {
         return (_foodlets[id]->body().GetWorldCenter() - c->pos()).Length();
       };
 
-      score += 1 - dist(_params.spec.target, receiver())
-                   / dist(3, emitter());
+      int target = _params.spec.target;
+      if (_params.type == Type::COLOR) { // Must manually look for the target
+        target = -1;
+        for (uint i=0; i<_foodlets.size()-1; i++)
+          if (_foodlets[i]->baseColor() == _params.spec.colors.back())
+            target = i;
+      }
+
+      if (target >= 0)
+        score += 1 - dist(target, receiver())
+                     / dist(_foodlets.size()-1, emitter());
 
     } else {
       assert(events.size() == 1);
 
       auto e = *events.begin();
-      success = (e.foodlet == _foodlets[_params.spec.target]) ? 1 : -1;
+      bool match = false;
+      if (_params.type == Type::DIRECTION)
+        match = (e.foodlet == _foodlets[_params.spec.target]);
+      else
+        match = (e.foodlet->baseColor() == _params.spec.colors.back());
+
+      success = match ? 1 : -1;
       score += success;
     }
 

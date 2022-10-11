@@ -30,7 +30,7 @@ fi
 shift
 
 config=$(dirname $lhs)/../configs/Simulation.config
-config=$(ls $config)
+config=$(readlink -e $config)
 if [ ! -f "$config" ]
 then
   echo "Failed to find config"
@@ -43,8 +43,8 @@ output=$(dirname $lhs)/$(basename $lhs .dna)/outputs
 
 build=build/release/language
 [ ! -z ${BUILD+x} ] && build=$BUILD
-[ ! -z ${CMD+x} ] && set -x
 [ ! -z ${TOOL+x} ] && tool=$TOOL
+[ ! -z ${CMD+x} ] && set -x
 if [ -n "$gui" ]
 then
   $build/lg-visualizer --config $config --data-folder ${output} \

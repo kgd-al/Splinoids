@@ -42,7 +42,7 @@ Foodlet::Foodlet(BodyType type, uint id, b2Body *body, float r, decimal e)
   _maxEnergy = maxStorage(type, _radius);
   assert(_energy <= _maxEnergy);
 
-  _baseColor = utils::uniformStdArray<Color>(0);
+  _baseColor = {0,1,0};
   updateColor();
 }
 
@@ -62,13 +62,15 @@ void Foodlet::consumed(decimal de) {
   updateColor();
 }
 
+void Foodlet::setBaseColor(config::Color base) {
+  _baseColor = base;
+  updateColor();
+}
+
 void Foodlet::updateColor(void) {
   float f = float(fullness());
-  if (isPlant())
-    _color = {0, .25f*(3+f), 0};
-
-  else if (isCorpse())
-    _color = {f*_baseColor[0], f*_baseColor[1], f*_baseColor[2]};
+  if (isPlant())  f = .25f*(3+f);
+  _color = {f*_baseColor[0], f*_baseColor[1], f*_baseColor[2]};
 }
 
 void Foodlet::update(Environment &env) {

@@ -108,8 +108,7 @@ void calibrateEnergyCosts (void) {
 auto &apoget_force_link = config::PTree::rsetSize;
 int main(int argc, char *argv[]) {
 //  using Ind = simu::Evaluator::Ind;
-  using Genome = simu::Evaluator::Genome;  
-  using EvalType = simu::Scenario::Type;
+  using Genome = simu::Evaluator::Genome;
 
   // ===========================================================================
   // == Command line arguments parsing
@@ -126,7 +125,7 @@ int main(int argc, char *argv[]) {
   std::string outputFolder = "tmp/lg-evo/";
   char overwrite = simu::Simulation::ABORT;
 
-  std::string evalTypeStr = "ERROR";
+  std::string evalType = "ERROR";
   uint popSize = 5, generations = 1;
   uint threads = 1;
   long seed = -1;
@@ -169,7 +168,7 @@ int main(int argc, char *argv[]) {
            "defaults to the current timestamp)",
      cxxopts::value(id))
     ("type", "Type of evaluation. Valid values are "
-     + simu::Evaluator::prettyEvalTypes(), cxxopts::value(evalTypeStr))
+     + simu::Evaluator::prettyEvalTypes(), cxxopts::value(evalType))
 
     ("save-populations",
      "Whether to save populations after evaluation (1+) and maybe before (2) "
@@ -190,13 +189,10 @@ int main(int argc, char *argv[]) {
 
   novelty = (!result.count("no-novelty"));
 
-  EvalType evalType;
   {
-    using utils::operator<<;
-    std::istringstream iss (evalTypeStr);
-    iss >> evalType;
-    if (!iss)
-      utils::Thrower("Provided eval type '", evalTypeStr,
+    std::string evalTypes = simu::Evaluator::prettyEvalTypes();
+    if (evalTypes.find(evalType) == std::string::npos)
+      utils::Thrower("Provided eval type '", evalType,
         "' is not a valid value. See the help for more information");
   }
 

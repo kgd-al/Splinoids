@@ -46,7 +46,9 @@ columnid(name)=system('awk -F, -vn='.name.' "NR==1{ c=0; for (i=1; i<=NF; i++) i
 lg_i=columnid('lg_avg');
 set yrange [-1.1:2.1];
 unset y2tics;
-plot for [i=0:2] folder.'/gen_stats.csv' using 1:lg_i+i w l t columnhead;
+p0=0; p1=0; shift(x) = (p1 = p0, p0 = x);
+plot for [i=0:2] folder.'/gen_stats.csv' using 1:lg_i+i w l t columnhead, \
+     '' using 1:(shift(column(lg_i+1)), p1 < p0 ? p0 : 1/0) pt 7 ps .5 t 'New';
 unset yrange;
 
 nrn_i=columnid('neurons_avg'); cnx_i=columnid('cxts_avg');
