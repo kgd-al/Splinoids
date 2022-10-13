@@ -61,9 +61,9 @@ else
 fi
 
 scenario=$2
-if [ -n $2 ]
+if [ -n "$2" ]
 then
-  echo "Evaluating for scenario $scenario"
+  echo "Evaluating for scenario '$scenario'"
 else
   echo "No evaluation scenario provided"
   usage

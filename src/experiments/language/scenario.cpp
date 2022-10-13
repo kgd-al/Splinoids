@@ -81,6 +81,10 @@ Foodlet* Scenario::makeFoodlet (float x, int side, Color c) {
   return f;
 }
 
+void Scenario::muteReceiver(void) {
+  receiver()->mute = true;
+}
+
 void Scenario::init(const Params &params) {
   _params = params;
 

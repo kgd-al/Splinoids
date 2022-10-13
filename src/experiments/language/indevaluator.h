@@ -73,6 +73,7 @@ struct Evaluator {
   static std::atomic<bool> aborted;
 
   Params params;
+  bool muteReceiver = false;
 };
 
 } // end of namespace simu

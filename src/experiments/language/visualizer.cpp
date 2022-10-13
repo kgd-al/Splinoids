@@ -382,6 +382,8 @@ int main(int argc, char *argv[]) {
   auto s_params = params.scenarioParams(0);
   s_params.genome = ind.dna;
   scenario.init(s_params);
+  if (ind.infos == "rmute") scenario.muteReceiver();
+
 //  if (!annNeuralTags.empty() /*&& snapshots == -1 && annRender.empty()*/) {
 //    phenotype::ANN &ann = scenario.subject()->brain();
 //    simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);

@@ -43,6 +43,7 @@ public:
   void preDelCritter (Critter *c);
 
 //  void applyLesions (int lesions);
+  void muteReceiver (void);
 
   const auto& simulation (void) const {
     return _simulation;

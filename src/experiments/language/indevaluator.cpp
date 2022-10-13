@@ -557,6 +557,9 @@ void Evaluator::operator() (Ind &ind, Params &params) {
   ind.stats["neurons"] = staticBrain.neurons().size()
                        - staticBrain.inputsCount() - staticBrain.outputsCount();
   ind.stats["cxts"] = staticBrain.stats().edges;
+  ind.stats["depth"] = staticBrain.stats().depth;
+
+  if (muteReceiver) ind.infos = "rmute";
 
   for (uint i=0; i<n && !brainless; i++) {
 
@@ -567,6 +570,7 @@ void Evaluator::operator() (Ind &ind, Params &params) {
     s_params.genome = ind.dna;
     s_params.brainTemplate = &staticBrain;
     scenario.init(s_params);
+    if (muteReceiver) scenario.muteReceiver();
     auto pstr = Params::toString(s_params);
 
     /// Modular ANN

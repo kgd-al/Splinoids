@@ -132,7 +132,7 @@ int main(int argc, char *argv[]) {
 
   int gagaSavePopulations = 0;
 
-  bool selfHearing = false; /// TODO REMOVE
+  bool selfHearing = false, muteReceiver = false; /// TODO REMOVE
 
   auto id = timestamp();
 
@@ -177,6 +177,8 @@ int main(int argc, char *argv[]) {
 
     ("self-hearing", "Whether splinoids can hear their own vocalizations",
      cxxopts::value(selfHearing)->implicit_value("true"))
+    ("mute-receiver", "Whether receiver can vocalize",
+     cxxopts::value(muteReceiver)->implicit_value("true"))
     ;
 
   auto result = options.parse(argc, argv);
@@ -276,6 +278,7 @@ int main(int argc, char *argv[]) {
 
   phylogeny::GIDManager gidManager;
   simu::Evaluator eval (evalType);
+  eval.muteReceiver = muteReceiver;
 
   using GA = simu::Evaluator::GA;
 

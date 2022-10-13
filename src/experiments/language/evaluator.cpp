@@ -209,6 +209,7 @@ int main(int argc, char *argv[]) {
 
   simu::Evaluator eval (scenario);
 //  eval.setLesionTypes(lesions);
+  if (ind.infos == "rmute") eval.muteReceiver = true;
 
   eval.logsSavePrefix = stdfs::path(outputFolder);
   eval.annTagsFile = annNeuralTags;

@@ -263,8 +263,9 @@ do
 #   done
 done
 
+line '#'
 aggregate=$dfolder/summary.png
-if [ -f "$aggregate" ]
+if false # [ -f "$aggregate" ]
 then
   glog S 'Behavorial aggregate' $aggregate
 else
@@ -275,8 +276,8 @@ else
     labels=$(jq -r '.stats | to_entries[] | "\(.key): \(.value)"' $ind \
       | sed -e 's/d_l/0 &/' -e 's/d_f/1 &/' -e 's/d_r/2 &/' | sort \
       | sed -n 's/lg_[0-2] d/label:d/p' | tr -d ' ')
-    traces=$(ls $dfolder/d_{l,f,r}/ptrajectory.png)
-    sounds=$(ls $dfolder/d_{l,f,r}/sounds.png)
+    traces=$(ls -U $dfolder/d_{l,f,r}/ptrajectory.png)
+    sounds=$(ls -U $dfolder/d_{l,f,r}/sounds.png)
   else
     labels=$(jq -r '.stats | to_entries[] | "\(.key): \(.value)"' $ind \
       | sed -n 's/lg_/label:/p' | tr -d ' ')
