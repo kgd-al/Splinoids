@@ -83,10 +83,20 @@ private:
   QLabel *_lFirstname, *_lLastname;
   QComboBox *_bSex;
   QMap<QString, QLabel*> _dataWidgets;
-  ColorLabels *_rLabels, *_eLabels, *_sLabels, *_tLabels, *_hLabels;
+
+  ColorLabels *_rLabels, *_eLabels, *_sLabels;
+#ifdef WITH_SENSORS_TOUCH
+  ColorLabels *_tLabels;
+#endif
+#ifdef WITH_SENSORS_HEALTH
+  ColorLabels *_hLabels;
+#endif
+
   std::array<LabeledSlider*, 3> _mSliders;
   std::array<LabeledSlider*, simu::Critter::ARTICULATIONS> _aSliders;
+#ifdef WITH_ACTION_CLOCKSPEED
   std::array<QLabel*, 2> _cLabels;
+#endif
 
   QHBoxLayout *_contentsLayout;
   QBoxLayout *_retinaLayout, *_earsLayout;

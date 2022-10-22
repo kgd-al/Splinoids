@@ -14,6 +14,9 @@
 #include "../simu/enumarray.hpp"
 
 DEFINE_PRETTY_ENUMERATION(Motor, LEFT = 1, RIGHT = -1)
+//#define WITH_SENSORS_TOUCH
+//#define WITH_SENSORS_HEALTH
+//#define WITH_ACTION_CLOCKSPEED
 
 namespace simu {
 
@@ -185,7 +188,9 @@ private:
 
   // ===========================================================================
   // == Touch cache data ==
+#ifdef WITH_SENSORS_TOUCH
   std::array<uint, 2*SPLINES_COUNT+1> _touch;
+#endif
 
   // ===========================================================================
   // == Neural outputs ==
@@ -219,7 +224,9 @@ private:
    */
   std::array<decimal, 1+2*SPLINES_COUNT> _currHealth;
   std::bitset<2*SPLINES_COUNT> _destroyed;
+#ifdef WITH_SENSORS_HEALTH
   decimal _previousHealthness;
+#endif
 
   // Cached-data for sounds emitted into the environment
   // 0 -> Involuntary (motion, feeding, ...)
@@ -516,9 +523,11 @@ public:
     return bodyHealth() / bodyMaxHealth();
   }
 
+#ifdef WITH_SENSORS_HEALTH
   auto instantaneousPain (void) const {
     return std::max(decimal(0), _previousHealthness - bodyHealthness());
   }
+#endif
 
   auto splineHealthness (uint i, Side s) const {
     auto m = splineMaxHealth(i, s);
@@ -570,12 +579,21 @@ public:
   }
 
   void registerContact (const FixtureData &fd, bool touching) {
+#ifdef WITH_SENSORS_TOUCH
     _touch[fd.type == FixtureType::BODY ? 0 : 1+splineIndex(fd)]
       += (touching ? +1 : -1);
+#else
+    (void)fd; (void)touching;
+#endif
   }
 
   bool touchSensorOn (uint i) const {
+#ifdef WITH_SENSORS_TOUCH
     return _touch[i] > 0;
+#else
+    (void)i;
+    return false;
+#endif
   }
 
   decimal currentHealth (const FixtureData &d) const;
@@ -737,7 +755,11 @@ public:
   }
 
   void overrideTouchSensor(uint i, bool touch) {
+#ifdef WITH_SENSORS_TOUCH
     _touch[i] = touch;
+#else
+    (void)i;(void)touch;
+#endif
   }
 
   // ===========================================================================

@@ -19,14 +19,15 @@ struct Evaluator {
     Scenario::Type type;
     Specs specs;
 
-    Scenario::Params::Flags flags;
+    std::vector<Scenario::Params::Flags> flags;
 
-    static Params fromArgv (const std::string &scenario);
+    static Params fromArgv (const std::string &scenario,
+                            const std::string &optarg = "");
 
     Scenario::Params scenarioParams (uint i) const;
 
-    static std::string toString (const Scenario::Params &p);
-    static std::string toString (Scenario::Type t, const Scenario::Spec &s);
+    bool neuralEvaluation (void) const;
+    static bool neuralEvaluation (const std::string &scenario);
   };
 
   using Footprint = std::vector<float>;
@@ -36,7 +37,8 @@ struct Evaluator {
   using Ind = GAGA::NoveltyIndividual<Genome, Footprint>;
   using GA = GAGA::GA<Genome, Ind>;
 
-  Evaluator (const std::string &scenarioType);
+  Evaluator (const std::string &scenarioType,
+             const std::string &scenarioArg = "");
 
 //  void setLesionTypes (const std::string &s);
 
@@ -59,8 +61,6 @@ struct Evaluator {
   }
 
   static Ind fromJsonFile (const std::string &path);
-
-  static bool neuralEvaluation (const std::string &scenario);
 
   static void dumpStats (const stdfs::path &dna, const stdfs::path &folder);
 

@@ -176,7 +176,7 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age,
 
   _lmotors = { { Motor::LEFT, 0 }, { Motor::RIGHT, 0 } };
   _amotors.fill(0);
-  clockSpeed(.5); assert(0 <= _clockSpeed && _clockSpeed < 10);
+  clockSpeed(0); assert(0 <= _clockSpeed && _clockSpeed < 10);
   _reproduction = 0;
 
   _energy = std::isinf(e) ? maximalEnergyStorage(_size) : e / initEnergyRatio;
@@ -188,7 +188,9 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age,
   _voice.fill(0);
   _sounds.fill(0);
   _ears.fill(0);
+#ifdef WITH_SENSORS_TOUCH
   _touch.fill(0);
+#endif
 
   // Update current healths
   if (std::isinf(e))
@@ -200,7 +202,9 @@ Critter::Critter(const Genome &g, b2Body *body, decimal e, float age,
   for (uint i=0; i<SPLINES_COUNT; i++)
     for (Side s: {Side::LEFT, Side::RIGHT})
       _currHealth[1+splineIndex(i, s)] = splineMaxHealth(i, s);
+#ifdef WITH_SENSORS_HEALTH
   _previousHealthness = bodyHealthness();
+#endif
 
   _destroyed.reset();
 
@@ -332,8 +336,10 @@ void Critter::buildBrain (const Genome &genotype,
 //  add(inputs,  .0,  -.25, -.5); // energy
 //  add(inputs,  .0,   .25, -.5); // health
 
+#ifdef WITH_SENSORS_HEALTH
   add(inputs, 0.f, -1.f, - .5f);  // health ratio
   add(inputs, 0.f, -1.f, -1.f);   // health variation
+#endif
 
   // Vision
   std::set<float> tmpXCoords;
@@ -380,6 +386,7 @@ void Critter::buildBrain (const Genome &genotype,
   }
 
   // Touch
+#ifdef WITH_SENSORS_TOUCH
   add(inputs, 0.f, -1.f, 1.f/8.f);  // body
 #if NUMBER_OF_SPLINES > 0
   for (int s: {1,-1}) {
@@ -391,6 +398,7 @@ void Critter::buildBrain (const Genome &genotype,
       add(inputs, x, -1.f, -1.f/8.f + 2.f * i / (SPLINES_COUNT * 8.f));
     }
   }
+#endif
 #endif
 
 
@@ -408,10 +416,14 @@ void Critter::buildBrain (const Genome &genotype,
 
   for (float x: {-.5f, .5f}) add(outputs, x, 1.f, 0.f);
 
+#ifdef WITH_ACTION_CLOCKSPEED
   add(outputs,  .0f, 1.f, -1.f);  // clock speed
+#endif
 
   add(outputs,  .0f, 1.f,  1.f);  // vocalisation:  volume
+#if VOCAL_CHANNELS > 1
   add(outputs,  .0f, 1.f,   .5f); //                frequency
+#endif
 
 #if ARMS > 0
   for (uint i=0; i<_arms.size(); i++)
@@ -468,7 +480,9 @@ void Critter::step(Environment &env) {
   updateColors();
 
   // Miscellaneous updates
+#ifdef WITH_SENSORS_HEALTH
   _previousHealthness = bodyHealth();
+#endif
 
   // TODO Smell?
 }
@@ -622,12 +636,18 @@ void Critter::neuralStep(void) {
 //    inputs[i++] = _age;
 //    inputs[i++] = reproductionReadiness(reproductionType());
 //    inputs[i++] = usableEnergy() / maxUsableEnergy();
+
+#ifdef WITH_SENSORS_HEALTH
     _neuralInputs[i++] = bodyHealthness();
     _neuralInputs[i++] = inPain > -1 ? inPain : instantaneousPain();
+#endif
 
     for (const auto &c: _retina) for (float v: c) _neuralInputs[i++] = v;
     for (const auto &e: _ears)  _neuralInputs[i++] = e;
+
+#ifdef WITH_SENSORS_TOUCH
     for (const auto &t: _touch) _neuralInputs[i++] = (t > 0);
+#endif
 
     // Process n propagation steps
     _brain(_neuralInputs, _neuralOutputs, _genotype.brain.substeps);
@@ -636,20 +656,32 @@ void Critter::neuralStep(void) {
 #ifndef NDEBUG
     for (auto &v: _neuralOutputs)  assert(-1 <= v && v <= 1);
 #endif
-    if (!selectiveBrainDead[0])
-      _lmotors[Motor::LEFT] = _neuralOutputs[0];
-    if (!selectiveBrainDead[1])
-      _lmotors[Motor::RIGHT] = _neuralOutputs[1];
 
-    if (!selectiveBrainDead[2])
-      _clockSpeed = clockSpeed(_neuralOutputs[2]);
+    i=0;
+    if (!selectiveBrainDead[i])
+      _lmotors[Motor::LEFT] = _neuralOutputs[i];
+    if (!selectiveBrainDead[i+1])
+      _lmotors[Motor::RIGHT] = _neuralOutputs[i+1];
+    i+=2;
 
-    if (!selectiveBrainDead[3]) _voice[0] = _neuralOutputs[3];
-    if (!selectiveBrainDead[4]) _voice[1] = _neuralOutputs[4];
+#ifdef WITH_ACTION_CLOCKSPEED
+    if (!selectiveBrainDead[i])
+      _clockSpeed = clockSpeed(_neuralOutputs[i]);
+    i++;
+#endif
 
-    for (uint i=0; i<_arms.size(); i++)
-      if (!selectiveBrainDead[i+5])
-        _amotors[i] = _neuralOutputs[i+5];
+    if (!selectiveBrainDead[i]) _voice[0] = _neuralOutputs[i];
+    i++;
+#if VOCAL_CHANNELS > 1
+    if (!selectiveBrainDead[i]) _voice[1] = _neuralOutputs[i];
+    i++;
+#endif
+
+#if ARTICULATIONS > 0
+    for (uint j=0; j<_arms.size(); j++)
+      if (!selectiveBrainDead[i+j])
+        _amotors[i] = _neuralOutputs[i+j];
+#endif
 
 //    _reproduction = _neuralOutputs[?];
 
@@ -698,8 +730,12 @@ void Critter::neuralStep(void) {
   // Emit sounds (requested and otherwise)
   if (!mute) {
     _sounds.fill(0);
+#if VOCAL_CHANNELS > 1
     uint vi = std::min(VOCAL_CHANNELS - 1,
                        uint(VOCAL_CHANNELS * .5f * (_voice[1]+1)));
+#else
+    uint vi=0;
+#endif
     assert(vi < VOCAL_CHANNELS);
     _sounds[0] = std::min(1.f, _body.GetLinearVelocity().Length());
     _sounds[1+vi] = std::max(0.f, _voice[0]);

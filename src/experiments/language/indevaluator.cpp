@@ -4,8 +4,9 @@ namespace simu {
 
 std::atomic<bool> Evaluator::aborted = false;
 
-Evaluator::Evaluator (const std::string &scenarioType) {
-  params = Params::fromArgv(scenarioType);
+Evaluator::Evaluator (const std::string &scenarioType,
+                      const std::string &scenarioArg) {
+  params = Params::fromArgv(scenarioType, scenarioArg);
 }
 
 std::string Evaluator::prettyEvalTypes(void) {
@@ -16,66 +17,67 @@ std::string Evaluator::prettyEvalTypes(void) {
 
 void Evaluator::applyNeuralFlags(phenotype::ANN &ann,
                                  const std::string &tagsfile) {
-//  auto &n = ann.neurons();
+  auto &n = ann.neurons();
 
-//  std::ifstream ifs (tagsfile);
-//  if (!ifs)
-//    utils::Thrower("Failed to open neural tags file '", tagsfile, "'");
+  std::ifstream ifs (tagsfile);
+  if (!ifs)
+    utils::Thrower("Failed to open neural tags file '", tagsfile, "'");
 
-//  for (std::string line; std::getline(ifs, line); ) {
-//    if (line.empty() || line[0] == '/') continue;
-//    std::istringstream iss (line);
-//    phenotype::Point pos;
-//    iss >> pos;
+  for (std::string line; std::getline(ifs, line); ) {
+    if (line.empty() || line[0] == '/') continue;
+    std::istringstream iss (line);
+    phenotype::Point pos;
+    iss >> pos;
 
-//    auto it = n.find(pos);
-//    if (it == n.end())
-//      utils::Thrower("No neuron at position {", pos.x(), ", ", pos.y(), "}");
+    auto it = n.find(pos);
+    if (it == n.end())
+      utils::Thrower("No neuron at position {", pos.x(), ", ", pos.y(), "}");
 
-//    iss >> (*it)->flags;
-//  }
+    iss >> (*it)->flags;
+  }
 
-//  // Also aggregate similar inputs/outputs
-//  for (auto &p: ann.neurons()) {
-//    using P = phenotype::Point;
-//    phenotype::ANN::Neuron &n = *p;
-//    P pos = n.pos;
-//    auto &f = n.flags;
+  // Also aggregate similar inputs/outputs
+  for (auto &p: ann.neurons()) {
+    using P = phenotype::Point;
+    phenotype::ANN::Neuron &n = *p;
+    P pos = n.pos;
+    auto &f = n.flags;
 
-//    if (n.type == phenotype::ANN::Neuron::I) {
-//      if (pos == P{0.f, -1.f, -.5f} || pos == P{0.f, -1.f, -1.f})
-//        f = 1<<18;  // health
-//      else if (pos.z() <= -1/3.) {
-//        f = 1<<19;  // audition
-//        if (pos.x() > 0)  f |= 1<<17;  // right
-//      } else if (pos.z() >= 1/3.) {
-//        f = 1<<20;  // vision
-//        if (pos.x() > 0)  f |= 1<<17;  // right
-//      } else {
-//        f = 1<<21;  // touch
-//        if (pos.x() > 0)  f |= 1<<17;  // right
-//      }
-//      if (f) f |= 1<<16; // input
+    if (n.type == phenotype::ANN::Neuron::I) {
+      if (pos == P{0.f, -1.f, -.5f} || pos == P{0.f, -1.f, -1.f})
+        f = 1<<18;  // health
+      else if (pos.z() <= -1/3.) {
+        f = 1<<19;  // audition
+        if (pos.x() > 0)  f |= 1<<17;  // right
+      } else if (pos.z() >= 1/3.) {
+        f = 1<<20;  // vision
+        if (pos.x() > 0)  f |= 1<<17;  // right
+      } else {
+        f = 1<<21;  // touch
+        if (pos.x() > 0)  f |= 1<<17;  // right
+      }
+      if (f) f |= 1<<16; // input
 
-//    } else if (n.type == phenotype::ANN::Neuron::O) {
-//      if (pos.z() >= .5)
-//        f = 1 << 26;  // Voice
-//      else if (pos.z() == -.5f) {
-//        f = 1<<27;    // arms
-//        if (pos.x() > 0) f |= 1<<25;  // right
-//      }
-//      if (f) f |= 1<<24; // output
-//    }
-//  }
+    } else if (n.type == phenotype::ANN::Neuron::O) {
+      if (pos.z() >= .5)
+        f = 1 << 26;  // Voice
+      else if (pos.z() == -.5f) {
+        f = 1<<27;    // arms
+        if (pos.x() > 0) f |= 1<<25;  // right
+      }
+      if (f) f |= 1<<24; // output
+    }
+  }
 
-//  if (config::Simulation::verbosity() > 0) {
-//    std::cout << "Neural flags:\n";
-//    for (const auto &p: n)
-//      std::cout << "\t" << std::setfill(' ') << std::setw(10) << p->pos
-//                << ":\t"
-//                << std::bitset<8*sizeof(p->flags)>(p->flags)
-//                << "\n";
-//  }
+  if (config::Simulation::verbosity() > 0) {
+    std::cout << "Neural flags:\n";
+    for (const auto &p: n)
+      std::cout << "\t" << std::setfill(' ') << std::setw(10) << p->pos
+                << ":\t"
+                << std::bitset<8*sizeof(p->flags)>(p->flags)
+                << " (" << p->flags << ")"
+                << "\n";
+  }
 }
 
 auto duration (const simu::Simulation &s) {
@@ -117,10 +119,13 @@ void Evaluator::logging_freeData(LogData **d) {
 
 void Evaluator::logging_init(LogData *d, const stdfs::path &f,
                              Scenario &s) {
-  stdfs::create_directories(f);
-  std::cerr << f << " should exist!\n";
 
-  static const auto NEURAL_FLAGS = "OFNCBATHI";
+  if (stdfs::create_directories(f))
+    std::cout << "Created " << f << "\n";
+  if (!stdfs::exists(f))
+    utils::Thrower("Failed to create data folder ", f);
+
+  static const auto NEURAL_FLAGS = "CBARE";
 
   const auto filename = [] (const std::string &name,
                             const std::string &ext,
@@ -272,51 +277,11 @@ bool rgb_cmp (const Color &lhs, const Color &rhs) {
                                        rhs.begin(), rhs.end());
 }
 
-std::string Evaluator::Params::toString(const Scenario::Params &p) {
-  return toString(p.type, p.spec);
-}
-
-std::string Evaluator::Params::toString (Scenario::Type t,
-                                         const Scenario::Spec &s) {
-  using Type = Scenario::Type;
-  std::ostringstream oss;
-  switch (t) {
-  case Type::DIRECTION:
-    oss << "d_" << std::array<char,3>{{'l','f','r'}}[s.target];
-    break;
-  case Type::COLOR: {
-    uint cl = s.colors.size() - 1, cr = s.target;
-    auto l_colors = s.colors;
-    auto r_color = l_colors.back();
-    l_colors.pop_back();
-
-    auto vl = colors(cl);
-    int id_l = 0;
-    while (vl != l_colors && id_l >= 0) {
-      if (std::next_permutation(vl.begin(), vl.end(), rgb_cmp))
-        id_l++;
-      else
-        id_l = -1;
-    }
-
-    auto vr = colors(cr);
-    auto id_r = std::distance(vr.begin(),
-                              std::find(vr.begin(), vr.end(), r_color));
-
-    oss << "c" << cl << cr << "_" << id_l << id_r;
-    }
-    break;
-  default:
-    utils::Thrower("Unable to generate string representation");
-  }
-
-  return oss.str();
-}
-
 void parseDirectionSpecs (const std::string &s, Evaluator::Params &p) {
   static const auto spec = [] (uint t) {
     Scenario::Spec s {};
     s.target = t;
+    s.name = utils::mergeToString("d_", "lfr"[t]);
     return s;
   };
 
@@ -332,40 +297,61 @@ void parseDirectionSpecs (const std::string &s, Evaluator::Params &p) {
     default:
       utils::Thrower("Unknown direction scenario subtype ", s[2]);
     }
+    spec.name = s;
     p.specs = {spec};
 
   } else
     utils::Thrower("Malformed direction scenario specification '", s, "'");
 }
 
-void parseColorSpecs (const std::string &s, Evaluator::Params &p) {
+using Colors = std::vector<Color>;
+void parseColorSpace (const std::string &s, uint &cl, uint &cr,
+                      Colors &l_colors, Colors &r_colors) {
   if (s.size() < 3)
     utils::Thrower("Missing argument(s) for color scenario: '", s,
                    "' != c[23][23]");
 
-  uint cl = s[1] - '0', cr = s[2] - '0';
-
-  std::vector<Color> l_colors = colors(cl);
+  cl = s[1] - '0';
+  l_colors = colors(cl);
   if (l_colors.empty())
     utils::Thrower("Invalid value ", cl, " for left-hand side colors");
 
-  std::vector<Color> r_colors = colors(cr);
+  cr = s[2] - '0';
+  r_colors = colors(cr);
   if (r_colors.empty())
     utils::Thrower("Invalid value ", cr, " for right-hand side colors");
+}
+
+Colors nthPermutation (Colors colors, uint n) {
+  for (uint i=0; i<n; i++)
+    std::next_permutation(colors.begin(), colors.end(), rgb_cmp);
+  return colors;
+}
+
+void parseColorSpecs (const std::string &s, Evaluator::Params &p) {
+  uint cl, cr;
+  Colors l_colors, r_colors;
+  parseColorSpace(s, cl, cr, l_colors, r_colors);
 
   if (s.size() == 3) {
+    uint i_r = 0;
     for (const Color &r_c: r_colors) {
       l_colors = colors(cl);
 
+      uint i_l = 0;
       do {
         Scenario::Spec spec;
         spec.colors = l_colors;
         spec.colors.push_back(r_c);
-        spec.target = cr;
+        spec.name = utils::mergeToString("c", cl, cr, "_", i_l, i_r);
         p.specs.push_back(spec);
+        i_l++;
 
       } while (std::next_permutation(l_colors.begin(), l_colors.end(), rgb_cmp));
+
+      i_r++;
     }
+
   } else if (s.size() == 6) {
     uint cl_id = s[4] - '0', cr_id = s[5] - '0';
     if (cl_id >= cl)
@@ -374,31 +360,152 @@ void parseColorSpecs (const std::string &s, Evaluator::Params &p) {
       utils::Thrower("Unknown color scenario (right) subtype '", s[5], "'");
 
     Scenario::Spec spec;
-    auto lc = colors(cl);
-    for (uint i=0; i<cl_id; i++)
-      std::next_permutation(lc.begin(), lc.end(), rgb_cmp);
-    spec.colors = lc;
+    spec.colors = nthPermutation(colors(cl), cl_id);
     spec.colors.push_back(colors(cr)[cr_id]);
-    spec.target = cr;
+    spec.name = utils::mergeToString("c", cl, cr, "_", cl_id, cr_id);
     p.specs = {spec};
 
   } else
     utils::Thrower("Malformed color scenario specification '", s, "'");
-
-  static const auto str =
-      static_cast<std::string(*)(Scenario::Type, const Scenario::Spec&)>(
-        Evaluator::Params::toString);
-  std::cout << "Parsed '" << s << "' into:";
-  if (p.specs.size() == 1) std::cout << " " << str(p.type, p.specs.front());
-  else {
-    std::cout << "\n";
-    for (const Scenario::Spec &s: p.specs)
-      std::cout << "\t" << str(p.type, s) << "\n";
-  }
-  std::cout << "\n";
 }
 
-Evaluator::Params Evaluator::Params::fromArgv (const std::string &scenario) {
+void parseNeuralEvaluationColorSpecs(const std::string &s, const std::string &a,
+                                     Evaluator::Params &p) {
+  using Flag = Scenario::Params::Flag;
+  std::string ss = s.substr(3);
+
+  uint cl, cr;
+  Colors l_colors, r_colors;
+  parseColorSpace(ss, cl, cr, l_colors, r_colors);
+
+  std::string nbase = utils::mergeToString("ne_c", cl, cr);
+
+  static auto colorSpec = [] (Colors colors, auto name, auto argument) {
+    return Scenario::Spec{-1u, colors, argument, name};
+  };
+
+  auto stimulus = [&p, &nbase] (auto name, Colors color, auto arg, int flag) {
+    p.specs.push_back(colorSpec(color, nbase + "_" + name, arg));
+    Scenario::Params::Flags flags;
+    if (flag >= 0)  flags.set(flag);
+    p.flags.push_back(flags);
+  };
+
+  auto vname = [] (char role, uint i) {
+    return utils::mergeToString("v", role, i);
+  };
+
+  auto aname = [] (uint l, uint r) {
+    return utils::mergeToString("a", l, r);
+  };
+
+  auto aarg = [cl, cr] (auto arg, uint l, uint r) {
+    std::regex pattern (utils::mergeToString("c", cl, cr, "_XX"));
+    return std::regex_replace(arg, pattern,
+             utils::mergeToString("c", cl, cr, "_", l, r))
+           + "/acoustics.dat";
+  };
+
+  static constexpr Flag AUDITIVE_FLAGS []
+    { Flag::AUDITION_0, Flag::AUDITION_1, Flag::AUDITION_2 };
+
+  ss = ss.substr(3 + (ss.size() > 3));
+  if (ss.empty()) { // generate all
+    if (a.empty())
+      utils::Thrower("Missing vocalization data for auditive neural evaluation"
+                     " (via scenario argument)");
+
+    uint i=0;
+    for (Color &c: r_colors)
+      stimulus(vname('e', i++), {c}, "", Flag::VISION_EMITTER);
+
+    i=0;
+    do {
+      stimulus(vname('r', i++), l_colors, "", Flag::VISION_RECEIVER);
+    } while (std::next_permutation(l_colors.begin(), l_colors.end(), rgb_cmp));
+
+    uint fl = 1;
+    for (uint l=2; l<=cl; l++) fl *= l;  // compute cl!
+    for (uint r=0; r<cr; r++) {
+      for (uint l=0; l<fl; l++) {
+        stimulus(aname(l, r), {}, aarg(a, l, r), AUDITIVE_FLAGS[r]);
+        auto arg = p.specs.back().arg;
+        if (!stdfs::exists(arg))
+          utils::Thrower("Deduced file '", arg, "' for auditive neural"
+                         " evaluation does not exist");
+      }
+    }
+
+  } else if (ss.size() == 3) {
+    if (ss == "nul") {  // nul scenario (e.g. for rendering cppns/anns)
+      stimulus("nul", {}, "", -1);
+
+    } if (ss[0] == 'v') { // parse for specific visual stimulus
+      uint i = ss[2] - '0';
+
+      switch (ss[1]) {
+      case 'e':
+        if (i >= cr) utils::Thrower("Invalid index for visual stimulus");
+        stimulus(vname('e', i), {colors(cr)[i]}, "", Flag::VISION_EMITTER);
+        break;
+
+      case 'r':
+        if (i >= cl) utils::Thrower("Invalid index for visual stimulus");
+        stimulus(vname('r', i), nthPermutation(colors(cl), i), "",
+                 Flag::VISION_RECEIVER);
+        break;
+
+      default:
+        utils::Thrower("Invalid case '", ss[1], "' for visual stimulus");
+      }
+
+    } else if (ss[0] == 'a') { // parse for specific auditory stimulus
+      uint l = ss[1] - '0', r = ss[2] - '0';
+      if (l >= cl || r >= cr)
+        utils::Thrower("Invalid index for visual stimulus");
+
+      stimulus(aname(l, r), {}, aarg(a, l, r), AUDITIVE_FLAGS[r]);
+    }
+
+  } else
+    utils::Thrower("Failed to parse provided scenario spec '", s, "'");
+}
+
+void parseNeuralEvaluationSpecs (const std::string &s, const std::string &arg,
+                                 Evaluator::Params &p) {
+  using Type = Scenario::Type;
+  p.type = Scenario::Type::NEURAL_EVALUATION;
+  static constexpr auto tor = [] (Type &lhs, Type rhs) {
+    return lhs = Type(uint(lhs) | uint(rhs));
+  };
+
+  switch (s[3]) {
+  case 'd':
+    tor(p.type, Scenario::Type::DIRECTION);
+    utils::Thrower("Neural evaluation of 'Direction' scenario is not implemented");
+    break;
+  case 'c':
+    tor(p.type, Scenario::Type::COLOR);
+    parseNeuralEvaluationColorSpecs(s, arg, p);
+    break;
+  default:
+      utils::Thrower("Unknown scenario type ", s[0], " for neural evaluation");
+  }
+
+  assert(p.flags.size() == p.specs.size());
+}
+
+
+bool Evaluator::Params::neuralEvaluation(const std::string &scenario) {
+  return scenario.substr(0, 2) == "ne";
+}
+
+bool Evaluator::Params::neuralEvaluation(void) const {
+  return Scenario::Params::neuralEvaluation(type);
+}
+
+Evaluator::Params Evaluator::Params::fromArgv (const std::string &scenario,
+                                               const std::string &optarg) {
   Evaluator::Params params;
 
   using Type = Scenario::Type;
@@ -415,66 +522,28 @@ Evaluator::Params Evaluator::Params::fromArgv (const std::string &scenario) {
     break;
 
   default:
-    utils::Thrower("Unknown scenario type ", scenario[0]);
+    if (neuralEvaluation(scenario))
+      parseNeuralEvaluationSpecs(scenario, optarg, params);
+    else
+      utils::Thrower("Unknown scenario type ", scenario[0]);
   }
 
+  std::cout << "Parsed '" << scenario << "' into:";
+  if (params.specs.size() == 1) std::cout << " " << params.specs.front();
+  else {
+    std::cout << "\n";
+    for (const Scenario::Spec &s: params.specs)
+      std::cout << "\t" << s << "\n";
+  }
+  std::cout << "\n";
 
-//  if (neuralEvaluation(scenario)) {
-//    params.flags.reset();
-
-//    using F = simu::Scenario::Params::Flag;
-//    std::string s = scenario;
-//    if (s.size() != 4) utils::Thrower("Scenario '", s, "' has unexpected size");
-
-//    bool ok = true;
-//    switch (s[1]) {
-//    case '1':
-//      switch (s[3]) {
-//      case 'a': params.flags.set(F::PAIN_ABSL); break;
-//      case 'i': params.flags.set(F::PAIN_INST); break;
-//      case 't': params.flags.set(F::TOUCH); break;
-//      default: ok = false;
-//      }
-//      break;
-
-//    case '2':
-//      switch (s[3]) {
-//      case 'a': params.flags.set(F::WITH_ALLY); break;
-//      case 'b': params.flags.set(F::WITH_OPP1); break;
-//      case 'c': params.flags.set(F::WITH_OPP2); break;
-//      default: ok = false;
-//      }
-//      break;
-
-//    case '3':
-//      switch (s[3]) {
-//      case 'n': params.flags.set(F::SOUND_NOIS); break;
-//      case 'f': params.flags.set(F::SOUND_FRND); break;
-//      case 'o': params.flags.set(F::SOUND_OPPN); break;
-//      default: ok = false;
-//      }
-//      if (scenarioArg.empty() && s[3] != 'n')
-//        utils::Thrower("Type 3 scenario requires an additional argument");
-//      else
-//        params.scenarioArg = scenarioArg;
-//      break;
-
-//    default: ok = false;
-//    }
-
-//    if (!params.flags.any() || !ok)
-//      utils::Thrower("Invalid scenario '", scenario, "'");
-//    assert(params.flags.any() && ok);
-//  }
+//  std::cerr << __PRETTY_FUNCTION__ << ": Exiting immediately\n";
+//  exit(0);
 
   return params;
 }
 
 // ===
-
-bool Evaluator::neuralEvaluation(const std::string &scenario) {
-  return !scenario.empty() && scenario.substr(0, 2) != "ne";
-}
 
 void Evaluator::operator () (Ind &ind) {
   operator() (ind, params);
@@ -497,7 +566,7 @@ std::vector<std::string> Evaluator::footprintFields (const Params &p) {
   v[f++] = "e_ax";
 
   for (uint i=0; i<p.specs.size(); i++) {
-    auto l = Params::toString(p.scenarioParams(i));
+    auto l = p.scenarioParams(i).spec.name;
     v[f++] = "e_an_e_" + l;
     v[f++] = "e_an_r_" + l;
     v[f++] = "e_vc_e_" + l;
@@ -516,7 +585,7 @@ Scenario::Params Evaluator::Params::scenarioParams (uint i) const {
   Scenario::Params p;
   p.type = type;
   p.spec = specs[i];
-  p.flags.reset();
+  if (!flags.empty()) p.flags = flags[i];
   p.brainTemplate = nullptr;
   return p;
 }
@@ -571,21 +640,31 @@ void Evaluator::operator() (Ind &ind, Params &params) {
     s_params.brainTemplate = &staticBrain;
     scenario.init(s_params);
     if (muteReceiver) scenario.muteReceiver();
-    auto pstr = Params::toString(s_params);
+    auto pstr = s_params.spec.name;
 
     /// Modular ANN
-//    if (!logsSavePrefix.empty() && !annTagsFile.empty()) {
-//      for (simu::Critter *c: scenario.teams()[0]) {
-//        auto &brain = c->brain();
-//        applyNeuralFlags(brain, annTagsFile);
-//        manns.push_back(std::make_unique<phenotype::ModularANN>(brain));
-//      }
-//    }
+    if (!logsSavePrefix.empty() && !annTagsFile.empty()) {
+      manns.clear();
+
+      for (simu::Critter *c: scenario.critters()) {
+        auto &brain = c->brain();
+        applyNeuralFlags(brain, annTagsFile);
+        manns.push_back(std::make_unique<phenotype::ModularANN>(brain));
+
+//        phenotype::ModularANN &mann = *manns.back();
+//        std::cerr << "Modular ANN (" << mann.modules().size() << " items):\n";
+//        for (const auto &p: mann.modules()) {
+//          const phenotype::ModularANN::Module &m = *p.second;
+//          std::cerr << "\tpos: " << m.center << "; " << m.neurons.size() << " neurons with flag 0x"
+//                    << std::hex << m.flags << std::dec << " and type " << m.type() << "\n";
+//        }
+      }
+    }
   //  scenario.applyLesions(lesion);
 
     LogData log;
     if (!logsSavePrefix.empty())
-      logging_init(&log, logsSavePrefix / Params::toString(s_params), scenario);
+      logging_init(&log, logsSavePrefix / pstr, scenario);
 
     float stddev_count = 0, stddev_mean = 0, stddev_M2 = 0;
     float mean_first = 0, stddev_first = 0, mean_last = 0, stddev_last = 0;
@@ -622,39 +701,44 @@ void Evaluator::operator() (Ind &ind, Params &params) {
       if (!logsSavePrefix.empty()) logging_step(&log, scenario);
     }
 
-    scores[i] = scenario.score();
-    ind.stats["lg_" + pstr] = scores[i];
-    mute |= scenario.mute();
+    if (!params.neuralEvaluation()) {
+      scores[i] = scenario.score();
+      ind.stats["lg_" + pstr] = scores[i];
+      mute |= scenario.mute();
 
-    auto ee = scenario.emitter()->energyCosts,
-         er = scenario.receiver()->energyCosts;
+      auto ee = scenario.emitter()->energyCosts,
+           er = scenario.receiver()->energyCosts;
 
-    if (i==0) footprint[f++] = ee[3]; // axons cost
-    footprint[f++] = ee[2]; // emitter neural consumption
-    footprint[f++] = er[2]; // receiver neural consumption
-    footprint[f++] = ee[1]; // emitter vocal consumption
-    footprint[f++] = er[0]; // receiver motor consumption
+      if (i==0) footprint[f++] = ee[3]; // axons cost
+      footprint[f++] = ee[2]; // emitter neural consumption
+      footprint[f++] = er[2]; // receiver neural consumption
+      footprint[f++] = ee[1]; // emitter vocal consumption
+      footprint[f++] = er[0]; // receiver motor consumption
 
-    // If aborted too quickly
-    if (timestamp() < TPS)
-      sm_compute(mean_first, stddev_first);
-    else
-      sm_compute(mean_last, stddev_last);
+      // If aborted too quickly
+      if (timestamp() < TPS)
+        sm_compute(mean_first, stddev_first);
+      else
+        sm_compute(mean_last, stddev_last);
 
-    // Shorted vocalisation metrics
-    footprint[f++] = mean_first;
-    footprint[f++] = stddev_first;
-    footprint[f++] = mean_last;
-    footprint[f++] = stddev_last;
+      // Shorted vocalisation metrics
+      footprint[f++] = mean_first;
+      footprint[f++] = stddev_first;
+      footprint[f++] = mean_last;
+      footprint[f++] = stddev_last;
 
-    ind.stats["stime"] += Scenario::DURATION - duration(simulation);
+      ind.stats["stime"] += Scenario::DURATION - duration(simulation);
+    }
   }
+
+  // Skip scores/novelty computations
+  if (params.neuralEvaluation())  return;
 
   if (brainless) {
     std::replace_if(footprint.begin(), footprint.end(),
                     static_cast<bool(*)(float)>(std::isnan), 0.f);
     for (uint i=0; i<n; i++)
-      ind.stats["lg_" + Params::toString(params.scenarioParams(i))] =
+      ind.stats["lg_" + params.scenarioParams(i).spec.name] =
         scores[i] = Scenario::minScore();
 
   } else if (f != footprint.size())

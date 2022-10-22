@@ -327,7 +327,7 @@ public:
 
 struct GeneColorPicker : public ColorLabel {
   template <typename B>
-  GeneColorPicker (const B &b, uint i, uint j)
+  GeneColorPicker (const B &/*b*/, uint i, uint j)
     : i(i), j(j), /*min(b.min), max(b.max),*/ readonly(false) {}
 
   void setReadOnly (bool r) {
@@ -816,9 +816,13 @@ void GeneticManipulator::buildNeuralPanel(void) {
   iol->addRow("Vision", _rLabels = new ColorLabels(rcells, true));
   iol->addRow("Audition", _eLabels
               = new ColorLabels(2*(simu::Critter::VOCAL_CHANNELS+1), true));
+#ifdef WITH_SENSORS_TOUCH
   iol->addRow("Touch", _tLabels
               = new ColorLabels(1+(2*simu::Critter::SPLINES_COUNT), false));
+#endif
+#ifdef WITH_SENSORS_HEALTH
   iol->addRow("Health", _hLabels = new ColorLabels(2, false));
+#endif
   iol->addRow(line(""));
 
   QGridLayout *g = new QGridLayout;
@@ -826,6 +830,7 @@ void GeneticManipulator::buildNeuralPanel(void) {
   g->addWidget(_mSliders[0] = new LabeledSlider(-1, 1), 1, 0);
   g->addWidget(_mSliders[1] = new LabeledSlider(-1, 1), 1, 1);
 
+#ifdef WITH_ACTION_CLOCKSPEED
   g->addWidget(new QLabel("Clock"), 0, 3, 1, 1, Qt::AlignCenter);
 
   auto ml = new QHBoxLayout;
@@ -833,13 +838,18 @@ void GeneticManipulator::buildNeuralPanel(void) {
   ml->addWidget(_mSliders[2] = new LabeledSlider(-1, 1));
   ml->addWidget(_cLabels[1] = new QLabel);
   g->addLayout(ml, 1, 3);
+#else
+  _mSliders[2] = nullptr;
+#endif
 
   iol->addRow(g);
 
+#if NUMBER_OF_ARMS > 0
   auto al = new QHBoxLayout;
   for (uint i=0; i<_aSliders.size(); i++)
    al->addWidget(_aSliders[i] = new LabeledSlider(-1, 1));
   iol->addRow("Arms", al);
+#endif
 
   iol->addRow("Sound", _sLabels
              = new ColorLabels(simu::Critter::VOCAL_CHANNELS+1, false));
@@ -933,8 +943,12 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
         _rLabels->label(i + j * lhs)->setVisible(false);
 
     _eLabels->setEnabled(true);
+#ifdef WITH_SENSORS_TOUCH
     _tLabels->setEnabled(true);
+#endif
+#ifdef WITH_SENSORS_HEALTH
     _hLabels->setEnabled(true);
+#endif
     _sLabels->setEnabled(true);
 
     for (uint i=0; i<S_v; i++) {
@@ -959,9 +973,11 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
     _bPicker->setGeneValue(g.colors[0]);
 #endif
 
+#ifdef WITH_ACTION_CLOCKSPEED
     _cLabels[0]->setText(QString::number(100*g.minClockSpeed, 'f', 1));
     _mSliders.back()->setRange(100*g.minClockSpeed, 100*g.maxClockSpeed);
     _cLabels[1]->setText(QString::number(100*g.maxClockSpeed, 'f', 1));
+#endif
 
     _cppn = std::make_unique<phenotype::CPPN>(
               phenotype::CPPN::fromGenotype(g.brain));
@@ -979,8 +995,12 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
 
     _rLabels->setEnabled(false);
     _eLabels->setEnabled(false);
+#ifdef WITH_SENSORS_TOUCH
     _tLabels->setEnabled(false);
+#endif
+#ifdef WITH_SENSORS_HEALTH
     _hLabels->setEnabled(false);
+#endif
     _sLabels->setEnabled(false);
 
     for (uint i=0; i<S_v; i++) {
@@ -1002,9 +1022,11 @@ void GeneticManipulator::setSubject(visu::Critter *s) {
 
     for (PrettyBar *b: _sBars)  b->noValue();
 
-    for (auto s: _mSliders) s->noValue();
+    for (auto s: _mSliders) if (s) s->noValue();
     for (auto s: _aSliders) s->noValue();
+#ifdef WITH_ACTION_CLOCKSPEED
     for (auto l: _cLabels)  l->setText("");
+#endif
 
     _cppn.release();
     _brainPanel->noData();
@@ -1052,7 +1074,9 @@ void GeneticManipulator::readCurrentStatus(void) {
   _lFirstname->setText(firstname);
 
   set("Age", &SCritter::age, percent);
+#ifdef WITH_ACTION_CLOCKSPEED
   set("Clock", &SCritter::clockSpeed, percent);
+#endif
   set("Effcy", &SCritter::efficiency, percent);
 
   set("Repro", &SCritter::reproductionReadinessBrittle, percent);
@@ -1081,11 +1105,15 @@ void GeneticManipulator::readCurrentStatus(void) {
     _sLabels->label(j)->setValue(s[j]);
   }
 
+#ifdef WITH_SENSORS_TOUCH
   for (uint i=0; i<1+2*simu::Critter::SPLINES_COUNT; i++)
     _tLabels->label(i)->setValue(c.touchSensorOn(i));
+#endif
 
+#ifdef WITH_SENSORS_HEALTH
   _hLabels->label(0)->setValue(c.bodyHealthness());
   _hLabels->label(1)->setValue(c.instantaneousPain());
+#endif
 
   _sBars[0]->setValue(float(c.usableEnergy()));
   _sBars[1]->setValue(float(c.bodyHealth()));
@@ -1096,7 +1124,9 @@ void GeneticManipulator::readCurrentStatus(void) {
 
   _mSliders[0]->setValue(c.motorOutput(Motor::LEFT));
   _mSliders[1]->setValue(c.motorOutput(Motor::RIGHT));
+#ifdef WITH_ACTION_CLOCKSPEED
   _mSliders[2]->setValue(100*c.clockSpeed());
+#endif
 
   for (uint i=0; i<_aSliders.size(); i++)
     _aSliders[i]->setValue(c.armJointOutput(i));

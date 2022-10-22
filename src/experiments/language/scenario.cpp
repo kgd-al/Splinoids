@@ -16,15 +16,43 @@ const Simulation::InitData Scenario::commonInitData = [] {
   return d;
 }();
 
+struct {
+  struct Size { float w,h; };
+  Size eval {50,50};
+  Size evo {10,5};
+} ENV_SIZES;
+
 genotype::Environment Scenario::environmentGenome (bool eval) {
   genotype::Environment e;
   e.maxVegetalPortion = 1;
   e.taurus = 0;
 
-  if (eval) e.width = e.height = 50;
-  else      e.width = 2*(e.height = 5);
+  if (eval) e.width = e.height = ENV_SIZES.eval.w;
+  else      e.width = 2*(e.height = ENV_SIZES.evo.h);
 
   return e;
+}
+
+// =============================================================================
+
+std::ostream& operator<< (std::ostream &os, const Scenario::Spec &s) {
+  os << s.name;
+
+  os << " t=" << s.target;
+
+  os << " colors: {";
+  for (const Color &c: s.colors) {
+    os << " ";
+    if (c == Color{{1,0,0}}) os << "R";
+    else if (c == Color{{0,1,0}}) os << "G";
+    else if (c == Color{{0,0,1}})  os << "B";
+    else os << "?";
+  }
+  os << " }";
+
+  if (!s.arg.empty())
+    os << " [" << s.arg << "]";
+  return os;
 }
 
 // =============================================================================
@@ -40,22 +68,21 @@ Scenario::Scenario (Simulation &simulation) : _simulation(simulation) {
   });
 }
 
+float critterXPos (int id) {  return (1-2*id);  }
+float critterYPos (void) {    return 0;         }
+
 Critter* Scenario::makeCritter (uint id, const genotype::Critter &genome,
                                 const phenotype::ANN *brainTemplate) {
 
   static constexpr auto E = INFINITY;
 
-  const auto x = [this] (int id) {
-    return (1-2*id)
-        /** _simulation.environment().xextent() / 3.f*/;
-  };
   const auto pin = [] (auto c) {
     c->immobile = true;
 //    c->paralyzed = true;
 //    c->body().SetType(b2_staticBody);
   };
 
-  auto c = _simulation.addCritter(genome, x(id), 0,
+  auto c = _simulation.addCritter(genome, critterXPos(id), critterYPos(),
                                   id*M_PI, E, .5, true,
                                   brainTemplate);
   _critters.push_back(c);
@@ -67,8 +94,8 @@ Critter* Scenario::makeCritter (uint id, const genotype::Critter &genome,
 }
 
 Foodlet* Scenario::makeFoodlet (float x, int side, Color c) {
-  const float W = _simulation.environment().xextent(),
-              H = _simulation.environment().yextent();
+  const float W = .5 * ENV_SIZES.evo.w,
+              H = .5 * ENV_SIZES.evo.h;
 
   float fr = .25, fe = Foodlet::maxStorage(BodyType::PLANT, fr);
   auto fy = -2 * side * (x-.5f) * std::min(H-fr, 1 * H);
@@ -88,12 +115,9 @@ void Scenario::muteReceiver(void) {
 void Scenario::init(const Params &params) {
   _params = params;
 
-  // Will be flipped at the end of the first step
-//  if (!params.neutralFirst) _currentFlags.reset();
-//  else                      _currentFlags = params.flags;
-
   if (neuralEvaluation())
-    std::cout << "Using flags: " << params.flags << "\n";
+    std::cout << "Using flags: " << params.flags << "\n"
+              << "Spec: " << params.spec << "\n";
 
   _simulation.init(environmentGenome(neuralEvaluation()),
                    {}, commonInitData);
@@ -102,23 +126,59 @@ void Scenario::init(const Params &params) {
   if (neuralEvaluation()) _simulation._systemExpectedEnergy = -1;
 
   if (neuralEvaluation()) {
-//    config::Simulation::combatBaselineIntensity.overrideWith(0);
-//    makeCritter(0, 0, params.lhs.genome);
-//    if (!params.neutralFirst) {
-//      if (hasFlag(Params::WITH_ALLY)) makeCritter(1, 0, _params.lhs.genome);
-//      if (hasFlag(Params::WITH_OPP1) || hasFlag(Params::WITH_OPP2))
-//        makeCritter(1, 0, _params.rhs.genome);
-//    }
+    makeCritter(0, params.genome, params.brainTemplate);
 
-//    if (hasFlag(Params::SOUND_FRND) || hasFlag(Params::SOUND_OPPN)) {
-//      std::istringstream iss (params.arg);
-//      iss >> _testChannel;
-//      if (!iss)
-//        utils::Thrower("Failed to parse ", params.arg, " as a channel number");
-//      if (Critter::VOCAL_CHANNELS < _testChannel)
-//        utils::Thrower("Channel id is out of range [0, ",
-//                       Critter::VOCAL_CHANNELS, "]");
-//    }
+    if (hasFlag(Params::VISION_EMITTER))
+      makeFoodlet(.5, 1, params.spec.colors.front());
+
+    else if (hasFlag(Params::VISION_RECEIVER)) {
+      float n = params.spec.colors.size();
+      for (uint i=0; i<n; i++)
+        makeFoodlet(i/(n-1), 1, params.spec.colors[i]);
+
+    } else if (hasAuditionFlag()) {
+      std::ifstream ifs (_params.spec.arg);
+      if (!ifs)
+        utils::Thrower("Failed to open '", _params.spec.arg, "'");
+      std::string line;
+      std::getline(ifs, line);
+
+      static constexpr auto EMITTER_COLUMN_HEADER = "EO0";
+      auto headers = utils::split(line, ' ');
+      auto it = std::find(headers.begin(), headers.end(), EMITTER_COLUMN_HEADER);
+      if (it == headers.end())
+        utils::Thrower("Failed to find column ", EMITTER_COLUMN_HEADER);
+      uint col = std::distance(headers.begin(), it);
+
+      auto data = _injectionData;
+      while (std::getline(ifs, line)) {
+        std::stringstream ss (utils::split(line, ' ')[col]);
+        float val;
+        ss >> val;
+        data.push_back(val);
+      }
+
+      std::cerr << "Extracted data:\n  [";
+      for (float v: data) std::cerr << " " << v;
+      std::cerr << "]\n";
+
+      const auto LOOP_TIMESTEPS =
+          EVAL_STEP_DURATION * config::Simulation::ticksPerSecond() - 1;
+
+      uint il, ir;
+      for (il = 0; il<data.size() && data[il] == 0; il++);
+      for (ir = data.size()-1;
+           ir < data.size() && (data[ir] == 0 || ir>LOOP_TIMESTEPS);
+           ir--);
+
+      std::cerr << "Limiting auditive sample to [" << il << ":" << ir << "]\n";
+      _injectionData = decltype(data)(data.begin()+il, data.begin()+ir+1);
+      _injectionData.push_back(0);  // Pad with a zero
+
+      std::cerr << "Target sample:\n  [";
+      for (float v: _injectionData) std::cerr << " " << v;
+      std::cerr << "]\n";
+    }
 
   } else {
     for (uint i=0; i<2; i++)
@@ -134,7 +194,7 @@ void Scenario::init(const Params &params) {
       assert(_foodlets.size() == 4);
 
     } else if (params.type == Type::COLOR) {
-      float n = params.spec.colors.size() - 1;
+      float n = params.spec.colors.size() - 1; // ignore rhs color
       for (uint i=0; i<n; i++)
         makeFoodlet(1-i/(n-1), -1, params.spec.colors[i]);
       makeFoodlet((n-1)/2.f, 1, params.spec.colors.back());
@@ -164,89 +224,53 @@ char Scenario::critterRole(uint id) {
 void Scenario::postEnvStep(void) {}
 
 void Scenario::postStep(void) {
-//  static constexpr auto INJURY = .9;
-
-  static const auto TIMEOUT = DURATION*config::Simulation::ticksPerSecond();
-//  static const auto PERIOD = 4 * config::Simulation::ticksPerSecond();
+  static const auto TPS = config::Simulation::ticksPerSecond();
+  static const auto TIMEOUT = DURATION * TPS;
+  static const auto EVAL_PERIOD = EVAL_STEP_DURATION * TPS;
   const auto t = _simulation.currTime().timestamp();
-
-//  static const auto injectSound = [] (simu::Critter *c, uint channel) {
-//    auto &ears = c->ears();
-//    ears.fill(0);
-//    ears[channel] = ears[channel+Critter::VOCAL_CHANNELS+1] = 1;
-//  };
 
   _mute &= emitter()->silent(false);
 
   if (neuralEvaluation()) {
-//    const auto step = t / PERIOD;
-//    if (step >= 6)  _simulation._finished = true;
+    const auto step = t / EVAL_PERIOD;
+    if (step >= EVAL_STEPS)  _simulation._finished = true;
 
-//    Critter *sbj = subject();
+    bool neutral = (step%2);
+    Critter *sbj = *_critters.begin();
 
-//    sbj->body().SetTransform(sbj->body().GetPosition(),
-//                             std::sin(2*M_PI*t / PERIOD) * M_PI / 4);
+    // ensure it stays alive
+    static const auto E = sbj->maximalEnergyStorage(Critter::MAX_SIZE);
+    sbj->overrideUsableEnergyStorage(E);
 
-//    bool neutral = (step%2 != _params.neutralFirst);
+    if (!neutral && hasAuditionFlag()) {
+      auto &ears = sbj->ears();
+      ears.fill(0);
+      float val = 0;
+      val = _injectionData[(t-1) % _injectionData.size()];
+      ears[1] = ears[3] = val;
+    }
 
-//    if (!neutral) {
-//      if (hasFlag(Params::SOUND_NOIS)) injectSound(sbj, 0);
-//      if (hasFlag(Params::SOUND_FRND) || hasFlag(Params::SOUND_OPPN))
-//        injectSound(sbj, _testChannel);
-//    }
+    if (!((t-1) % EVAL_PERIOD == 0)) return;
 
-//    if (!((t-1) % PERIOD == 0)) return;
+    if (hasVisionFlag()) {
+      static constexpr Color BLACK {0,0,0};
 
-////    std::cerr << "## Period " << step << "\n";
-//    // Maybe create stuff
-//    if (neutral) {  // Clean previous
-//      if (!_teams[1].empty()) {
-//        for (auto &c: _teams[1])  _simulation.delCritter(c);
-//        _teams[1].clear();
-//      }
+      for (uint i=0; i<_foodlets.size(); i++)
+        _foodlets[i]->setBaseColor(neutral ? BLACK : _params.spec.colors[i]);
+    }
 
-//    } else if (step > 0) {
-//      if (hasFlag(Params::WITH_ALLY)) makeCritter(1, 0, _params.lhs.genome);
-//      if (hasFlag(Params::WITH_OPP1) || hasFlag(Params::WITH_OPP2))
-//        makeCritter(1, 0, _params.rhs.genome);
-//    }
+    using F = Params::Flag;
+    for (Params::Flag f: {F::VISION_EMITTER, F::VISION_RECEIVER,
+                          F::AUDITION_0, F::AUDITION_1,F::AUDITION_2})
+      if (hasFlag(f)) _currentFlags.flip(f);
 
-//    // Apply damages
-//    if (hasFlag(Params::PAIN_ABSL)) {
-//      damage(sbj, !neutral, false);
-//      _currentFlags.flip(Params::PAIN_ABSL);
-//    }
-
-//    if (hasFlag(Params::PAIN_INST)) {
-//      sbj->inPain = neutral ? -1 : INJURY;
-//      _currentFlags.flip(Params::PAIN_INST);
-//    }
-
-//    if (hasFlag(Params::TOUCH)) {
-//      sbj->overrideTouchSensor(0, !neutral);
-//      _currentFlags.flip(Params::TOUCH);
-//    }
-
-//    // manage remaining flags
-//    if (hasFlag(Params::WITH_ALLY)) _currentFlags.flip(Params::WITH_ALLY);
-//    if (hasFlag(Params::WITH_OPP1)) _currentFlags.flip(Params::WITH_OPP1);
-//    if (hasFlag(Params::WITH_OPP2)) _currentFlags.flip(Params::WITH_OPP2);
-
-//    // Manage sound
-//    if (hasFlag(Params::SOUND_NOIS)) _currentFlags.flip(Params::SOUND_NOIS);
-//    if (hasFlag(Params::SOUND_FRND)) _currentFlags.flip(Params::SOUND_FRND);
-//    if (hasFlag(Params::SOUND_OPPN)) _currentFlags.flip(Params::SOUND_OPPN);
-
-//    return;
+  } else {
+    _simulation._finished =
+         (t >= TIMEOUT)
+      || !receiver()->body().IsAwake()
+      || (!_simulation.environment().feedingEvents().empty());
   }
 
-//  bool casualty = (_teams[0].size() < _teamsSize)
-//               || (_teams[1].size() < _teamsSize);
-
-  _simulation._finished =
-       (t >= TIMEOUT)
-    || !receiver()->body().IsAwake()
-    || (!_simulation.environment().feedingEvents().empty());
 }
 
 void Scenario::preDelCritter(Critter *c) {(void)c;}
@@ -270,8 +294,12 @@ float Scenario::score (void) const {
 
     int success = 0;
     if (events.empty()) {
-      const auto dist = [this] (uint id, const simu::Critter *c) {
-        return (_foodlets[id]->body().GetWorldCenter() - c->pos()).Length();
+      const auto vdist = [this] (uint id, const b2Vec2 &pos) {
+        return (_foodlets[id]->body().GetWorldCenter() - pos).Length();
+      };
+
+      const auto cdist = [this, vdist] (uint id, const simu::Critter *c) {
+        return vdist(id, c->pos());
       };
 
       int target = _params.spec.target;
@@ -283,8 +311,14 @@ float Scenario::score (void) const {
       }
 
       if (target >= 0)
-        score += 1 - dist(target, receiver())
-                     / dist(_foodlets.size()-1, emitter());
+        score += 1 - cdist(target, receiver())
+                     / vdist(target, {critterXPos(1), critterYPos()});
+
+//      if (target >= 0) {
+//        std::cerr << "FITNESS IS UNDEREVALUATED\n";
+//        score += 1 - cdist(target, receiver())
+//                    / cdist(_foodlets.size()-1, emitter());
+//      }
 
     } else {
       assert(events.size() == 1);

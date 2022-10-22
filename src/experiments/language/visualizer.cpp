@@ -130,7 +130,7 @@ int main(int argc, char *argv[]) {
   std::string configFile = "auto";  // Default to auto-config
   Verbosity verbosity = Verbosity::QUIET;
 
-  std::string indFile, spec;
+  std::string indFile, scenarioStr, scenarioArg;
 
   int startspeed = 1;
   bool autoquit = false;
@@ -176,7 +176,9 @@ int main(int argc, char *argv[]) {
      cxxopts::value(verbosity))
 
     ("ind", "Splinoid genome", cxxopts::value(indFile))
-    ("scenario", "Scenario name to evaluate", cxxopts::value(spec))
+    ("scenario", "Scenario name to evaluate", cxxopts::value(scenarioStr))
+    ("scenario-arg", "Eventual argument for the requested scenario",
+     cxxopts::value(scenarioArg))
 
     ("start", "Whether to start running immendiatly after initialisation"
               " (and optionally at which speed > 1)",
@@ -305,7 +307,7 @@ int main(int argc, char *argv[]) {
   // ===========================================================================
   // == Data load
 
-  auto params = simu::Evaluator::Params::fromArgv(spec);
+  auto params = simu::Evaluator::Params::fromArgv(scenarioStr, scenarioArg);
   Ind ind = simu::Evaluator::fromJsonFile(indFile);
 
   // ===========================================================================
@@ -602,7 +604,7 @@ int main(int argc, char *argv[]) {
 #endif
 
     MANNViewer av;
-    phenotype::ANN &ann = scenario.receiver()->brain();
+    phenotype::ANN &ann = scenario.subject()->brain();
     simu::Evaluator::applyNeuralFlags(ann, annNeuralTags);
 
     phenotype::ModularANN annAgg (ann);
@@ -675,9 +677,9 @@ int main(int argc, char *argv[]) {
 
     r = a.exec();
 
-    if (!params.flags.any())
+    if (!params.neuralEvaluation())
       std::cout << "Score: " << scenario.score() << " ("
-                << simu::Evaluator::Params::toString(params.type, s_params.spec)
+                << s_params.spec.name
                 << ")\n";
 
 //    Eval::logging_freeData(&log);

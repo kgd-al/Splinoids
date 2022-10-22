@@ -107,7 +107,7 @@ int main(int argc, char *argv[]) {
   Verbosity verbosity = Verbosity::QUIET;
 
   std::string indFile;
-  std::string scenario;
+  std::string scenario, scenarioArg;
 
   std::string outputFolder = "tmp/lg-eval/";
   char overwrite = simu::Simulation::PURGE;
@@ -137,8 +137,8 @@ int main(int argc, char *argv[]) {
 
     ("ind", "Splinoid genome", cxxopts::value(indFile))
     ("scenario", "Scenario name to test", cxxopts::value(scenario))
-//    ("scenario-arg", "Eventual argument for the requested scenario",
-//     cxxopts::value(scenarioArg))
+    ("scenario-arg", "Eventual argument for the requested scenario",
+     cxxopts::value(scenarioArg))
 
     ("lesions", "Lesion type to apply (def: {})", cxxopts::value(lesions))
 
@@ -207,7 +207,7 @@ int main(int argc, char *argv[]) {
   const auto prevInfos = ind.infos;
   const auto prevStats = ind.stats;
 
-  simu::Evaluator eval (scenario);
+  simu::Evaluator eval (scenario, scenarioArg);
 //  eval.setLesionTypes(lesions);
   if (ind.infos == "rmute") eval.muteReceiver = true;
 
@@ -240,7 +240,7 @@ int main(int argc, char *argv[]) {
   std::cout << mseconds << "ms" << std::endl;
 
   bool ok = true;
-  if (!eval.params.flags.any()) {
+  if (!eval.params.neuralEvaluation()) {
     std::cout << "Comparison result for lhs:\n"
               << "\tfitness(es):\n";
     ok &= diffStatsMap(prevFitness, ind.fitnesses);

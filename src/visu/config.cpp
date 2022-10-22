@@ -22,6 +22,7 @@ simu::Color fromQt (const QColor &qc) {
 namespace config {
 #define CFILE Visualisation
 
+DEFINE_SUBCONFIG(ESHNGui, configESHNGui)
 DEFINE_SUBCONFIG(Simulation, configSimulation)
 
 DEFINE_PARAMETER(float, viewZoom, 100)//100)

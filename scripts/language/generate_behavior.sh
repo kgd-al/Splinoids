@@ -27,6 +27,7 @@ line(){
 
 ind="$1"
 scenario=$2
+line
 echo "Processing $ind for scenario $scenario"
 indfolder=$(dirname $ind)/$(basename $ind .dna)
 shift
@@ -89,179 +90,168 @@ else
     }' | tee $communication
   fi  
 fi
-# 
-# ################################################################################
-# # Generic stats
-# stats=$indfolder/stats
-# if [ -f "$stats" ]
-# then
-#   echo "Stats file '$stats' already exists. Skipping"
-# else
-#   $sfolder/evaluate.sh --stats $ind #|| exit 2
-# fi
-# 
+
 # ################################################################################
 # ################################################################################
-# # Neural clustering based on reproductible conditions
-# 
-# neuralclusteringcolors(){
-#   o=$(dirname $1)/$(basename $1 dat)ntags
-#   ltags=$2
-#   if [ -z "$ltags" ]
-#   then
-#     echo "No neural tags provided"
-#     exit 3
-#   fi
-#   awk -vltags="$ltags" '
-#     BEGIN {
-#       split(ltags, tags, ";");
-#       n=length(tags);
-#       printf "// tags: %d", tags[1];
-#       for (i=2; i<=n; i++)
-#         printf ",%d", tags[i];
-#       printf "\n";
-#     }
-#     NR==1 { print "//    ", $0; }
-#     NR>1 {
-#       v=0;
-#       for (i=2; i<=NF; i++)
-#         if ($i != 0 && $i != "nan")
-#           v = or(v, tags[i-1]);
-#           
-#       r=""                    # initialize result to empty (not 0)
-#       a=v                     # get the number
-#       while(a!=0){            # as long as number still has a value
-#         r=((a%2)?"1":"0") r   # prepend the modulos2 to the result
-#         a=int(a/2)            # shift right (integer division by 2)
-#       }
-#      
-#       printf "// %s -> %0*d\n", $0, n, r;
-#       gsub(/[()]/, "", $1);
-#       printf "%s %d\n", $1, v;
-#     }' $1 > $o
-#   echo "Generated '$(ls $o)'"
-# }
-# 
-# ffpass(){
-#   echo "$indfolder/eval_$1_pass/$2"
-# }
-# 
-# archive_eval_folder(){  
-#   idir=$1
-#   odir=$2
-#   echo "$idir -> $odir"
-#   cp -rlf --no-target-directory $idir $odir && rm -r $idir
-# }
-# 
-# do_cluster(){
-#   folder=$1
-#   flags=$2
-#   for f in $folder/*/neurons.dat
-#   do
-#     dfolder=$(dirname $f)
-#     od=$dfolder/$(basename $f .dat)_groups.dat
-#     if [ ! -f $od ]
-#     then
-#       touch $od
-#       python3 $(dirname $0)/mw_neural_clustering.py $f -1
-#       r=$?
-#       if [ $r -eq 41 ]
-#       then
-#         echo "Clustering failed: not enough neurons"
-#       elif [ $r -gt 42 ]
-#       then
-#         echo "Clustering failed: not enough data"
-#       elif [ $r -gt 0 ]
-#       then
-#         echo "Clustering failed!"
-#         exit 2
-#       fi
-#       echo "Generated '$od'"
-#       neuralclusteringcolors $od $flags
-#     fi
-#   done
-#     
-#   aggregate="$folder/neural_groups.dat"
-#   echo "Generating data aggregate: $aggregate"
-#   
-#   ng_dat_files=$(ls $folder/*/neurons_groups.dat)
-# #   tail -n+0 $ng_dat_files
-#   awk '
-#   NR==1{ 
-#     header=$0;
-#     next;
-#   }
-#   FNR == 1 { next; }
-#   {
-#     neurons[$1]=1;
-#     for (i=2; i<=NF; i++) {
-#       if ($i != "nan") {
-#         data[$1,i] += $i;
-#         counts[$1,i]++;
-#       }
-#     }
-#   }
-#   END {
-#     print header;
-#     for (n in neurons) {
-#       printf "%s", n;
-#       for (j=2; j<=NF; j++) printf " %d", (data[n,j] > 0);
-#       printf "\n";
-#     }
-#   }' $ng_dat_files > $aggregate
-#   echo "Generated $aggregate"
-# 
-#   # Mean
-#   # for (j=2; j<=NF; j++) printf " %.1f", data[n,j]/counts[n,j];
-# 
-#   # Union
-#   # for (j=2; j<=NF; j++) printf " %.1f", (data[n,j] > 0);
-#   
-#   # Intersection (specifically for AEB)
-#   # for (j=2; j<=NF; j++) printf " %.1f", (data[n,j] > thr);
-#   
-#   neuralclusteringcolors $aggregate $flags
-# }
-# 
+# Neural clustering based on reproductible conditions
+
+neuralclusteringcolors(){
+  o=$(dirname $1)/$(basename $1 dat)ntags
+  ltags=$2
+  if [ -z "$ltags" ]
+  then
+    echo "No neural tags provided"
+    exit 3
+  fi
+  awk -vltags="$ltags" '
+    BEGIN {
+      split(ltags, tags, ";");
+      n=length(tags);
+      printf "// tags: %d", tags[1];
+      for (i=2; i<=n; i++)
+        printf ",%d", tags[i];
+      printf "\n";
+    }
+    NR==1 { print "//    ", $0; }
+    NR>1 {
+      v=0;
+      for (i=2; i<=NF; i++)
+        if ($i != 0 && $i != "nan")
+          v = or(v, tags[i-1]);
+          
+      r=""                    # initialize result to empty (not 0)
+      a=v                     # get the number
+      while(a!=0){            # as long as number still has a value
+        r=((a%2)?"1":"0") r   # prepend the modulos2 to the result
+        a=int(a/2)            # shift right (integer division by 2)
+      }
+     
+      printf "// %s -> %0*d\n", $0, n, r;
+      gsub(/[()]/, "", $1);
+      printf "%s %d\n", $1, v;
+    }' $1 > $o
+  echo "Generated '$(ls $o)'"
+}
+
+ffpass(){
+  echo "$indfolder/eval_$1_pass/$2"
+}
+
+archive_eval_folder(){  
+  idir=$1
+  odir=$2
+  echo "$idir -> $odir"
+  cp -rlf --no-target-directory $idir $odir && rm -r $idir
+}
+
+do_cluster(){
+  folder=$1
+  flags=$2
+  for f in $folder/*/neurons.dat
+  do
+    dfolder=$(dirname $f)
+    od=$dfolder/$(basename $f .dat)_groups.dat
+    if [ ! -f $od ]
+    then
+      touch $od
+      python3 $(dirname $0)/mw_neural_clustering.py $f -1
+      r=$?
+      if [ $r -eq 41 ]
+      then
+        echo "Clustering failed: not enough neurons"
+      elif [ $r -gt 42 ]
+      then
+        echo "Clustering failed: not enough data"
+      elif [ $r -gt 0 ]
+      then
+        echo "Clustering failed!"
+        exit 2
+      fi
+      echo "Generated '$od'"
+      neuralclusteringcolors $od $flags
+    fi
+  done
+    
+  aggregate="$folder/neural_groups.dat"
+  echo "Generating data aggregate: $aggregate"
+  
+  ng_dat_files=$(ls $folder/*/neurons_groups.dat)
+#   tail -n+0 $ng_dat_files
+  awk '
+  NR==1{ 
+    header=$0;
+    next;
+  }
+  FNR == 1 { next; }
+  {
+    neurons[$1]=1;
+    for (i=2; i<=NF; i++) {
+      if ($i != "nan") {
+        data[$1,i] += $i;
+        counts[$1,i]++;
+      }
+    }
+  }
+  END {
+    print header;
+    for (n in neurons) {
+      printf "%s", n;
+      for (j=2; j<=NF; j++) printf " %d", (data[n,j] > 0);
+      printf "\n";
+    }
+  }' $ng_dat_files > $aggregate
+  echo "Generated $(ls $aggregate)"
+
+  # Mean
+  # for (j=2; j<=NF; j++) printf " %.1f", data[n,j]/counts[n,j];
+
+  # Union
+  # for (j=2; j<=NF; j++) printf " %.1f", (data[n,j] > 0);
+  
+  # Intersection (specifically for AEB)
+  # for (j=2; j<=NF; j++) printf " %.1f", (data[n,j] > thr);
+  
+  neuralclusteringcolors $aggregate $flags
+}
+
 # ################################################################################
-# # Evaluation 1: pain/touch
-# echo
-# line
-# echo "First-pass evaluation 1: pain/touch"
-# line
-# 
-# pfolder=$(ffpass "first" "e1")
-# validscenarios="e1_a e1_i e1_t"
-# 
-# #                         Touch
-# #                         | Absolute pain
-# #                         | | Instantaneous pain
-# #                         v v v
-# currentflags="0;0;0;0;0;0;4;2;1"
-# 
-# if ls $pfolder/* >/dev/null 2>&1
-# then
-#   echo "Data folder '$pfolder' already populated. Skipping"
-# else
-#   mkdir -p $pfolder
-#   
-#   opp=$(head -n 1 <<< "$opponents")
-#   for s in $validscenarios
-#   do
-#     echo "Scenario: $s"
-#     $sfolder/evaluate.sh $ind $opp --scenario $s
-#     
-#     archive_eval_folder $(datafolder $ind $opp $s) $pfolder/$s
-#   done
-# fi
-# 
-# aggregate="$pfolder/neurons_groups.dat"
-# if [ -f "$aggregate" ]
-# then
-#   echo "Neural aggregate '$aggregate' already generated. Skipping"
-# else
-#   do_cluster $pfolder $currentflags
-# fi
+# # Evaluation for c22
+if [ "$scenario" == "c22" ]
+then
+  scenario_arg=$indfolder/baseline/c22_XX/
+
+  echo
+  line
+  echo "First-pass evaluation for $scenario"
+  line
+
+  pfolder=$(ffpass "first" "c22")
+
+  #               Hearing "blue"  
+  #               | Hearing "red"
+  #               | | Receiver vision (multiple foodlets)
+  #               | | | Emitter vision (single foodlet)
+  #               v v v v
+  currentflags="0;8;4;2;1"
+
+  if ls $pfolder/* >/dev/null 2>&1
+  then
+    echo "Data folder '$pfolder' already populated. Skipping"
+  else
+    mkdir -p $pfolder
+    
+    ./scripts/language/evaluate.sh $ind --data-folder $pfolder \
+      --scenario ne_c22 --scenario-arg $scenario_arg 
+  fi
+
+  aggregate="$pfolder/neurons_groups.dat"
+  if [ -f "$aggregate" ]
+  then
+    echo "Neural aggregate '$aggregate' already generated. Skipping"
+  else
+    do_cluster $pfolder $currentflags
+  fi
+fi
 # 
 # ################################################################################
 # # Evaluation 2: ally/opponent 1/opponent 2 discrimination
@@ -369,17 +359,6 @@ fi
 #   echo $opponent
 # }
 # 
-# scenario_arg(){
-#   case $1 in
-#   e3_f)
-#     echo ' --scenario-arg' $(get_channel $ind)
-#     ;;
-#   e3_o)
-#     opp=$(get_opponent_for_e3o)
-#     echo ' --scenario-arg' $(get_channel $opp)
-#     ;;
-#   esac
-# }
 # 
 # if ls $pfolder/* >/dev/null 2>&1
 # then
@@ -458,47 +437,35 @@ fi
 # 
 # # cat $(dirname $aggregate)/$(basename $aggregate .dat).ntags
 # 
-# ################################################################################
-# # Second pass: rerun everything while monitoring modules
-# echo
-# line
-# echo "Second-pass evaluations"
-# line
-# 
-# for e in $indfolder/eval_first_pass/e[0-9]
-# do
-#   eval=$(basename $e)  
-#   ntags=$e/neural_groups.ntags
-#   
-#   pfolder=$(ffpass "second" "$eval")
-#   if ls $pfolder/* >/dev/null 2>&1
-#   then
-#     echo 'Data folder '$pfolder' already exists. Skipping'
-#   else
-#     for s in $e/e*;
-#     do
-#       scenario=$(basename $s)
-#       line
-#       echo "# $scenario"
-#       opp=$(get_opponent_for_scenario $scenario)
-#       set -x
-#       $sfolder/evaluate.sh $ind $opp \
-#         --scenario $scenario $(scenario_arg $scenario $opp) \
-#         -f $pfolder \
-#         --ann-aggregate=$ntags > /dev/null
-#       set +x
-#       mv -v $pfolder/*$scenario $pfolder/$scenario
-#     done
-#     
-#     for opp in $opponents
-#     do
-#       line
-#       echo "# $e/$opp"
-#       $sfolder/evaluate.sh $ind $opp -f $pfolder --ann-aggregate=$ntags > /dev/null
-#     done
-#   fi    
-# done
-# 
+################################################################################
+# Second pass: rerun everything while monitoring modules
+echo
+line
+echo "Second-pass evaluations"
+line
+
+ntags=$indfolder/eval_first_pass/$scenario/neural_groups.ntags
+
+pfolder=$(ffpass "second" "$scenario")
+if ls $pfolder/* >/dev/null 2>&1
+then
+  echo 'Data folder '$pfolder' already exists. Skipping'
+else
+  line '='
+  echo "Monitoring modules on natural scenarios"
+  $sfolder/evaluate.sh $ind \
+    --scenario $scenario \
+    -f $pfolder \
+    --ann-aggregate=$ntags
+    
+  line '='
+  echo "Monitoring modules on evaluation scenarios"
+  $sfolder/evaluate.sh $ind \
+    --scenario ne_$scenario --scenario-arg $scenario_arg \
+    -f $pfolder \
+    --ann-aggregate=$ntags
+fi    
+
 # ################################################################################
 # # Third pass: rerun just combat while monitoring meta-modules
 # echo

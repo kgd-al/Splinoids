@@ -45,7 +45,8 @@ line(){
   echo
 }
 
-echo "Processing $ind for scenario $scenario"
+line
+echo "Generating visuals for $ind for scenario $scenario"
 indfolder=$indbase
 shift
 
@@ -100,7 +101,7 @@ plotoutputs(){
     set title 'Voice';
     plot for [c in 'VV VC'] f using (column(c)) with lines title c;
 
-    unset multiplot;" #|| rm -fv $outputsoverview
+    unset multiplot;"
 }
 
 plotmodules(){
@@ -247,9 +248,9 @@ do
     " || rm -fv $soundoverview
     ls $soundoverview
     
-#     rm $data
+    rm $data
   fi
-#   
+  
 #   for f in $dfolder/outputs*.dat
 #   do
 #     o=$(dirname $f)/$(basename $f .dat).png
@@ -265,7 +266,7 @@ done
 
 line '#'
 aggregate=$dfolder/summary.png
-if false # [ -f "$aggregate" ]
+if [ -f "$aggregate" ]
 then
   glog S 'Behavorial aggregate' $aggregate
 else
@@ -340,140 +341,74 @@ else
     ls $aggregate
 fi
 
-# ################################################################################
-# # Communication overview
-# 
-# soundoverview=$indfolder/sounds.png
-# if [ -f "$soundoverview" ]
-# then
-#   echo "Sound overview '$soundoverview' already generated. Skipping"
-# else
-#   soundupper=$indfolder/sounds_mk.png
-#   gnuplot -e "
-#     n=$teamsize;
-#     files=system('ls $indfolder/*/acoustics.dat');
-#         
-#     set output '$soundupper';
-#     set term pngcairo size 1280, 800;
-# 
-#     set multiplot layout words(files), n;
-#     set key above;
-#     set style fill solid .75;
-#     
-#     set xrange [0:500]; set yrange [0:1];
-#     do for [i=1:n] {
-#       do for [f in files] {
-#         plot for [j=10:12] f using 0:12*(i-1)+j:(0) with filledcurves title columnhead;
-#       };
-#     };
-#     
-#     unset multiplot;
-#   " #|| rm -v "$soundoverview"
-#   
-#   soundlower=$indfolder/sounds_eval.png
-#   gnuplot -e "
-#     set output '$soundlower';
-#     set term pngcairo size 1280, 800;
-#     
-#     files=system('ls $indfolder/eval_first_pass/e1/*/acoustics.dat');
-#     set multiplot layout words(files), 1;
-#     set xrange [0:600]; set yrange [0:1];
-#     set style fill solid .25;
-#     set key above;
-#     
-#     do for [f in files] {
-#       plot for [i=10:12] f using 0:i:(0) with filledcurves title columnhead;
-#     };
-#     
-#     unset multiplot;
-#   "
-#   
-#   montage -tile x2 -geometry +0+0 $indfolder/sounds_{mk,eval}.png $soundoverview
-#   echo "Generated $soundoverview"
-# fi
-# 
-# 
-# ################################################################################
-# # Neural clustering based on reproductible conditions
-# 
-# echo "Plotting neural clustering (first pass)"
-# 
-# ffpass(){
-#   echo "$indfolder/eval_$1_pass/$2"
-# }
-# firstopp=$(head -n 1 <<< "$opponents")
-# 
-# # Rendering non-aggregated ann
-# # for e in $pfolder/*/
-# # do
-# #   aggregate="$e/mann.$ext"
-# #   if [ -f "$aggregate" ]
-# #   then
-# #     echo "ANN coloring '$aggregate' already generated. Skipping"
-# #   else
-# #     CMD=yes $ofolder/evaluate.sh --gui $ind $firstopp --overwrite i \
-# #       --ann-render=$ext --ann-aggregate=-1 --ann-tags=$e/neurons_groups.ntags 
-# #     echo "Generated $aggregate"
-# #   fi
-# # done
-# 
-# for e in e1 e2 e3
-# do
-#   pfolder=$(ffpass "first" $e)
-#   
-#   for f in $pfolder/*/outputs*.dat
-#   do
-#     o=$(dirname $f)/$(basename $f .dat).png
-#     if [ -f "$o" ]
-#     then
-#       echo "Output overview '$o' already generated. Skipping"
-#     else
-#       plotoutputs $f $o
-#       echo "Generated outputs overview '$o'"
-#     fi
-#   done
-# 
-#   # Rendering aggregated clustering
-#   aggregate="$pfolder/mann.$ext"
-#   if [ -f "$aggregate" ]
-#   then
-#     echo "ANN clustering '$aggregate' already generated. Skipping"
-#   else
-#     echo "Generating ANN clustering: $aggregate"
-#     
-#     $sfolder/evaluate.sh --gui $ind $firstopp --overwrite i \
-#       --ann-render=$ext --ann-aggregate --ann-tags=$pfolder/neural_groups.ntags
-#     
-#     echo "Generated $aggregate"
-#   fi
-# done
-# 
-# # Render meta-modules
-# pfolder=$(ffpass "first" "")
-# for depth in false
-# do
-#   for symmetry in false
-#   do
-#     suffix=""
-#     [ $depth == "true" ] && suffix="${suffix}_depth"
-#     [ $symmetry == "true" ] && suffix="${suffix}_symmetry"
-#     aggregate="$pfolder/mann$suffix.$ext"
-#     if [ -f "$aggregate" ]
-#     then
-#       echo "ANN clustering '$aggregate' already generated. Skipping"
-#     else
-#       echo "Generating ANN clustering: $aggregate"
-#       
-#       mannWithDepth=$depth mannWithSymmetry=$symmetry CMD=yes $sfolder/evaluate.sh --gui $ind $firstopp --overwrite i \
-#         --ann-render=$ext --ann-aggregate --ann-tags=$pfolder/neural_groups.ntags
-#         
-#       [ ! -z "$suffix" ] && mv -v $pfolder/mann.$ext $aggregate
-#       
-#       echo "Generated $aggregate"
-#     fi
-#   done
-# done
-# 
+################################################################################
+# Neural clustering based on reproductible conditions
+
+echo
+line
+echo "Plotting neural clustering"
+line
+
+ffpass(){
+  echo "$indfolder/eval_$1_pass/$2"
+}
+pfolder=$(ffpass "second" "$scenario")
+
+for f in $pfolder/*/outputs*.dat
+do
+  o=$(dirname $f)/$(basename $f .dat).png
+  if [ -f "$o" ]
+  then
+    echo "Output overview '$o' already generated. Skipping"
+  else
+    plotoutputs $f $o
+    echo "Generated outputs overview '$o'"
+  fi
+done
+
+for f in $pfolder/*/modules*.dat
+do
+  o=$(dirname $f)/$(basename $f .dat).png
+  if [ -f "$o" ]
+  then
+    echo "Modules overview '$o' already generated. Skipping"
+  else
+    plotmodules $f $o "CBARE"
+    echo "Generated modules overview '$o'"
+  fi
+done
+
+# Rendering aggregated clustering
+colors=$'4: #FF0000\n8: #0000FF\n1: #00FF00\n2: #FFFF00'
+fpfolder=$(ffpass "first" "$scenario")
+for depth in true false
+do
+  for symmetry in true false
+  do
+    suffix=""
+    [ $depth == "true" ] && suffix="${suffix}_depth"
+    [ $symmetry == "true" ] && suffix="${suffix}_symmetry"
+    aggregate="$indfolder/mann$suffix.$ext"
+    if [ -f "$aggregate" ]
+    then
+      echo "ANN clustering '$aggregate' already generated. Skipping"
+    else
+      echo "Generating ANN clustering: $aggregate"
+      
+      annColorMapping=$colors mannWithDepth=$depth mannWithSymmetry=$symmetry $sfolder/evaluate.sh \
+        --gui $ind --overwrite i --scenario ne_${scenario}_nul \
+        --ann-render=$ext --ann-aggregate \
+        --ann-tags=$fpfolder/neural_groups.ntags
+      r=$?
+      [ $r -ne 0 ] && exit $r
+        
+      mv -v $fpfolder/mann.$ext $aggregate
+      
+      echo "Generated $aggregate"
+    fi
+  done
+done
+
 # declare -A flags=([e1]="THI" [e2]="CBA" [e3]="OFN")
 # declare -p flags
 # for e in e1 e2 e3
@@ -490,18 +425,6 @@ fi
 #     else
 #       plotoutputs $f $o
 #       echo "Generated outputs overview '$o'"
-#     fi
-#   done
-# 
-#   for f in $pfolder/*/modules*.dat
-#   do
-#     o=$(dirname $f)/$(basename $f .dat).png
-#     if [ -f "$o" ]
-#     then
-#       echo "Modules overview '$o' already generated. Skipping"
-#     else
-#       plotmodules $f $o $flag
-#       echo "Generated modules overview '$o'"
 #     fi
 #   done
 # done

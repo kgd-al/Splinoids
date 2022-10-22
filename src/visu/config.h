@@ -2,6 +2,7 @@
 #define VISU_CONFIG_H
 
 #include "../simu/config.h"
+#include "kgd/eshn/gui/config.h"
 
 #include <QPointF>
 #include <QColor>
@@ -21,6 +22,7 @@ DEFINE_PRETTY_ENUMERATION(BrainDead, IGNORE = -1, UNSET = 0, SET = 1)
 namespace config {
 
 struct CONFIG_FILE(Visualisation) {
+  DECLARE_SUBCONFIG(ESHNGui, configESHNGui)
   DECLARE_SUBCONFIG(Simulation, configSimulation)
 
   DECLARE_PARAMETER(float, viewZoom)
