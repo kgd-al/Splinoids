@@ -91,6 +91,13 @@ do
   r=$?
   if [ $r -ne 0 ]
   then
+    ## REMOVE
+    if grep -q "Failed to extract a valid range" $base/.gn_bh.log 
+    then
+      echo "Ignoring $c until mute receivers are handled" >&2
+      continue
+    fi
+  
     echo "Evaluation of '$c' failed with exit code '$r'. Aborting" >&2
     exit $r
   fi
@@ -101,7 +108,16 @@ do
     $sfolder/plot_behavior.sh $c $scenario > $base/.pt_bh.log 2>&1
   fi
   
-done | pv -l -s $(($nchamps * $steps)) > /dev/null
+  r=$?
+  if [ $r -ne 0 ]
+  then
+    echo "Rendering of '$c' failed with exit code '$r'. Aborting" >&2
+    exit $r
+  fi
+  
+  [ -f "generate_all.stop" ] && break
+  
+done | pv -l -s $(($nchamps * $steps)) > .generate_all.log
 
 r=${PIPESTATUS[0]}
 exit $r

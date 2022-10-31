@@ -27,13 +27,15 @@ void sigint_manager (int) {
 //  return p? l : -2;
 //}
 
+static constexpr auto PAD = 15;
+
 template <typename T>
 bool diffStatsMap (const T &prev, const T &curr) {
   bool allOk = true;
 
   for (const auto &p: curr) {
     auto it = prev.find(p.first);
-    std::cout << "\t" << std::setw(10) << p.first << ": ";
+    std::cout << "\t" << std::setw(PAD) << p.first << ": ";
     if (it != prev.end()) {
       bool ok = (p.second == it->second);
       if (ok)
@@ -67,7 +69,7 @@ bool diffStatsArray (const T &prev, const T &curr, const U &fields) {
        ++it_p, ++it_c, ++it_l, i++) {
     auto v_p = *it_p, v_c = *it_c;
     bool ok = (v_p == v_c);
-    std::cout << "\t" << std::setw(10) << *it_l << ": ";
+    std::cout << "\t" << std::setw(PAD) << *it_l << ": ";
     if (ok)
       std::cout << GAGA_COLOR_GREEN;
     else

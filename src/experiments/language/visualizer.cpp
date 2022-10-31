@@ -299,7 +299,7 @@ int main(int argc, char *argv[]) {
 //  config::Simulation::auditionRange.overrideWith(0);
 //#endif
 
-  config::Simulation::verbosity.overrideWith(0);
+//  config::Simulation::verbosity.overrideWith(0);
   if (verbosity != Verbosity::QUIET)
     config::Visualisation::printConfig(std::cout);
 

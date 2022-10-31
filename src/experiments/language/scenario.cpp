@@ -50,8 +50,9 @@ std::ostream& operator<< (std::ostream &os, const Scenario::Spec &s) {
   }
   os << " }";
 
-  if (!s.arg.empty())
-    os << " [" << s.arg << "]";
+  static const auto &TPS = config::Simulation::ticksPerSecond();
+  if (!s.audioSample.empty())
+    os << " [ " << int(100*s.audioSample.size() / float(TPS)) / 100 << "s ]";
   return os;
 }
 
@@ -128,7 +129,7 @@ void Scenario::init(const Params &params) {
   if (neuralEvaluation()) {
     makeCritter(0, params.genome, params.brainTemplate);
 
-    if (hasFlag(Params::VISION_EMITTER))
+    if (hasVisionEmitterFlag())
       makeFoodlet(.5, 1, params.spec.colors.front());
 
     else if (hasFlag(Params::VISION_RECEIVER)) {
@@ -136,48 +137,8 @@ void Scenario::init(const Params &params) {
       for (uint i=0; i<n; i++)
         makeFoodlet(i/(n-1), 1, params.spec.colors[i]);
 
-    } else if (hasAuditionFlag()) {
-      std::ifstream ifs (_params.spec.arg);
-      if (!ifs)
-        utils::Thrower("Failed to open '", _params.spec.arg, "'");
-      std::string line;
-      std::getline(ifs, line);
+//    } else if (hasAuditionFlag()) {
 
-      static constexpr auto EMITTER_COLUMN_HEADER = "EO0";
-      auto headers = utils::split(line, ' ');
-      auto it = std::find(headers.begin(), headers.end(), EMITTER_COLUMN_HEADER);
-      if (it == headers.end())
-        utils::Thrower("Failed to find column ", EMITTER_COLUMN_HEADER);
-      uint col = std::distance(headers.begin(), it);
-
-      auto data = _injectionData;
-      while (std::getline(ifs, line)) {
-        std::stringstream ss (utils::split(line, ' ')[col]);
-        float val;
-        ss >> val;
-        data.push_back(val);
-      }
-
-      std::cerr << "Extracted data:\n  [";
-      for (float v: data) std::cerr << " " << v;
-      std::cerr << "]\n";
-
-      const auto LOOP_TIMESTEPS =
-          EVAL_STEP_DURATION * config::Simulation::ticksPerSecond() - 1;
-
-      uint il, ir;
-      for (il = 0; il<data.size() && data[il] == 0; il++);
-      for (ir = data.size()-1;
-           ir < data.size() && (data[ir] == 0 || ir>LOOP_TIMESTEPS);
-           ir--);
-
-      std::cerr << "Limiting auditive sample to [" << il << ":" << ir << "]\n";
-      _injectionData = decltype(data)(data.begin()+il, data.begin()+ir+1);
-      _injectionData.push_back(0);  // Pad with a zero
-
-      std::cerr << "Target sample:\n  [";
-      for (float v: _injectionData) std::cerr << " " << v;
-      std::cerr << "]\n";
     }
 
   } else {
@@ -227,13 +188,16 @@ void Scenario::postStep(void) {
   static const auto TPS = config::Simulation::ticksPerSecond();
   static const auto TIMEOUT = DURATION * TPS;
   static const auto EVAL_PERIOD = EVAL_STEP_DURATION * TPS;
-  const auto t = _simulation.currTime().timestamp();
+  const auto t = _simulation.currTime().timestamp() - 1;
 
   _mute &= emitter()->silent(false);
 
   if (neuralEvaluation()) {
     const auto step = t / EVAL_PERIOD;
-    if (step >= EVAL_STEPS)  _simulation._finished = true;
+    if (step >= EVAL_STEPS) {
+      _simulation._finished = true;
+      return;
+    }
 
     bool neutral = (step%2);
     Critter *sbj = *_critters.begin();
@@ -246,11 +210,12 @@ void Scenario::postStep(void) {
       auto &ears = sbj->ears();
       ears.fill(0);
       float val = 0;
-      val = _injectionData[(t-1) % _injectionData.size()];
+      const auto &audio = _params.spec.audioSample;
+      val = audio[(t % EVAL_PERIOD) % audio.size()];
       ears[1] = ears[3] = val;
     }
 
-    if (!((t-1) % EVAL_PERIOD == 0)) return;
+    if (!(t % EVAL_PERIOD == 0)) return;
 
     if (hasVisionFlag()) {
       static constexpr Color BLACK {0,0,0};
@@ -260,13 +225,15 @@ void Scenario::postStep(void) {
     }
 
     using F = Params::Flag;
-    for (Params::Flag f: {F::VISION_EMITTER, F::VISION_RECEIVER,
-                          F::AUDITION_0, F::AUDITION_1,F::AUDITION_2})
+    for (Params::Flag f: {F::VISION_RECEIVER,
+                          F::VISION_E0,   F::VISION_E1,   F::VISION_E2,
+                          F::AUDITION_E0, F::AUDITION_E1, F::AUDITION_E2,
+                          F::AUDITION_R0, F::AUDITION_R1, F::AUDITION_R2})
       if (hasFlag(f)) _currentFlags.flip(f);
 
   } else {
     _simulation._finished =
-         (t >= TIMEOUT)
+         (t >= TIMEOUT-1)
       || !receiver()->body().IsAwake()
       || (!_simulation.environment().feedingEvents().empty());
   }

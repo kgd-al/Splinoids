@@ -95,11 +95,8 @@ plotoutputs(){
     set title 'Motors';
     plot for [c in 'ML MR'] f using (column(c)) with lines title c;
     
-    set title 'Clock speed';
-    plot for [c in 'CS'] f using (column(c)) with lines title c;
-    
     set title 'Voice';
-    plot for [c in 'VV VC'] f using (column(c)) with lines title c;
+    plot for [c in 'VV'] f using (column(c)) with lines title c;
 
     unset multiplot;"
 }
@@ -116,6 +113,11 @@ plotmodules(){
   head -n 1 $1
   line =
   cols=$(awk -vflags="$3" 'NR==1 {
+      if (index(flags, ";"))
+        split(flags, lflags, ";");
+      else
+        for (i=l; i<=length(flags); i++) lflags[i] = flags[length(flags)-i+1];
+        
       for(i=2; i<=NF; i++) {
         if (substr($i, length($i), 1) == "M") {
           f=substr($i, 1, length($i)-1);
@@ -123,9 +125,9 @@ plotmodules(){
             name = "Neutral";
           else {
             name = "";
-            for (j=0; j<length(flags); j++)
+            for (j=0; j<length(lflags); j++)
               if (and(f, 2^j))
-                name = name substr(flags, length(flags)-j, 1);
+                name = name lflags[j+1];
           }
           print i, f, name;
         }
@@ -247,8 +249,6 @@ do
       unset multiplot;
     " || rm -fv $soundoverview
     ls $soundoverview
-    
-    rm $data
   fi
   
 #   for f in $dfolder/outputs*.dat
@@ -292,10 +292,15 @@ else
   grep -e "lg_" <<< $ind || stats=$(jq -r '"lg: \(.fitnesses.lg)"' $ind; cat <<< $stats)
   stats=$(awk '{ printf "%s %g\n", $1, $2 }' <<< "$stats" | column -t)
 
+  lights=$(grep "${scenario}_" <<< "$labels" \
+    | awk -F: '{printf "xc:%s ", ($3 > 1) ? "green" : "red"}')
+  
+  header=$(line _ 20)
   width=$((1920 / $(wc -w <<< $subcases)))
   convert -family Courier \
-          \( -font Courier -pointsize 24 label:"$ind" +append \) \
-          \( -font Courier -pointsize 18 label:"------\n$stats\n" +append \) \
+          \( -font Courier -pointsize 24 label:"$ind" \) \
+          \( -size 16x16 -border 1 $lights +append -size x \) \
+          \( -font Courier -pointsize 18 label:"$header\n$stats\n" \) \
           \( $traces -resize ${width}x +append \) \
           \( $sounds -resize ${width}x +append \) \
           \( $labels -gravity center -extent ${width}x -font Courier  +append \) \
@@ -349,63 +354,80 @@ line
 echo "Plotting neural clustering"
 line
 
-ffpass(){
-  echo "$indfolder/eval_$1_pass/$2"
-}
-pfolder=$(ffpass "second" "$scenario")
-
-for f in $pfolder/*/outputs*.dat
+for f in $indfolder/eval_second_pass/*/
 do
-  o=$(dirname $f)/$(basename $f .dat).png
-  if [ -f "$o" ]
-  then
-    echo "Output overview '$o' already generated. Skipping"
-  else
-    plotoutputs $f $o
-    echo "Generated outputs overview '$o'"
-  fi
-done
+  pfolder=$f
 
-for f in $pfolder/*/modules*.dat
-do
-  o=$(dirname $f)/$(basename $f .dat).png
-  if [ -f "$o" ]
-  then
-    echo "Modules overview '$o' already generated. Skipping"
-  else
-    plotmodules $f $o "CBARE"
-    echo "Generated modules overview '$o'"
-  fi
-done
-
-# Rendering aggregated clustering
-colors=$'4: #FF0000\n8: #0000FF\n1: #00FF00\n2: #FFFF00'
-fpfolder=$(ffpass "first" "$scenario")
-for depth in true false
-do
-  for symmetry in true false
+  for f in $pfolder/*/outputs*.dat
   do
-    suffix=""
-    [ $depth == "true" ] && suffix="${suffix}_depth"
-    [ $symmetry == "true" ] && suffix="${suffix}_symmetry"
-    aggregate="$indfolder/mann$suffix.$ext"
-    if [ -f "$aggregate" ]
+    o=$(dirname $f)/$(basename $f .dat).png
+    if [ -f "$o" ]
     then
-      echo "ANN clustering '$aggregate' already generated. Skipping"
+      echo "Output overview '$o' already generated. Skipping"
     else
-      echo "Generating ANN clustering: $aggregate"
-      
-      annColorMapping=$colors mannWithDepth=$depth mannWithSymmetry=$symmetry $sfolder/evaluate.sh \
-        --gui $ind --overwrite i --scenario ne_${scenario}_nul \
-        --ann-render=$ext --ann-aggregate \
-        --ann-tags=$fpfolder/neural_groups.ntags
-      r=$?
-      [ $r -ne 0 ] && exit $r
-        
-      mv -v $fpfolder/mann.$ext $aggregate
-      
-      echo "Generated $aggregate"
+      plotoutputs $f $o
+      echo "Generated outputs overview '$o'"
     fi
+  done
+
+  for f in $pfolder/*/modules*.dat
+  do
+    o=$(dirname $f)/$(basename $f .dat).png
+    if [ -f "$o" ]
+    then
+      echo "Modules overview '$o' already generated. Skipping"
+    else
+      plotmodules $f $o "A_e;A_r;V_e;V_r"
+      echo "Generated modules overview '$o'"
+    fi
+  done
+
+  # Rendering aggregated clustering
+  colors=$'8: #00FFFF\n4: #FFFF00\n2: #0000FF\n1: #FF0000'
+  
+  # may be generate global key
+  aggregate="$indfolder/../../../mann_key.png"
+  if [ ! -f "$aggregate" ]
+  then
+    cc(){
+      awk -vc=$1 'NR==c{print($2)}' <<< "$colors"
+    }
+    echo "Generating global key '$aggregate'"
+    convert -size 64x64 -gravity center \
+      \( null: label:Receiver label:Emitter +append \) \
+      \( label:Vision xc:$(cc 4) xc:$(cc 3) +append \) \
+      \( label:Audition xc:$(cc 2) xc:$(cc 1) +append \) \
+      -append $aggregate
+    ls $aggregate
+  fi
+  
+  fpfolder=$(sed 's/eval_second/eval_first/' <<< $pfolder)
+  for depth in false #true false
+  do
+    for symmetry in false #true false
+    do
+      suffix=""
+      [ $depth == "true" ] && suffix="${suffix}_depth"
+      [ $symmetry == "true" ] && suffix="${suffix}_symmetry"
+      aggregate="$pfolder/mann$suffix.$ext"
+      if false #[ -f "$aggregate" ]
+      then
+        echo "ANN clustering '$aggregate' already generated. Skipping"
+      else
+        echo "Generating ANN clustering: $aggregate"
+        
+        annColorMapping=$colors mannWithDepth=$depth mannWithSymmetry=$symmetry $sfolder/evaluate.sh \
+          --gui $ind --overwrite i --scenario ne_${scenario}_null \
+          --ann-render=$ext --ann-aggregate \
+          --ann-tags=$fpfolder/neural_groups.ntags
+        r=$?
+        [ $r -ne 0 ] && exit $r
+          
+        mv -v $fpfolder/mann.$ext $aggregate
+        
+        echo "Generated $aggregate"
+      fi
+    done
   done
 done
 

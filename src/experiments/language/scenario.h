@@ -28,8 +28,9 @@ public:
     // last is right-hand side (except for neural evaluations)
     std::vector<Color> colors;
 
-    // optional argument (e.g. file name for auditive neural evaluation)
-    std::string arg;
+    // For neural evaluation.
+    // Recording of emitter/receiver in 'normal' conditions
+    std::vector<float> audioSample;
 
     std::string name;
 
@@ -43,18 +44,12 @@ public:
     Spec spec;
 
     enum Flag {
-      // For Directions:
-      //  - vision: 2 (one per role)
-      //  - audition: 3 (one per direction)
-
-      // For Colors:
-      //  - vision: 2 (one per role, merge all colors)
-      //  - audition: n (one per vocalized color, implies some overlap)
-
-      VISION_EMITTER, VISION_RECEIVER,
-      AUDITION_0, AUDITION_1, AUDITION_2
+      VISION_RECEIVER,
+      VISION_E0, VISION_E1, VISION_E2,
+      AUDITION_R0, AUDITION_R1, AUDITION_R2,
+      AUDITION_E0, AUDITION_E1, AUDITION_E2
     };
-    using Flags = std::bitset<5>;
+    using Flags = std::bitset<10>;
     Flags flags;
 
     static bool neuralEvaluation(Type t) {
@@ -96,15 +91,31 @@ public:
     return _params.flags.test(f);
   }
 
+  bool hasVisionEmitterFlag (void) {
+    return hasFlag(Params::VISION_E0)
+        || hasFlag(Params::VISION_E1)
+        || hasFlag(Params::VISION_E2);
+  }
+
   bool hasVisionFlag (void) {
-    return hasFlag(Params::VISION_EMITTER)
+    return hasVisionEmitterFlag()
         || hasFlag(Params::VISION_RECEIVER);
   }
 
+  bool hasEmitterAuditionFlag (void) {
+    return hasFlag(Params::AUDITION_E0)
+        || hasFlag(Params::AUDITION_E1)
+        || hasFlag(Params::AUDITION_E2);
+  }
+
+  bool hasReceiverAuditionFlag (void) {
+    return hasFlag(Params::AUDITION_R0)
+        || hasFlag(Params::AUDITION_R1)
+        || hasFlag(Params::AUDITION_R2);
+  }
+
   bool hasAuditionFlag (void) {
-    return hasFlag(Params::AUDITION_0)
-        || hasFlag(Params::AUDITION_1)
-        || hasFlag(Params::AUDITION_2);
+    return hasEmitterAuditionFlag() || hasReceiverAuditionFlag();
   }
 
   const auto& currentFlags (void) const {
@@ -144,9 +155,6 @@ private:
   Params::Flags _currentFlags;
 
   bool _mute;
-
-  // For neural evaluation. Recording of emitter in 'normal' conditions
-  std::vector<float> _injectionData;
 
   Critter* makeCritter (uint id, const genotype::Critter &genome,
                         const phenotype::ANN *brainTemplate);

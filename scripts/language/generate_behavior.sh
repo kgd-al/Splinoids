@@ -158,13 +158,13 @@ do_cluster(){
       r=$?
       if [ $r -eq 41 ]
       then
-        echo "Clustering failed: not enough neurons"
+        echo "Clustering of '$f' failed: not enough neurons"
       elif [ $r -gt 42 ]
       then
-        echo "Clustering failed: not enough data"
+        echo "Clustering of '$f' failed: not enough data"
       elif [ $r -gt 0 ]
       then
-        echo "Clustering failed!"
+        echo "Clustering of '$f' failed!"
         exit 2
       fi
       echo "Generated '$od'"
@@ -225,14 +225,16 @@ then
   echo "First-pass evaluation for $scenario"
   line
 
-  pfolder=$(ffpass "first" "c22")
+  pfolder=$(ffpass "first" "c22_e1")
 
-  #               Hearing "blue"  
-  #               | Hearing "red"
-  #               | | Receiver vision (multiple foodlets)
-  #               | | | Emitter vision (single foodlet)
-  #               v v v v
-  currentflags="0;8;4;2;1"
+  #               Emitter audition
+  #               |     Receiver audition
+  #               |     |     Emitter vision (single foodlet)
+  #               |     |     |   Receiver vision (multiple foodlets)
+  #               +-+   +-+   +-+ |
+  #             v v v v v v   v v v
+  currentflags="0;8;8;0;4;4;0;2;2;1"
+# "AE2;AE1;AE0;AR2;AR1;AR0;VE2;VE1;VE0;VR"
 
   if ls $pfolder/* >/dev/null 2>&1
   then
@@ -444,27 +446,30 @@ line
 echo "Second-pass evaluations"
 line
 
-ntags=$indfolder/eval_first_pass/$scenario/neural_groups.ntags
+for f in $indfolder/eval_first_pass/${scenario}_*/
+do
+  pfolder=$(sed 's/eval_first/eval_second/' <<< "$f")
+  ntags=$f/neural_groups.ntags
 
-pfolder=$(ffpass "second" "$scenario")
-if ls $pfolder/* >/dev/null 2>&1
-then
-  echo 'Data folder '$pfolder' already exists. Skipping'
-else
-  line '='
-  echo "Monitoring modules on natural scenarios"
-  $sfolder/evaluate.sh $ind \
-    --scenario $scenario \
-    -f $pfolder \
-    --ann-aggregate=$ntags
-    
-  line '='
-  echo "Monitoring modules on evaluation scenarios"
-  $sfolder/evaluate.sh $ind \
-    --scenario ne_$scenario --scenario-arg $scenario_arg \
-    -f $pfolder \
-    --ann-aggregate=$ntags
-fi    
+  if ls $pfolder/* >/dev/null 2>&1
+  then
+    echo 'Data folder '$pfolder' already exists. Skipping'
+  else
+    line '='
+    echo "Monitoring modules on natural scenarios"
+    $sfolder/evaluate.sh $ind \
+      --scenario $scenario \
+      -f $pfolder \
+      --ann-aggregate=$ntags
+      
+    line '='
+    echo "Monitoring modules on evaluation scenarios"
+    $sfolder/evaluate.sh $ind \
+      --scenario ne_$scenario --scenario-arg $scenario_arg \
+      -f $pfolder \
+      --ann-aggregate=$ntags
+  fi
+done
 
 # ################################################################################
 # # Third pass: rerun just combat while monitoring meta-modules

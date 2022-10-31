@@ -296,9 +296,13 @@ std::vector<std::string> Critter::neuralOutputsHeader (void) const {
   std::vector<std::string> v;
   v.push_back("ML");
   v.push_back("MR");
+#ifdef WITH_ACTION_CLOCKSPEED
   v.push_back("CS");
+#endif
   v.push_back("VV");
+#if VOCAL_CHANNELS > 1
   v.push_back("VC");
+#endif
 #if ARMS > 0
   for (uint i=0; i<_arms.size(); i++) v.push_back(utils::mergeToString("A", i));
 #endif
